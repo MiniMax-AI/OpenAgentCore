@@ -1,0 +1,2000 @@
+Sep 14 00:05:53 gw1 sshd[18836]: Accepted publickey for admin from 198.51.100.5 port 60346 ssh2: RSA SHA256:8ex13czyty5z5w9vrylw
+Sep 14 00:07:38 gw1 sshd[17850]: Failed password for git from 192.0.2.8 port 51227 ssh2
+Sep 14 00:11:10 gw1 sshd[33403]: Accepted publickey for bob from 192.0.2.30 port 53549 ssh2: RSA SHA256:c02ipy8swz8vipfouiuj
+Sep 14 00:13:39 gw1 sshd[20609]: Connection reset by 198.51.100.33 port 54959 [preauth]
+Sep 14 00:13:44 gw1 sshd[35245]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 00:14:29 gw1 sshd[7854]: Accepted publickey for admin from 198.51.100.34 port 50785 ssh2: RSA SHA256:vu80pfelpump4kb3nsnj
+Sep 14 00:25:20 gw1 sshd[38728]: Received disconnect from 198.51.100.54 port 47025:11: disconnected by user
+Sep 14 00:25:49 gw1 sshd[15052]: Server listening on 0.0.0.0 port 22.
+Sep 14 00:27:44 gw1 sshd[31760]: Failed password for git from 198.51.100.57 port 36636 ssh2
+Sep 14 00:31:41 gw1 sshd[11688]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 00:32:01 gw1 systemd-logind[612]: New session 56665 of user deploy.
+Sep 14 00:33:58 gw1 sshd[21921]: Failed password for root from 198.51.100.18 port 60449 ssh2
+Sep 14 00:38:32 gw1 sshd[8162]: Failed password for admin from 203.0.113.77 port 63449 ssh2
+Sep 14 00:38:43 gw1 sshd[31140]: Failed password for invalid user test from 192.0.2.11 port 32055 ssh2
+Sep 14 00:39:07 gw1 sshd[17841]: Accepted publickey for alice from 198.51.100.43 port 42716 ssh2: RSA SHA256:xwfp9d0wh8vq7rcyjgqd
+Sep 14 00:39:07 gw1 CRON[30730]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 00:40:55 gw1 sshd[29655]: Server listening on 0.0.0.0 port 22.
+Sep 14 00:46:22 gw1 sshd[14634]: Connection reset by 198.51.100.50 port 17945 [preauth]
+Sep 14 00:48:33 gw1 sshd[26990]: Accepted publickey for alice from 198.51.100.31 port 41681 ssh2: RSA SHA256:kwtos6lhq1uzxls1x55f
+Sep 14 00:49:24 gw1 sshd[22810]: Failed publickey for deploy from 203.0.113.200 port 37307 ssh2
+Sep 14 00:52:43 gw1 CRON[23518]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 00:54:18 gw1 systemd-logind[612]: New session 44031 of user bob.
+Sep 14 00:55:53 gw1 sshd[4423]: Failed password for root from 203.0.113.77 port 62493 ssh2
+Sep 14 01:02:04 gw1 sshd[9605]: Failed password for root from 198.51.100.43 port 39420 ssh2
+Sep 14 01:02:52 gw1 sshd[21014]: Accepted publickey for bob from 192.0.2.25 port 60243 ssh2: RSA SHA256:lhuq51ljojt3b94ides5
+Sep 14 01:05:17 gw1 sshd[9439]: Failed password for deploy from 198.51.100.22 port 31258 ssh2
+Sep 14 01:06:56 gw1 sshd[20008]: Failed password for deploy from 198.51.100.6 port 47657 ssh2
+Sep 14 01:07:03 gw1 sshd[10833]: Failed password for invalid user guest from 192.0.2.24 port 46994 ssh2
+Sep 14 01:08:37 gw1 sshd[28259]: Connection closed by authenticating user guest 203.0.113.200 port 46612 [preauth]
+Sep 14 01:10:09 gw1 CRON[24613]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 01:15:00 gw1 sshd[32819]: Failed password for invalid user pi from 203.0.113.77 port 53130 ssh2
+Sep 14 01:17:09 gw1 sshd[11859]: pam_unix(sshd:session): session closed for user alice
+Sep 14 01:17:42 gw1 sshd[21818]: Connection reset by 198.51.100.42 port 19273 [preauth]
+Sep 14 01:18:11 gw1 sshd[3508]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 01:18:56 gw1 sshd[29259]: Received disconnect from 192.0.2.29 port 46482:11: disconnected by user
+Sep 14 01:21:50 gw1 sshd[15889]: Server listening on 0.0.0.0 port 22.
+Sep 14 01:22:29 gw1 sshd[12473]: Failed password for invalid user test from 198.51.100.29 port 45803 ssh2
+Sep 14 01:22:30 gw1 systemd-logind[612]: New session 39048 of user bob.
+Sep 14 01:23:58 gw1 sshd[20839]: Connection reset by 192.0.2.3 port 10136 [preauth]
+Sep 14 01:24:50 gw1 sshd[31046]: Failed publickey for alice from 203.0.113.200 port 34501 ssh2
+Sep 14 01:26:37 gw1 sshd[4718]: Failed password for carol from 198.51.100.52 port 37734 ssh2
+Sep 14 01:29:07 gw1 systemd-logind[612]: New session 5821 of user carol.
+Sep 14 01:29:18 gw1 sshd[4408]: Failed password for invalid user oracle from 198.51.100.16 port 62065 ssh2
+Sep 14 01:29:25 gw1 sshd[29064]: Failed password for alice from 192.0.2.21 port 52427 ssh2
+Sep 14 01:29:42 gw1 sshd[39957]: Invalid user ftpuser from 203.0.113.200 port 32917
+Sep 14 01:30:34 gw1 sshd[4859]: Server listening on 0.0.0.0 port 22.
+Sep 14 01:31:23 gw1 sshd[6771]: Server listening on 0.0.0.0 port 22.
+Sep 14 01:32:32 gw1 sshd[16967]: Failed password for ubuntu from 192.0.2.18 port 35881 ssh2
+Sep 14 01:33:21 gw1 sshd[23006]: pam_unix(sshd:session): session closed for user carol
+Sep 14 01:40:07 gw1 sshd[30600]: Failed password for ubuntu from 192.0.2.5 port 57660 ssh2
+Sep 14 01:40:29 gw1 sshd[29857]: pam_unix(sshd:session): session closed for user alice
+Sep 14 01:40:54 gw1 sshd[9666]: Failed password for invalid user support from 192.0.2.6 port 39073 ssh2
+Sep 14 01:47:39 gw1 sshd[12865]: pam_unix(sshd:session): session closed for user bob
+Sep 14 01:49:44 gw1 sshd[33483]: Received disconnect from 198.51.100.33 port 7779:11: disconnected by user
+Sep 14 01:53:13 gw1 sshd[31871]: Connection closed by authenticating user carol 203.0.113.200 port 52625 [preauth]
+Sep 14 01:56:15 gw1 sshd[34020]: Server listening on 0.0.0.0 port 22.
+Sep 14 01:56:51 gw1 sshd[17374]: Failed password for ubuntu from 198.51.100.3 port 31646 ssh2
+Sep 14 01:58:21 gw1 sshd[32705]: Received disconnect from 192.0.2.30 port 63647:11: disconnected by user
+Sep 14 01:58:24 gw1 sshd[25267]: Failed password for carol from 198.51.100.40 port 46599 ssh2
+Sep 14 02:02:55 gw1 sshd[3521]: Failed password for invalid user support from 192.0.2.21 port 41315 ssh2
+Sep 14 02:03:04 gw1 sshd[14640]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 02:05:30 gw1 sshd[19299]: Failed password for bob from 198.51.100.11 port 53479 ssh2
+Sep 14 02:07:18 gw1 sshd[12416]: Failed password for invalid user guest from 192.0.2.38 port 50429 ssh2
+Sep 14 02:07:28 gw1 sshd[10162]: Connection reset by 192.0.2.2 port 63338 [preauth]
+Sep 14 02:08:08 gw1 sshd[9418]: Received disconnect from 198.51.100.19 port 38365:11: disconnected by user
+Sep 14 02:10:38 gw1 sshd[3050]: Accepted publickey for carol from 198.51.100.5 port 44623 ssh2: RSA SHA256:gqxb95bvwz1t8xxqnsbu
+Sep 14 02:11:12 gw1 sshd[38201]: Connection reset by 198.51.100.20 port 50555 [preauth]
+Sep 14 02:11:14 gw1 sshd[38222]: Failed password for invalid user oracle from 198.51.100.54 port 52520 ssh2
+Sep 14 02:11:40 gw1 sshd[39470]: Failed password for invalid user test from 192.0.2.18 port 63921 ssh2
+Sep 14 02:17:49 gw1 sshd[21258]: Accepted publickey for admin from 198.51.100.24 port 38261 ssh2: RSA SHA256:jahgwxvg05avd8058uny
+Sep 14 02:19:48 gw1 sshd[10398]: Failed password for postgres from 192.0.2.29 port 56812 ssh2
+Sep 14 02:20:04 gw1 sshd[32933]: Received disconnect from 198.51.100.43 port 16221:11: disconnected by user
+Sep 14 02:22:08 gw1 sshd[20725]: Accepted publickey for root from 198.51.100.26 port 55529 ssh2: RSA SHA256:ndzdpgx4nsjf8vrg7cvi
+Sep 14 02:22:58 gw1 sshd[21345]: Failed password for carol from 198.51.100.43 port 47089 ssh2
+Sep 14 02:27:36 gw1 sshd[15736]: Failed password for postgres from 198.51.100.40 port 41070 ssh2
+Sep 14 02:29:38 gw1 sshd[11777]: Accepted publickey for root from 198.51.100.39 port 34837 ssh2: RSA SHA256:cmuguny52siyy2dhvynt
+Sep 14 02:29:46 gw1 sshd[26431]: Failed password for invalid user ftpuser from 192.0.2.17 port 51586 ssh2
+Sep 14 02:29:48 gw1 sshd[12332]: Failed publickey for root from 203.0.113.200 port 61666 ssh2
+Sep 14 02:35:41 gw1 sshd[28399]: Accepted publickey for deploy from 198.51.100.6 port 50930 ssh2: RSA SHA256:3rc61m8uann5ubyyzpwt
+Sep 14 02:37:29 gw1 sshd[13377]: Failed password for ubuntu from 198.51.100.54 port 40980 ssh2
+Sep 14 02:41:57 gw1 sshd[38299]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 02:44:48 gw1 sshd[15040]: Failed password for invalid user guest from 192.0.2.4 port 35878 ssh2
+Sep 14 02:46:03 gw1 sshd[1502]: Failed password for invalid user test from 192.0.2.25 port 30803 ssh2
+Sep 14 02:48:56 gw1 sshd[4366]: Received disconnect from 198.51.100.30 port 2227:11: disconnected by user
+Sep 14 02:49:03 gw1 sshd[38064]: Received disconnect from 192.0.2.39 port 16518:11: disconnected by user
+Sep 14 02:52:18 gw1 sshd[36299]: Failed password for invalid user ftpuser from 192.0.2.6 port 62452 ssh2
+Sep 14 02:53:58 gw1 sshd[36514]: Failed password for invalid user guest from 192.0.2.22 port 55019 ssh2
+Sep 14 02:54:54 gw1 sshd[29419]: Failed password for git from 192.0.2.11 port 47357 ssh2
+Sep 14 02:55:36 gw1 sshd[6429]: Failed password for invalid user support from 198.51.100.35 port 38323 ssh2
+Sep 14 03:01:12 gw1 sshd[19154]: Server listening on 0.0.0.0 port 22.
+Sep 14 03:01:25 gw1 sshd[21435]: Connection closed by authenticating user admin 203.0.113.200 port 46809 [preauth]
+Sep 14 03:03:06 gw1 sshd[34394]: Connection reset by 198.51.100.24 port 24227 [preauth]
+Sep 14 03:04:27 gw1 sshd[25420]: Connection reset by 192.0.2.22 port 21918 [preauth]
+Sep 14 03:05:22 gw1 sshd[35822]: Failed password for root from 198.51.100.13 port 45011 ssh2
+Sep 14 03:05:47 gw1 systemd-logind[612]: New session 12767 of user deploy.
+Sep 14 03:06:17 gw1 sshd[21832]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 14 03:06:26 gw1 sshd[30321]: Failed password for invalid user test from 192.0.2.35 port 47675 ssh2
+Sep 14 03:08:13 gw1 sshd[34320]: Failed password for invalid user guest from 198.51.100.32 port 31865 ssh2
+Sep 14 03:10:33 gw1 sshd[25181]: Server listening on 0.0.0.0 port 22.
+Sep 14 03:14:04 gw1 sshd[1075]: Failed password for invalid user test from 198.51.100.19 port 33005 ssh2
+Sep 14 03:16:18 gw1 sshd[37685]: Accepted publickey for bob from 198.51.100.25 port 30009 ssh2: RSA SHA256:ocryb0h15p1m18kqireu
+Sep 14 03:18:08 gw1 sshd[13247]: Failed publickey for pi from 203.0.113.200 port 50648 ssh2
+Sep 14 03:18:30 gw1 sshd[8776]: Accepted publickey for deploy from 198.51.100.26 port 37190 ssh2: RSA SHA256:fzcpzisa9bbfljvm19pb
+Sep 14 03:19:32 gw1 sshd[6886]: Failed password for admin from 198.51.100.46 port 46827 ssh2
+Sep 14 03:21:40 gw1 sshd[20939]: Accepted publickey for deploy from 192.0.2.2 port 63105 ssh2: RSA SHA256:phihmjh3znbkjlr44pzk
+Sep 14 03:21:47 gw1 sshd[6058]: Server listening on 0.0.0.0 port 22.
+Sep 14 03:25:29 gw1 sshd[30841]: Failed password for bob from 198.51.100.25 port 40554 ssh2
+Sep 14 03:26:17 gw1 CRON[3330]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 03:28:07 gw1 sshd[21116]: Failed password for deploy from 198.51.100.57 port 45060 ssh2
+Sep 14 03:36:02 gw1 sshd[11499]: Invalid user test from 203.0.113.200 port 61307
+Sep 14 03:36:17 gw1 sshd[16856]: Server listening on 0.0.0.0 port 22.
+Sep 14 03:37:56 gw1 sshd[2048]: Failed password for deploy from 198.51.100.4 port 53951 ssh2
+Sep 14 03:38:14 gw1 sshd[8579]: Failed password for invalid user oracle from 192.0.2.36 port 50001 ssh2
+Sep 14 03:42:35 gw1 sshd[33159]: Failed password for invalid user oracle from 192.0.2.39 port 42301 ssh2
+Sep 14 03:45:50 gw1 sshd[8908]: Failed password for invalid user oracle from 198.51.100.48 port 36294 ssh2
+Sep 14 03:46:24 gw1 sshd[16177]: Failed password for invalid user support from 198.51.100.47 port 64731 ssh2
+Sep 14 03:51:14 gw1 CRON[22420]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 03:58:08 gw1 sshd[32965]: Failed password for invalid user pi from 198.51.100.20 port 40593 ssh2
+Sep 14 03:59:30 gw1 sshd[12626]: Accepted publickey for deploy from 198.51.100.7 port 31097 ssh2: RSA SHA256:a4z62idc6ec45p6nxfzl
+Sep 14 04:00:13 gw1 CRON[36378]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 04:00:22 gw1 sshd[22170]: Connection reset by 192.0.2.2 port 60841 [preauth]
+Sep 14 04:01:40 gw1 sshd[2923]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 04:02:13 gw1 sshd[28136]: Failed password for alice from 198.51.100.25 port 43653 ssh2
+Sep 14 04:04:28 gw1 sshd[31901]: Failed password for invalid user oracle from 203.0.113.77 port 36238 ssh2
+Sep 14 04:06:26 gw1 systemd-logind[612]: New session 34069 of user admin.
+Sep 14 04:07:21 gw1 sshd[30750]: Failed publickey for ubuntu from 203.0.113.200 port 33259 ssh2
+Sep 14 04:07:23 gw1 sshd[30881]: Accepted publickey for alice from 192.0.2.16 port 50778 ssh2: RSA SHA256:tga1j2q2h3jpd8jxxqk8
+Sep 14 04:09:08 gw1 sshd[17570]: Received disconnect from 192.0.2.35 port 31927:11: disconnected by user
+Sep 14 04:09:29 gw1 sshd[7364]: Failed password for ubuntu from 198.51.100.10 port 49721 ssh2
+Sep 14 04:10:35 gw1 sshd[24252]: Connection closed by authenticating user pi 203.0.113.200 port 44289 [preauth]
+Sep 14 04:12:08 gw1 CRON[34703]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 04:14:58 gw1 sshd[23993]: Connection reset by 198.51.100.11 port 25827 [preauth]
+Sep 14 04:16:53 gw1 sshd[38323]: Failed password for admin from 198.51.100.17 port 41360 ssh2
+Sep 14 04:26:19 gw1 sshd[9977]: Connection reset by 198.51.100.11 port 17982 [preauth]
+Sep 14 04:27:17 gw1 sshd[20968]: Received disconnect from 192.0.2.39 port 47032:11: disconnected by user
+Sep 14 04:28:24 gw1 sshd[38801]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 04:29:31 gw1 sshd[18116]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 04:31:03 gw1 sshd[8815]: Accepted publickey for alice from 192.0.2.5 port 47053 ssh2: RSA SHA256:s8i3endu162np2jririe
+Sep 14 04:31:44 gw1 sshd[32550]: Failed password for invalid user ftpuser from 203.0.113.77 port 39596 ssh2
+Sep 14 04:31:59 gw1 sshd[9048]: Server listening on 0.0.0.0 port 22.
+Sep 14 04:32:11 gw1 sshd[23376]: Failed publickey for carol from 203.0.113.200 port 64208 ssh2
+Sep 14 04:32:29 gw1 sshd[17623]: Invalid user guest from 203.0.113.200 port 44945
+Sep 14 04:38:35 gw1 sshd[37931]: Received disconnect from 198.51.100.12 port 34022:11: disconnected by user
+Sep 14 04:42:41 gw1 sshd[22208]: Accepted publickey for carol from 192.0.2.33 port 41516 ssh2: RSA SHA256:2zkqlr5agpiz7d7tabpn
+Sep 14 04:51:04 gw1 systemd-logind[612]: New session 23508 of user carol.
+Sep 14 04:51:38 gw1 sshd[33987]: Failed password for invalid user ftpuser from 198.51.100.35 port 45507 ssh2
+Sep 14 04:52:55 gw1 sshd[12953]: Connection reset by 192.0.2.36 port 19640 [preauth]
+Sep 14 04:54:35 gw1 sshd[34324]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 05:03:35 gw1 sshd[28250]: Accepted publickey for root from 198.51.100.29 port 47669 ssh2: RSA SHA256:mfnh5rw07xoyv9qj3fbu
+Sep 14 05:03:44 gw1 sshd[32406]: Failed password for admin from 198.51.100.17 port 53122 ssh2
+Sep 14 05:04:34 gw1 sshd[37087]: Failed password for root from 203.0.113.77 port 55436 ssh2
+Sep 14 05:05:11 gw1 sshd[39348]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 05:05:52 gw1 sshd[28059]: Connection reset by 192.0.2.21 port 26328 [preauth]
+Sep 14 05:05:54 gw1 sshd[4936]: Accepted publickey for deploy from 198.51.100.50 port 36943 ssh2: RSA SHA256:rlfzkmb1oxawa241obo4
+Sep 14 05:09:06 gw1 sshd[2232]: Failed password for root from 203.0.113.77 port 39261 ssh2
+Sep 14 05:11:28 gw1 sshd[28447]: Failed password for bob from 198.51.100.26 port 35472 ssh2
+Sep 14 05:13:15 gw1 sshd[28233]: Failed password for root from 198.51.100.10 port 47573 ssh2
+Sep 14 05:17:43 gw1 CRON[17475]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 05:20:06 gw1 sshd[22002]: Failed password for carol from 198.51.100.19 port 33653 ssh2
+Sep 14 05:25:44 gw1 sshd[33047]: Failed password for deploy from 198.51.100.55 port 59312 ssh2
+Sep 14 05:26:37 gw1 sshd[38303]: Failed password for ubuntu from 192.0.2.27 port 57865 ssh2
+Sep 14 05:27:22 gw1 sshd[39111]: Failed password for invalid user oracle from 198.51.100.46 port 37126 ssh2
+Sep 14 05:35:31 gw1 systemd-logind[612]: New session 36255 of user carol.
+Sep 14 05:37:15 gw1 sshd[16620]: Received disconnect from 192.0.2.30 port 12086:11: disconnected by user
+Sep 14 05:39:35 gw1 sshd[31083]: Failed password for bob from 192.0.2.19 port 63793 ssh2
+Sep 14 05:43:28 gw1 sshd[36673]: Failed password for git from 198.51.100.25 port 35230 ssh2
+Sep 14 05:47:17 gw1 sshd[34328]: Accepted publickey for deploy from 192.0.2.13 port 64128 ssh2: RSA SHA256:73emp1bussq7dyzs58nn
+Sep 14 05:48:31 gw1 sshd[9494]: Failed password for invalid user guest from 198.51.100.59 port 41827 ssh2
+Sep 14 05:49:08 gw1 CRON[18635]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 05:53:56 gw1 sshd[2453]: Received disconnect from 198.51.100.54 port 41337:11: disconnected by user
+Sep 14 05:56:43 gw1 CRON[17753]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 05:59:14 gw1 CRON[23858]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 05:59:18 gw1 systemd-logind[612]: New session 25538 of user admin.
+Sep 14 06:01:42 gw1 sshd[38628]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:01:59 gw1 sshd[6140]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:02:10 gw1 sshd[32140]: Failed publickey for carol from 203.0.113.200 port 52456 ssh2
+Sep 14 06:04:10 gw1 sshd[3523]: Received disconnect from 198.51.100.51 port 7361:11: disconnected by user
+Sep 14 06:05:31 gw1 sshd[34290]: Received disconnect from 198.51.100.28 port 6312:11: disconnected by user
+Sep 14 06:05:40 gw1 sshd[27643]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:07:20 gw1 sshd[22789]: Failed password for invalid user test from 198.51.100.28 port 31891 ssh2
+Sep 14 06:08:54 gw1 systemd-logind[612]: New session 23155 of user deploy.
+Sep 14 06:12:01 gw1 sshd[12599]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 14 06:13:04 gw1 sshd[15844]: Connection closed by authenticating user postgres 203.0.113.200 port 52236 [preauth]
+Sep 14 06:13:15 gw1 sshd[37174]: pam_unix(sshd:session): session closed for user admin
+Sep 14 06:14:04 gw1 sshd[2266]: Failed password for alice from 198.51.100.11 port 62603 ssh2
+Sep 14 06:15:35 gw1 sshd[37366]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:18:34 gw1 sshd[20688]: Failed password for invalid user support from 203.0.113.77 port 35164 ssh2
+Sep 14 06:19:32 gw1 sshd[27526]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 14 06:20:08 gw1 sshd[10392]: Failed password for invalid user oracle from 198.51.100.55 port 39248 ssh2
+Sep 14 06:22:19 gw1 sshd[11755]: Accepted publickey for deploy from 198.51.100.35 port 47464 ssh2: RSA SHA256:6acbfo9cqhtz6xuavoh7
+Sep 14 06:22:20 gw1 sshd[37278]: Failed password for ubuntu from 198.51.100.41 port 51196 ssh2
+Sep 14 06:24:03 gw1 sshd[17079]: Failed password for root from 192.0.2.20 port 41561 ssh2
+Sep 14 06:25:03 gw1 sshd[20967]: Failed password for bob from 192.0.2.30 port 36816 ssh2
+Sep 14 06:29:19 gw1 sshd[33716]: Connection reset by 192.0.2.21 port 15816 [preauth]
+Sep 14 06:29:42 gw1 sshd[35957]: Connection reset by 198.51.100.30 port 33953 [preauth]
+Sep 14 06:30:47 gw1 sshd[30667]: Failed password for postgres from 192.0.2.16 port 49825 ssh2
+Sep 14 06:31:53 gw1 sshd[20148]: Accepted publickey for bob from 198.51.100.17 port 52671 ssh2: RSA SHA256:4mlo2cgwndttrqvyjka3
+Sep 14 06:32:36 gw1 sshd[19090]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:33:28 gw1 sshd[24620]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:33:35 gw1 sshd[37676]: Failed password for invalid user oracle from 192.0.2.25 port 63492 ssh2
+Sep 14 06:37:18 gw1 sshd[24379]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 06:38:31 gw1 sshd[13904]: Accepted publickey for admin from 198.51.100.42 port 39307 ssh2: RSA SHA256:53h12058meow9324p8mt
+Sep 14 06:38:48 gw1 sshd[19048]: Failed publickey for test from 203.0.113.200 port 43105 ssh2
+Sep 14 06:41:53 gw1 sshd[28406]: Failed password for invalid user oracle from 192.0.2.8 port 31747 ssh2
+Sep 14 06:42:06 gw1 sshd[29733]: Failed password for deploy from 192.0.2.35 port 41883 ssh2
+Sep 14 06:43:07 gw1 sshd[17384]: Server listening on 0.0.0.0 port 22.
+Sep 14 06:46:39 gw1 sshd[38651]: Failed password for invalid user pi from 198.51.100.34 port 39456 ssh2
+Sep 14 06:51:20 gw1 sshd[22733]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 06:51:50 gw1 sshd[38922]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 06:54:02 gw1 sshd[25395]: Failed publickey for test from 203.0.113.200 port 41954 ssh2
+Sep 14 06:57:34 gw1 sshd[11057]: Failed password for ubuntu from 198.51.100.9 port 64333 ssh2
+Sep 14 07:00:02 gw1 sshd[12009]: Failed password for carol from 198.51.100.2 port 38021 ssh2
+Sep 14 07:03:25 gw1 sshd[17948]: Server listening on 0.0.0.0 port 22.
+Sep 14 07:11:17 gw1 sshd[16195]: Connection reset by 198.51.100.23 port 21294 [preauth]
+Sep 14 07:12:15 gw1 sshd[25862]: Accepted publickey for alice from 192.0.2.28 port 47407 ssh2: RSA SHA256:720t107glbtzt7hgc8y2
+Sep 14 07:13:26 gw1 CRON[31754]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 07:16:13 gw1 sshd[14896]: Failed password for invalid user pi from 203.0.113.77 port 51553 ssh2
+Sep 14 07:16:51 gw1 sshd[30097]: Accepted publickey for root from 192.0.2.5 port 42008 ssh2: RSA SHA256:p5hs6zwppzoz5og0q6to
+Sep 14 07:25:23 gw1 sshd[26639]: Failed password for invalid user test from 192.0.2.35 port 39024 ssh2
+Sep 14 07:32:39 gw1 sshd[33067]: Failed password for bob from 198.51.100.20 port 34366 ssh2
+Sep 14 07:34:33 gw1 sshd[31949]: Failed publickey for test from 203.0.113.200 port 43539 ssh2
+Sep 14 07:35:33 gw1 sshd[33092]: Failed password for ubuntu from 192.0.2.34 port 45920 ssh2
+Sep 14 07:40:28 gw1 sshd[17042]: Server listening on 0.0.0.0 port 22.
+Sep 14 07:41:34 gw1 sshd[10228]: Failed password for bob from 198.51.100.41 port 62699 ssh2
+Sep 14 07:42:31 gw1 sshd[20691]: Accepted publickey for bob from 198.51.100.45 port 61130 ssh2: RSA SHA256:z1iiikkl1roqof6e7rx5
+Sep 14 07:43:08 gw1 sshd[28718]: Server listening on 0.0.0.0 port 22.
+Sep 14 07:46:10 gw1 sshd[34710]: Accepted publickey for alice from 198.51.100.37 port 63557 ssh2: RSA SHA256:b3kn6erxr16o0c41yorc
+Sep 14 07:48:55 gw1 sshd[13424]: Failed publickey for guest from 203.0.113.200 port 41275 ssh2
+Sep 14 07:56:42 gw1 sshd[39655]: Invalid user guest from 203.0.113.200 port 58944
+Sep 14 07:57:32 gw1 sshd[1500]: Failed password for git from 192.0.2.13 port 52141 ssh2
+Sep 14 07:57:58 gw1 sshd[28370]: Accepted publickey for carol from 192.0.2.32 port 51363 ssh2: RSA SHA256:3cjj5t0i2b7jgrwafuho
+Sep 14 07:58:40 gw1 sshd[13466]: Failed password for invalid user support from 192.0.2.21 port 31804 ssh2
+Sep 14 08:00:22 gw1 sshd[3465]: Accepted publickey for bob from 198.51.100.20 port 40293 ssh2: RSA SHA256:h7cf0wug7g7o7qpecvwu
+Sep 14 08:00:53 gw1 sshd[14423]: Accepted publickey for admin from 198.51.100.48 port 61892 ssh2: RSA SHA256:1huwic2vol5btawpits8
+Sep 14 08:02:51 gw1 sshd[5217]: Connection reset by 198.51.100.29 port 50993 [preauth]
+Sep 14 08:03:27 gw1 sshd[21546]: Connection reset by 198.51.100.8 port 52856 [preauth]
+Sep 14 08:06:33 gw1 sshd[5592]: Server listening on 0.0.0.0 port 22.
+Sep 14 08:06:35 gw1 systemd-logind[612]: New session 63983 of user carol.
+Sep 14 08:08:16 gw1 sshd[30238]: Failed password for invalid user oracle from 192.0.2.39 port 58869 ssh2
+Sep 14 08:13:26 gw1 sshd[14289]: Connection reset by 198.51.100.58 port 3172 [preauth]
+Sep 14 08:19:24 gw1 sshd[32424]: Failed password for ubuntu from 198.51.100.2 port 59389 ssh2
+Sep 14 08:19:26 gw1 sshd[33304]: Connection closed by authenticating user deploy 203.0.113.200 port 43232 [preauth]
+Sep 14 08:20:20 gw1 sshd[34482]: Failed password for postgres from 192.0.2.10 port 42058 ssh2
+Sep 14 08:20:27 gw1 systemd-logind[612]: New session 52257 of user admin.
+Sep 14 08:25:14 gw1 sshd[37654]: Accepted publickey for deploy from 192.0.2.27 port 45049 ssh2: RSA SHA256:hi06kuo15yi31nps1ku8
+Sep 14 08:30:42 gw1 CRON[2012]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:31:11 gw1 systemd-logind[612]: New session 15274 of user admin.
+Sep 14 08:32:11 gw1 CRON[21188]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 08:34:16 gw1 sshd[23561]: Accepted publickey for root from 198.51.100.56 port 41196 ssh2: RSA SHA256:qvlnv66niyn0s1ws8orp
+Sep 14 08:35:06 gw1 sshd[34031]: Failed password for bob from 203.0.113.77 port 62038 ssh2
+Sep 14 08:36:28 gw1 sshd[34590]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 08:46:23 gw1 sshd[23734]: Connection reset by 198.51.100.5 port 62321 [preauth]
+Sep 14 08:55:13 gw1 sshd[8347]: Failed password for root from 192.0.2.34 port 42047 ssh2
+Sep 14 08:56:18 gw1 sshd[4382]: Accepted publickey for deploy from 192.0.2.9 port 64773 ssh2: RSA SHA256:ritelgsdsu2bd1bnahqr
+Sep 14 08:57:22 gw1 sshd[38974]: Accepted publickey for bob from 192.0.2.2 port 62337 ssh2: RSA SHA256:8plevn6i11mtu43ac4hg
+Sep 14 08:58:54 gw1 sshd[21889]: Accepted publickey for alice from 192.0.2.25 port 49086 ssh2: RSA SHA256:57hyd33we4k784qu4dbt
+Sep 14 08:59:22 gw1 sshd[21276]: Failed password for invalid user support from 198.51.100.7 port 37008 ssh2
+Sep 14 09:00:44 gw1 sshd[1062]: Failed password for invalid user ftpuser from 198.51.100.40 port 39775 ssh2
+Sep 14 09:01:41 gw1 sshd[4982]: Failed password for alice from 198.51.100.27 port 62232 ssh2
+Sep 14 09:02:47 gw1 sshd[7851]: Server listening on 0.0.0.0 port 22.
+Sep 14 09:05:30 gw1 sshd[24569]: Accepted publickey for admin from 192.0.2.31 port 41767 ssh2: RSA SHA256:hvskm8scztc8b19837x0
+Sep 14 09:06:14 gw1 sshd[4802]: pam_unix(sshd:session): session closed for user bob
+Sep 14 09:06:45 gw1 CRON[1621]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 09:09:32 gw1 CRON[29572]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 09:09:45 gw1 systemd-logind[612]: New session 57534 of user deploy.
+Sep 14 09:11:30 gw1 systemd-logind[612]: New session 41138 of user admin.
+Sep 14 09:17:40 gw1 sshd[12944]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 14 09:19:10 gw1 sshd[2692]: Failed password for invalid user oracle from 198.51.100.8 port 37672 ssh2
+Sep 14 09:19:49 gw1 sshd[10690]: Failed password for invalid user pi from 192.0.2.36 port 42083 ssh2
+Sep 14 09:21:56 gw1 sshd[18117]: Received disconnect from 198.51.100.8 port 38446:11: disconnected by user
+Sep 14 09:22:44 gw1 sshd[26570]: Connection reset by 198.51.100.24 port 41730 [preauth]
+Sep 14 09:24:05 gw1 sshd[28014]: pam_unix(sshd:session): session closed for user bob
+Sep 14 09:25:27 gw1 sshd[8947]: Failed password for git from 198.51.100.16 port 40177 ssh2
+Sep 14 09:28:06 gw1 sshd[9188]: Server listening on 0.0.0.0 port 22.
+Sep 14 09:30:02 gw1 sshd[4687]: Failed password for ubuntu from 198.51.100.29 port 46609 ssh2
+Sep 14 09:30:43 gw1 CRON[15521]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 09:32:14 gw1 sshd[12069]: Failed password for invalid user test from 192.0.2.36 port 39900 ssh2
+Sep 14 09:32:24 gw1 sshd[3251]: pam_unix(sshd:session): session closed for user carol
+Sep 14 09:33:03 gw1 sshd[20548]: Failed password for invalid user oracle from 192.0.2.11 port 52376 ssh2
+Sep 14 09:35:53 gw1 sshd[25586]: Accepted publickey for deploy from 198.51.100.7 port 63247 ssh2: RSA SHA256:ekfs4z3cinsksveg4rym
+Sep 14 09:36:54 gw1 sshd[12357]: Invalid user guest from 203.0.113.200 port 60027
+Sep 14 09:37:47 gw1 sshd[36739]: Failed password for invalid user guest from 198.51.100.40 port 50008 ssh2
+Sep 14 09:38:25 gw1 sshd[13036]: Accepted publickey for alice from 198.51.100.51 port 48614 ssh2: RSA SHA256:tt92r0crqtky2v1zzqfl
+Sep 14 09:39:02 gw1 CRON[33264]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 09:40:16 gw1 sshd[14674]: Failed password for invalid user support from 198.51.100.41 port 57042 ssh2
+Sep 14 09:41:04 gw1 sshd[38323]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 09:42:45 gw1 sshd[24909]: Accepted publickey for carol from 198.51.100.45 port 43232 ssh2: RSA SHA256:fso87xfnorbyx5r9x9nw
+Sep 14 09:43:52 gw1 sshd[15140]: Failed password for invalid user oracle from 198.51.100.49 port 34054 ssh2
+Sep 14 09:44:41 gw1 sshd[37232]: pam_unix(sshd:session): session closed for user admin
+Sep 14 09:47:34 gw1 sshd[28825]: Failed password for deploy from 198.51.100.27 port 37493 ssh2
+Sep 14 09:49:20 gw1 sshd[5332]: Connection reset by 192.0.2.14 port 64108 [preauth]
+Sep 14 09:50:03 gw1 sshd[14899]: Failed password for invalid user ftpuser from 198.51.100.16 port 40884 ssh2
+Sep 14 09:50:42 gw1 sshd[15477]: Accepted publickey for carol from 198.51.100.50 port 40371 ssh2: RSA SHA256:juuyrb5qibhtohf5pbfm
+Sep 14 09:52:23 gw1 sshd[25073]: Failed password for invalid user support from 198.51.100.5 port 60249 ssh2
+Sep 14 09:54:50 gw1 sshd[8355]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 09:54:57 gw1 sshd[10550]: Failed password for invalid user support from 192.0.2.30 port 55842 ssh2
+Sep 14 09:54:59 gw1 systemd-logind[612]: New session 46035 of user alice.
+Sep 14 09:55:46 gw1 systemd-logind[612]: New session 8463 of user admin.
+Sep 14 09:56:17 gw1 sshd[3174]: Failed password for alice from 192.0.2.22 port 61042 ssh2
+Sep 14 10:00:30 gw1 CRON[38654]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 10:01:07 gw1 sshd[11308]: Failed password for carol from 192.0.2.30 port 37816 ssh2
+Sep 14 10:02:23 gw1 sshd[8183]: Failed password for invalid user support from 192.0.2.32 port 40783 ssh2
+Sep 14 10:02:40 gw1 sshd[13183]: Accepted publickey for bob from 198.51.100.36 port 49071 ssh2: RSA SHA256:53pb2d2om90gjtom2dsq
+Sep 14 10:03:26 gw1 sshd[34478]: Connection closed by authenticating user git 203.0.113.200 port 35842 [preauth]
+Sep 14 10:03:26 gw1 systemd-logind[612]: New session 59518 of user root.
+Sep 14 10:05:12 gw1 sshd[22326]: Invalid user ubuntu from 203.0.113.200 port 58328
+Sep 14 10:13:16 gw1 sshd[19645]: pam_unix(sshd:session): session closed for user admin
+Sep 14 10:16:27 gw1 sshd[19543]: Connection reset by 198.51.100.42 port 26012 [preauth]
+Sep 14 10:18:46 gw1 sshd[22010]: Failed password for invalid user test from 198.51.100.26 port 51272 ssh2
+Sep 14 10:19:23 gw1 sshd[24881]: Failed password for alice from 198.51.100.57 port 45845 ssh2
+Sep 14 10:21:33 gw1 sshd[4900]: Received disconnect from 198.51.100.46 port 56511:11: disconnected by user
+Sep 14 10:24:58 gw1 sshd[15791]: Accepted publickey for admin from 198.51.100.9 port 64627 ssh2: RSA SHA256:9khcb52omw7znzz235wb
+Sep 14 10:28:33 gw1 sshd[22083]: Accepted publickey for admin from 198.51.100.58 port 59868 ssh2: RSA SHA256:1ng6lg5oqia8jlcihsvc
+Sep 14 10:28:37 gw1 sshd[15633]: Failed password for bob from 198.51.100.27 port 38029 ssh2
+Sep 14 10:29:40 gw1 sshd[30735]: Invalid user support from 203.0.113.200 port 47630
+Sep 14 10:31:20 gw1 sshd[12521]: Failed password for invalid user oracle from 192.0.2.29 port 54122 ssh2
+Sep 14 10:33:40 gw1 sshd[24564]: Failed password for deploy from 203.0.113.77 port 33211 ssh2
+Sep 14 10:41:27 gw1 systemd-logind[612]: New session 2309 of user alice.
+Sep 14 10:44:02 gw1 sshd[35811]: Failed password for bob from 203.0.113.77 port 36017 ssh2
+Sep 14 10:50:04 gw1 sshd[25324]: Failed password for alice from 192.0.2.4 port 64676 ssh2
+Sep 14 10:51:05 gw1 CRON[21165]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 10:51:21 gw1 CRON[3289]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 10:53:15 gw1 sshd[36266]: Connection closed by authenticating user postgres 203.0.113.200 port 36284 [preauth]
+Sep 14 10:53:36 gw1 sshd[37660]: Failed password for git from 198.51.100.40 port 37890 ssh2
+Sep 14 10:55:53 gw1 sshd[5838]: Failed password for carol from 192.0.2.23 port 64694 ssh2
+Sep 14 10:57:11 gw1 sshd[13329]: Connection reset by 192.0.2.20 port 5596 [preauth]
+Sep 14 10:58:12 gw1 sshd[39822]: Accepted publickey for root from 192.0.2.17 port 49799 ssh2: RSA SHA256:93jsualg9j2ipbntjxg0
+Sep 14 11:02:51 gw1 sshd[2954]: Failed password for deploy from 198.51.100.4 port 32349 ssh2
+Sep 14 11:08:41 gw1 sshd[10614]: Failed password for invalid user test from 192.0.2.17 port 52431 ssh2
+Sep 14 11:11:23 gw1 CRON[13820]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 11:12:40 gw1 CRON[36712]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 11:13:04 gw1 sshd[34956]: Accepted publickey for carol from 192.0.2.11 port 63667 ssh2: RSA SHA256:ndhopz8xsfne4r2ndo41
+Sep 14 11:13:27 gw1 sshd[6219]: Server listening on 0.0.0.0 port 22.
+Sep 14 11:22:21 gw1 sshd[29471]: Accepted publickey for alice from 192.0.2.21 port 57588 ssh2: RSA SHA256:8tqeygzibv6xntwd0rz5
+Sep 14 11:26:47 gw1 sshd[38572]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 14 11:26:56 gw1 sshd[21414]: Failed password for invalid user guest from 198.51.100.47 port 49808 ssh2
+Sep 14 11:29:09 gw1 sshd[26433]: Failed password for invalid user support from 198.51.100.52 port 40293 ssh2
+Sep 14 11:30:13 gw1 sshd[21363]: Failed password for carol from 192.0.2.2 port 58574 ssh2
+Sep 14 11:30:53 gw1 sshd[12005]: Failed password for alice from 192.0.2.16 port 47549 ssh2
+Sep 14 11:32:12 gw1 sshd[19168]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 14 11:33:36 gw1 sshd[4894]: Failed password for ubuntu from 192.0.2.16 port 41650 ssh2
+Sep 14 11:34:30 gw1 sshd[22544]: Failed password for admin from 198.51.100.51 port 50799 ssh2
+Sep 14 11:34:44 gw1 sshd[18764]: Failed password for postgres from 198.51.100.58 port 39604 ssh2
+Sep 14 11:35:22 gw1 CRON[26634]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 11:36:01 gw1 sshd[27031]: Failed password for invalid user oracle from 198.51.100.30 port 42638 ssh2
+Sep 14 11:36:25 gw1 sshd[12609]: Received disconnect from 198.51.100.52 port 54238:11: disconnected by user
+Sep 14 11:38:45 gw1 CRON[4583]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 11:39:39 gw1 sshd[18930]: Failed password for postgres from 198.51.100.17 port 31086 ssh2
+Sep 14 11:42:23 gw1 sshd[21522]: Connection closed by authenticating user git 203.0.113.200 port 48176 [preauth]
+Sep 14 11:45:26 gw1 sshd[1463]: Connection closed by authenticating user bob 203.0.113.200 port 30498 [preauth]
+Sep 14 11:47:23 gw1 sshd[38203]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 11:50:52 gw1 sshd[28398]: Server listening on 0.0.0.0 port 22.
+Sep 14 11:56:22 gw1 sshd[32765]: Failed password for alice from 192.0.2.34 port 60763 ssh2
+Sep 14 11:57:36 gw1 sshd[2644]: Failed password for deploy from 203.0.113.77 port 33310 ssh2
+Sep 14 11:58:40 gw1 sshd[29949]: Failed password for invalid user oracle from 198.51.100.59 port 63604 ssh2
+Sep 14 12:02:25 gw1 sshd[26185]: Failed password for admin from 203.0.113.77 port 48599 ssh2
+Sep 14 12:04:58 gw1 sshd[13741]: Accepted publickey for admin from 192.0.2.30 port 54834 ssh2: RSA SHA256:beghe3der0hvett7ms2i
+Sep 14 12:06:50 gw1 sshd[8488]: Failed publickey for ftpuser from 203.0.113.200 port 63556 ssh2
+Sep 14 12:08:10 gw1 sshd[37598]: Received disconnect from 198.51.100.42 port 54671:11: disconnected by user
+Sep 14 12:09:27 gw1 sshd[11229]: Server listening on 0.0.0.0 port 22.
+Sep 14 12:10:37 gw1 sshd[26889]: Failed password for invalid user ftpuser from 192.0.2.18 port 54036 ssh2
+Sep 14 12:16:58 gw1 sshd[12068]: Accepted publickey for deploy from 198.51.100.42 port 55153 ssh2: RSA SHA256:xwfgjgsjy6an4j93e9fb
+Sep 14 12:17:43 gw1 sshd[15693]: Failed password for invalid user guest from 198.51.100.46 port 59324 ssh2
+Sep 14 12:18:36 gw1 sshd[20717]: Failed password for root from 198.51.100.33 port 43106 ssh2
+Sep 14 12:20:21 gw1 sshd[11329]: Connection reset by 198.51.100.11 port 33709 [preauth]
+Sep 14 12:22:54 gw1 sshd[28950]: Failed publickey for admin from 203.0.113.200 port 45458 ssh2
+Sep 14 12:25:49 gw1 sshd[18565]: Accepted publickey for bob from 192.0.2.13 port 62055 ssh2: RSA SHA256:bwdj4zn20l2z68t4bw2d
+Sep 14 12:25:57 gw1 sshd[5548]: Failed password for invalid user guest from 198.51.100.41 port 42278 ssh2
+Sep 14 12:27:43 gw1 CRON[38635]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 12:29:46 gw1 sshd[21398]: Connection closed by authenticating user alice 203.0.113.200 port 42880 [preauth]
+Sep 14 12:30:08 gw1 sshd[7258]: Server listening on 0.0.0.0 port 22.
+Sep 14 12:34:13 gw1 CRON[3069]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 12:34:26 gw1 sshd[13532]: Failed password for invalid user ftpuser from 203.0.113.77 port 63247 ssh2
+Sep 14 12:36:49 gw1 sshd[9722]: Server listening on 0.0.0.0 port 22.
+Sep 14 12:42:50 gw1 sshd[3349]: Failed password for invalid user guest from 198.51.100.52 port 62812 ssh2
+Sep 14 12:44:03 gw1 sshd[20542]: Failed password for carol from 198.51.100.19 port 33553 ssh2
+Sep 14 12:45:34 gw1 sshd[14994]: Failed publickey for git from 203.0.113.200 port 33993 ssh2
+Sep 14 12:46:56 gw1 sshd[38448]: Accepted publickey for carol from 198.51.100.20 port 51421 ssh2: RSA SHA256:alyhjne0ny7o4n0dtwmx
+Sep 14 12:50:23 gw1 sshd[24218]: Failed password for ubuntu from 198.51.100.19 port 32784 ssh2
+Sep 14 12:55:37 gw1 sshd[22141]: Failed publickey for git from 203.0.113.200 port 57914 ssh2
+Sep 14 12:59:15 gw1 sshd[38946]: Failed password for carol from 192.0.2.32 port 43924 ssh2
+Sep 14 12:59:46 gw1 sshd[15623]: pam_unix(sshd:session): session closed for user carol
+Sep 14 13:01:24 gw1 sshd[33264]: pam_unix(sshd:session): session closed for user root
+Sep 14 13:01:32 gw1 sshd[13256]: pam_unix(sshd:session): session closed for user bob
+Sep 14 13:01:45 gw1 sshd[27123]: Failed password for alice from 192.0.2.27 port 38379 ssh2
+Sep 14 13:04:02 gw1 sshd[24604]: Server listening on 0.0.0.0 port 22.
+Sep 14 13:04:47 gw1 sshd[21539]: Failed password for admin from 198.51.100.42 port 55071 ssh2
+Sep 14 13:06:03 gw1 systemd-logind[612]: New session 21671 of user carol.
+Sep 14 13:08:16 gw1 sshd[5020]: Failed password for git from 198.51.100.44 port 57282 ssh2
+Sep 14 13:09:21 gw1 sshd[32700]: Failed password for git from 198.51.100.4 port 56814 ssh2
+Sep 14 13:09:43 gw1 CRON[12728]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 13:12:18 gw1 sshd[16565]: Accepted publickey for alice from 192.0.2.39 port 60026 ssh2: RSA SHA256:29omvlo4qceunrf2qgq1
+Sep 14 13:16:06 gw1 sshd[27132]: Received disconnect from 198.51.100.9 port 25054:11: disconnected by user
+Sep 14 13:22:07 gw1 sshd[4347]: pam_unix(sshd:session): session closed for user root
+Sep 14 13:24:30 gw1 sshd[25531]: Received disconnect from 198.51.100.9 port 59869:11: disconnected by user
+Sep 14 13:26:21 gw1 sshd[37324]: Failed password for deploy from 198.51.100.19 port 62728 ssh2
+Sep 14 13:26:48 gw1 sshd[30940]: Failed password for invalid user test from 198.51.100.28 port 43217 ssh2
+Sep 14 13:28:07 gw1 sshd[6628]: Accepted publickey for bob from 198.51.100.18 port 49628 ssh2: RSA SHA256:v9736nuonti6pj7tzyhk
+Sep 14 13:42:20 gw1 CRON[19219]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 13:47:20 gw1 sshd[4400]: Failed password for invalid user test from 198.51.100.55 port 47575 ssh2
+Sep 14 13:47:26 gw1 sshd[11124]: Accepted publickey for alice from 192.0.2.17 port 45922 ssh2: RSA SHA256:otzkfw2njosd1s3tx1xq
+Sep 14 13:50:51 gw1 sshd[13005]: Accepted publickey for bob from 198.51.100.55 port 63143 ssh2: RSA SHA256:c3ca6hf4lrwy8q7ne9df
+Sep 14 13:51:59 gw1 systemd-logind[612]: New session 37273 of user carol.
+Sep 14 13:53:21 gw1 sshd[34273]: Connection reset by 198.51.100.6 port 32171 [preauth]
+Sep 14 13:53:34 gw1 sshd[25093]: Received disconnect from 198.51.100.15 port 45377:11: disconnected by user
+Sep 14 13:53:53 gw1 sshd[24137]: Failed password for root from 198.51.100.56 port 44340 ssh2
+Sep 14 13:54:28 gw1 CRON[17713]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 13:56:26 gw1 sshd[26323]: Connection reset by 192.0.2.15 port 58575 [preauth]
+Sep 14 13:57:29 gw1 sshd[6305]: Failed password for admin from 203.0.113.77 port 43115 ssh2
+Sep 14 13:58:07 gw1 sshd[36126]: Failed password for invalid user pi from 192.0.2.27 port 34018 ssh2
+Sep 14 13:58:46 gw1 sshd[28705]: Accepted publickey for carol from 192.0.2.35 port 49389 ssh2: RSA SHA256:hwt4zuawodo7tkn7svic
+Sep 14 14:05:05 gw1 systemd-logind[612]: New session 41824 of user deploy.
+Sep 14 14:09:40 gw1 sshd[15628]: Failed password for invalid user guest from 192.0.2.20 port 62055 ssh2
+Sep 14 14:10:33 gw1 sshd[25507]: Failed password for invalid user pi from 198.51.100.31 port 56443 ssh2
+Sep 14 14:14:03 gw1 sshd[38671]: Connection closed by authenticating user deploy 203.0.113.200 port 33661 [preauth]
+Sep 14 14:15:31 gw1 sshd[10473]: Failed password for git from 192.0.2.20 port 34813 ssh2
+Sep 14 14:22:54 gw1 sshd[38548]: Failed password for postgres from 192.0.2.29 port 44813 ssh2
+Sep 14 14:23:56 gw1 sshd[24928]: Invalid user git from 203.0.113.200 port 59791
+Sep 14 14:27:24 gw1 sshd[11410]: Accepted publickey for admin from 198.51.100.22 port 42066 ssh2: RSA SHA256:c2eo78p7bblio7w7i53i
+Sep 14 14:28:31 gw1 sshd[7372]: Connection closed by authenticating user carol 203.0.113.200 port 55639 [preauth]
+Sep 14 14:31:39 gw1 sshd[14233]: Failed password for invalid user pi from 198.51.100.48 port 32200 ssh2
+Sep 14 14:32:48 gw1 sshd[3435]: Failed password for alice from 198.51.100.9 port 43511 ssh2
+Sep 14 14:32:56 gw1 sshd[23957]: Connection closed by authenticating user pi 203.0.113.200 port 53460 [preauth]
+Sep 14 14:34:45 gw1 systemd-logind[612]: New session 52683 of user root.
+Sep 14 14:35:14 gw1 sshd[24789]: Failed password for bob from 192.0.2.19 port 41632 ssh2
+Sep 14 14:36:51 gw1 sshd[7316]: Server listening on 0.0.0.0 port 22.
+Sep 14 14:37:38 gw1 sshd[29058]: Connection reset by 192.0.2.13 port 24744 [preauth]
+Sep 14 14:38:01 gw1 sshd[26393]: Connection reset by 198.51.100.36 port 8211 [preauth]
+Sep 14 14:40:51 gw1 sshd[3093]: Connection reset by 198.51.100.7 port 25897 [preauth]
+Sep 14 14:41:08 gw1 sshd[27576]: Failed password for root from 192.0.2.3 port 57279 ssh2
+Sep 14 14:42:51 gw1 sshd[32791]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 14:44:19 gw1 sshd[34844]: Server listening on 0.0.0.0 port 22.
+Sep 14 14:47:56 gw1 sshd[14270]: Connection reset by 198.51.100.51 port 43303 [preauth]
+Sep 14 14:48:15 gw1 sshd[4486]: Connection reset by 198.51.100.20 port 49461 [preauth]
+Sep 14 14:50:35 gw1 sshd[30067]: Connection reset by 192.0.2.15 port 6232 [preauth]
+Sep 14 14:51:24 gw1 sshd[6445]: Failed password for invalid user oracle from 203.0.113.77 port 57863 ssh2
+Sep 14 14:51:41 gw1 sshd[25244]: Accepted publickey for admin from 198.51.100.38 port 35570 ssh2: RSA SHA256:q214edigec6kicxx2iys
+Sep 14 14:57:43 gw1 sshd[36415]: Failed password for invalid user test from 192.0.2.34 port 52194 ssh2
+Sep 14 15:01:11 gw1 sshd[8383]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 15:03:44 gw1 sshd[11735]: Failed password for alice from 192.0.2.6 port 58915 ssh2
+Sep 14 15:04:32 gw1 systemd-logind[612]: New session 41015 of user carol.
+Sep 14 15:09:35 gw1 sshd[20288]: Server listening on 0.0.0.0 port 22.
+Sep 14 15:10:07 gw1 sshd[28750]: Accepted publickey for alice from 192.0.2.2 port 57267 ssh2: RSA SHA256:rzv7ljw3an7glt29zgvf
+Sep 14 15:17:30 gw1 sshd[39863]: Invalid user git from 203.0.113.200 port 43752
+Sep 14 15:18:35 gw1 sshd[20505]: Connection reset by 198.51.100.18 port 52253 [preauth]
+Sep 14 15:20:59 gw1 sshd[39596]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 14 15:22:58 gw1 sshd[26939]: Failed password for invalid user ftpuser from 198.51.100.7 port 38486 ssh2
+Sep 14 15:23:03 gw1 sshd[20694]: Connection reset by 198.51.100.43 port 13353 [preauth]
+Sep 14 15:25:05 gw1 sshd[30705]: Received disconnect from 198.51.100.40 port 2880:11: disconnected by user
+Sep 14 15:26:44 gw1 sshd[39591]: Failed password for invalid user support from 203.0.113.77 port 33733 ssh2
+Sep 14 15:29:07 gw1 sshd[12245]: Connection reset by 198.51.100.31 port 35524 [preauth]
+Sep 14 15:32:18 gw1 sshd[20843]: Invalid user bob from 203.0.113.200 port 42081
+Sep 14 15:33:56 gw1 sshd[6897]: Accepted publickey for root from 198.51.100.51 port 52872 ssh2: RSA SHA256:ku9gfvm6dopwnpm41nle
+Sep 14 15:39:38 gw1 systemd-logind[612]: New session 57851 of user deploy.
+Sep 14 15:40:19 gw1 sshd[6978]: Accepted publickey for root from 192.0.2.25 port 36261 ssh2: RSA SHA256:zcuhoi5tjgtpf1uco99p
+Sep 14 15:40:24 gw1 sshd[4714]: Invalid user alice from 203.0.113.200 port 35262
+Sep 14 15:41:42 gw1 sshd[14205]: Accepted publickey for bob from 192.0.2.6 port 52677 ssh2: RSA SHA256:6vzmqxoe4mjm4nhal4zl
+Sep 14 15:43:58 gw1 sshd[23290]: Failed password for bob from 192.0.2.33 port 42165 ssh2
+Sep 14 15:44:00 gw1 sshd[2284]: Accepted publickey for admin from 192.0.2.5 port 59318 ssh2: RSA SHA256:7mvrp04wji3ld8ir2vro
+Sep 14 15:50:29 gw1 sshd[27181]: Connection reset by 198.51.100.30 port 8987 [preauth]
+Sep 14 15:58:11 gw1 sshd[22934]: Failed password for carol from 192.0.2.30 port 50978 ssh2
+Sep 14 16:06:16 gw1 sshd[30986]: Accepted publickey for admin from 192.0.2.20 port 58027 ssh2: RSA SHA256:lzhwo9pmlm035frsaru6
+Sep 14 16:20:33 gw1 sshd[27633]: Failed password for ubuntu from 198.51.100.28 port 39847 ssh2
+Sep 14 16:22:25 gw1 sshd[15431]: Failed password for git from 198.51.100.42 port 43530 ssh2
+Sep 14 16:23:32 gw1 sshd[2781]: Failed password for invalid user support from 198.51.100.29 port 42058 ssh2
+Sep 14 16:28:00 gw1 sshd[14485]: Accepted publickey for admin from 198.51.100.18 port 42275 ssh2: RSA SHA256:v9a5oaog08dcyneakyxj
+Sep 14 16:28:41 gw1 sshd[38979]: Connection reset by 198.51.100.50 port 45089 [preauth]
+Sep 14 16:35:16 gw1 sshd[5751]: Failed password for carol from 198.51.100.47 port 59331 ssh2
+Sep 14 16:37:51 gw1 sshd[26962]: Accepted publickey for root from 198.51.100.6 port 59060 ssh2: RSA SHA256:kez5z3bb1leahhh3b6vk
+Sep 14 16:39:33 gw1 sshd[30396]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 16:40:09 gw1 sshd[5532]: Invalid user support from 203.0.113.200 port 46059
+Sep 14 16:41:17 gw1 systemd-logind[612]: New session 58465 of user alice.
+Sep 14 16:45:54 gw1 sshd[11650]: Server listening on 0.0.0.0 port 22.
+Sep 14 16:46:17 gw1 sshd[13106]: Connection reset by 198.51.100.46 port 54483 [preauth]
+Sep 14 16:48:03 gw1 sshd[28500]: Connection closed by authenticating user test 203.0.113.200 port 55298 [preauth]
+Sep 14 16:51:42 gw1 sshd[37042]: Server listening on 0.0.0.0 port 22.
+Sep 14 16:53:36 gw1 sshd[4444]: Failed password for carol from 192.0.2.21 port 42021 ssh2
+Sep 14 16:54:54 gw1 sshd[30800]: Failed password for invalid user guest from 198.51.100.10 port 31057 ssh2
+Sep 14 16:55:43 gw1 sshd[23355]: Server listening on 0.0.0.0 port 22.
+Sep 14 16:57:29 gw1 sshd[14610]: Failed publickey for carol from 203.0.113.200 port 40427 ssh2
+Sep 14 17:05:30 gw1 sshd[14180]: Failed password for invalid user pi from 198.51.100.58 port 40793 ssh2
+Sep 14 17:05:39 gw1 sshd[29014]: Failed password for postgres from 198.51.100.24 port 34468 ssh2
+Sep 14 17:07:31 gw1 sshd[9843]: Failed password for invalid user guest from 198.51.100.29 port 34956 ssh2
+Sep 14 17:13:02 gw1 sshd[23509]: Received disconnect from 192.0.2.21 port 54113:11: disconnected by user
+Sep 14 17:14:27 gw1 sshd[3940]: Connection reset by 198.51.100.37 port 1484 [preauth]
+Sep 14 17:16:36 gw1 sshd[29363]: Connection reset by 198.51.100.21 port 28755 [preauth]
+Sep 14 17:16:58 gw1 sshd[14601]: Connection reset by 192.0.2.23 port 39592 [preauth]
+Sep 14 17:16:58 gw1 systemd-logind[612]: New session 29775 of user admin.
+Sep 14 17:17:11 gw1 sshd[16752]: Failed password for invalid user test from 198.51.100.18 port 49547 ssh2
+Sep 14 17:20:15 gw1 systemd-logind[612]: New session 33221 of user admin.
+Sep 14 17:21:13 gw1 sshd[30697]: Server listening on 0.0.0.0 port 22.
+Sep 14 17:22:10 gw1 systemd-logind[612]: New session 6200 of user alice.
+Sep 14 17:26:27 gw1 systemd-logind[612]: New session 56794 of user carol.
+Sep 14 17:27:54 gw1 sshd[1295]: Failed password for bob from 192.0.2.5 port 48363 ssh2
+Sep 14 17:28:09 gw1 sshd[31557]: Failed password for admin from 203.0.113.77 port 37435 ssh2
+Sep 14 17:30:43 gw1 sshd[8540]: Failed password for alice from 203.0.113.77 port 49157 ssh2
+Sep 14 17:32:30 gw1 sshd[12170]: Accepted publickey for carol from 198.51.100.34 port 47544 ssh2: RSA SHA256:jyw0shk0f5o67cdn8j7g
+Sep 14 17:33:37 gw1 sshd[6744]: Accepted publickey for deploy from 192.0.2.7 port 31456 ssh2: RSA SHA256:w05cez7mxp9ozxl0sl9a
+Sep 14 17:35:33 gw1 sshd[34056]: Accepted publickey for deploy from 192.0.2.13 port 64016 ssh2: RSA SHA256:fesd6bi6ejzp9992ct30
+Sep 14 17:36:46 gw1 sshd[24679]: Accepted publickey for alice from 198.51.100.24 port 37505 ssh2: RSA SHA256:oknxhr080irwnd8za1ra
+Sep 14 17:37:32 gw1 CRON[31525]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 17:38:46 gw1 sshd[4091]: pam_unix(sshd:session): session closed for user root
+Sep 14 17:40:47 gw1 sshd[10241]: Server listening on 0.0.0.0 port 22.
+Sep 14 17:43:41 gw1 systemd-logind[612]: New session 49375 of user alice.
+Sep 14 17:47:40 gw1 sshd[7498]: Failed password for invalid user pi from 198.51.100.29 port 56213 ssh2
+Sep 14 17:52:11 gw1 CRON[7035]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 17:52:57 gw1 CRON[28939]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 17:56:08 gw1 sshd[28436]: Accepted publickey for carol from 198.51.100.44 port 46719 ssh2: RSA SHA256:pavlcjhy5ei6fsyomr7z
+Sep 14 17:57:49 gw1 sshd[39045]: Connection reset by 192.0.2.22 port 62737 [preauth]
+Sep 14 18:01:55 gw1 sshd[33382]: Invalid user git from 203.0.113.200 port 51379
+Sep 14 18:02:26 gw1 systemd-logind[612]: New session 17587 of user root.
+Sep 14 18:02:40 gw1 sshd[38530]: Failed password for alice from 203.0.113.77 port 60951 ssh2
+Sep 14 18:04:28 gw1 sshd[22698]: Server listening on 0.0.0.0 port 22.
+Sep 14 18:05:42 gw1 sshd[28143]: Failed publickey for deploy from 203.0.113.200 port 37312 ssh2
+Sep 14 18:06:59 gw1 CRON[33093]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 18:09:47 gw1 sshd[25237]: Failed password for git from 198.51.100.13 port 60164 ssh2
+Sep 14 18:13:26 gw1 sshd[23869]: Received disconnect from 192.0.2.7 port 18154:11: disconnected by user
+Sep 14 18:16:04 gw1 sshd[18117]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 14 18:17:13 gw1 sshd[39383]: Accepted publickey for alice from 198.51.100.43 port 32305 ssh2: RSA SHA256:0g20khjdauzvmvzpjylv
+Sep 14 18:18:07 gw1 sshd[24838]: Connection reset by 192.0.2.2 port 2520 [preauth]
+Sep 14 18:19:24 gw1 CRON[17007]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 18:19:40 gw1 sshd[20427]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 18:21:08 gw1 sshd[11760]: Failed password for alice from 198.51.100.47 port 56391 ssh2
+Sep 14 18:22:03 gw1 sshd[3342]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 18:26:43 gw1 systemd-logind[612]: New session 7044 of user carol.
+Sep 14 18:30:41 gw1 sshd[15793]: Failed password for carol from 203.0.113.77 port 40361 ssh2
+Sep 14 18:31:13 gw1 sshd[4468]: Accepted publickey for bob from 198.51.100.3 port 53701 ssh2: RSA SHA256:ljfhfn516i4jn5wk3k4u
+Sep 14 18:32:32 gw1 sshd[35417]: Accepted publickey for alice from 192.0.2.10 port 49173 ssh2: RSA SHA256:55diqquhk5kwu62mn3kz
+Sep 14 18:34:32 gw1 CRON[8264]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 18:41:21 gw1 sshd[17031]: Server listening on 0.0.0.0 port 22.
+Sep 14 18:41:41 gw1 sshd[22165]: Accepted publickey for alice from 198.51.100.34 port 57524 ssh2: RSA SHA256:k8tdj3hpp3xjf0k42org
+Sep 14 18:44:15 gw1 CRON[26712]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 18:45:07 gw1 sshd[22023]: Server listening on 0.0.0.0 port 22.
+Sep 14 18:48:27 gw1 sshd[30696]: Failed password for git from 198.51.100.33 port 58743 ssh2
+Sep 14 18:58:54 gw1 sshd[34588]: Received disconnect from 198.51.100.3 port 28976:11: disconnected by user
+Sep 14 19:00:14 gw1 sshd[3898]: Failed password for ubuntu from 198.51.100.59 port 31144 ssh2
+Sep 14 19:00:24 gw1 sshd[29338]: Failed password for invalid user oracle from 192.0.2.17 port 45160 ssh2
+Sep 14 19:02:37 gw1 sshd[6633]: Failed password for alice from 203.0.113.77 port 40585 ssh2
+Sep 14 19:03:07 gw1 sshd[29765]: Invalid user carol from 203.0.113.200 port 58453
+Sep 14 19:12:52 gw1 CRON[36576]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 19:15:23 gw1 sshd[31714]: Accepted publickey for deploy from 198.51.100.9 port 62073 ssh2: RSA SHA256:9xh7w87wp1ndhgt7kx8o
+Sep 14 19:17:07 gw1 sshd[12535]: Failed password for invalid user ftpuser from 198.51.100.47 port 57893 ssh2
+Sep 14 19:29:19 gw1 sshd[37907]: Connection reset by 198.51.100.38 port 22844 [preauth]
+Sep 14 19:32:30 gw1 sshd[38993]: pam_unix(sshd:session): session closed for user alice
+Sep 14 19:32:49 gw1 sshd[18714]: Connection closed by authenticating user git 203.0.113.200 port 46918 [preauth]
+Sep 14 19:37:51 gw1 sshd[3032]: Failed publickey for guest from 203.0.113.200 port 49791 ssh2
+Sep 14 19:41:30 gw1 sshd[8818]: Received disconnect from 192.0.2.8 port 18968:11: disconnected by user
+Sep 14 19:42:00 gw1 sshd[12277]: Accepted publickey for alice from 192.0.2.8 port 49680 ssh2: RSA SHA256:rix9uqlhdxx006q8xqso
+Sep 14 19:46:43 gw1 sshd[24758]: Accepted publickey for bob from 192.0.2.4 port 50473 ssh2: RSA SHA256:6rf6943diy7kwjub9xna
+Sep 14 19:48:03 gw1 sshd[37179]: Failed password for postgres from 203.0.113.77 port 37961 ssh2
+Sep 14 19:53:10 gw1 sshd[31602]: Failed password for alice from 198.51.100.14 port 41657 ssh2
+Sep 14 19:53:18 gw1 sshd[23898]: Failed password for invalid user guest from 192.0.2.4 port 56178 ssh2
+Sep 14 19:56:11 gw1 sshd[33748]: Received disconnect from 198.51.100.29 port 48632:11: disconnected by user
+Sep 14 19:59:58 gw1 sshd[3799]: Accepted publickey for root from 198.51.100.13 port 41691 ssh2: RSA SHA256:jcq1gnspm8h1x50m2fql
+Sep 14 20:01:46 gw1 sshd[9450]: Failed password for invalid user test from 198.51.100.8 port 45732 ssh2
+Sep 14 20:02:25 gw1 sshd[4904]: Failed publickey for guest from 203.0.113.200 port 49488 ssh2
+Sep 14 20:07:53 gw1 sshd[7749]: Invalid user admin from 203.0.113.200 port 31853
+Sep 14 20:09:27 gw1 sshd[34303]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 20:10:03 gw1 sshd[30365]: Failed password for invalid user oracle from 198.51.100.59 port 63256 ssh2
+Sep 14 20:11:48 gw1 sshd[35357]: Server listening on 0.0.0.0 port 22.
+Sep 14 20:14:20 gw1 sshd[24946]: Failed password for postgres from 192.0.2.26 port 42252 ssh2
+Sep 14 20:16:05 gw1 sshd[35171]: Connection reset by 198.51.100.15 port 9149 [preauth]
+Sep 14 20:17:37 gw1 sshd[30517]: Failed password for invalid user support from 198.51.100.22 port 41443 ssh2
+Sep 14 20:19:50 gw1 sshd[29042]: Accepted publickey for alice from 192.0.2.13 port 38329 ssh2: RSA SHA256:6fcpnqrfdp4u6bdbfu94
+Sep 14 20:21:38 gw1 sshd[39835]: Failed password for git from 198.51.100.43 port 58588 ssh2
+Sep 14 20:23:29 gw1 sshd[15594]: Failed password for invalid user guest from 192.0.2.27 port 49239 ssh2
+Sep 14 20:23:56 gw1 sshd[13809]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 14 20:24:16 gw1 sshd[34406]: pam_unix(sshd:session): session closed for user deploy
+Sep 14 20:25:17 gw1 sshd[38213]: Failed password for alice from 192.0.2.9 port 38341 ssh2
+Sep 14 20:27:07 gw1 sshd[31838]: Connection closed by authenticating user alice 203.0.113.200 port 32631 [preauth]
+Sep 14 20:29:00 gw1 sshd[33871]: Failed password for ubuntu from 198.51.100.27 port 36958 ssh2
+Sep 14 20:31:54 gw1 CRON[11865]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 20:33:25 gw1 sshd[25942]: pam_unix(sshd:session): session closed for user root
+Sep 14 20:33:26 gw1 sshd[33592]: Server listening on 0.0.0.0 port 22.
+Sep 14 20:33:43 gw1 sshd[1080]: Connection closed by authenticating user alice 203.0.113.200 port 31985 [preauth]
+Sep 14 20:35:12 gw1 sshd[30739]: Failed password for invalid user support from 198.51.100.27 port 52064 ssh2
+Sep 14 20:38:42 gw1 sshd[6645]: Failed password for invalid user pi from 203.0.113.77 port 64315 ssh2
+Sep 14 20:42:14 gw1 sshd[3361]: Accepted publickey for carol from 198.51.100.19 port 60446 ssh2: RSA SHA256:v8nlvtrhogax269tlx6x
+Sep 14 20:59:57 gw1 sshd[18420]: Connection closed by authenticating user deploy 203.0.113.200 port 42125 [preauth]
+Sep 14 21:00:28 gw1 sshd[14147]: Connection reset by 198.51.100.17 port 5855 [preauth]
+Sep 14 21:02:28 gw1 sshd[20767]: Invalid user bob from 203.0.113.200 port 55531
+Sep 14 21:03:50 gw1 sshd[1604]: Failed password for deploy from 203.0.113.77 port 49390 ssh2
+Sep 14 21:05:27 gw1 sshd[32425]: Server listening on 0.0.0.0 port 22.
+Sep 14 21:07:10 gw1 sshd[18624]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 14 21:14:51 gw1 sshd[8478]: Accepted publickey for root from 198.51.100.48 port 32475 ssh2: RSA SHA256:4bl2dbw9wzi2e6970rya
+Sep 14 21:15:52 gw1 sshd[38494]: Failed password for ubuntu from 192.0.2.22 port 48448 ssh2
+Sep 14 21:19:09 gw1 sshd[11447]: Accepted publickey for root from 192.0.2.36 port 56888 ssh2: RSA SHA256:8y9pbybnjjxkes9hne9x
+Sep 14 21:27:04 gw1 sshd[23157]: Failed password for alice from 198.51.100.14 port 52386 ssh2
+Sep 14 21:31:30 gw1 sshd[6038]: Failed password for deploy from 192.0.2.22 port 37245 ssh2
+Sep 14 21:36:32 gw1 sshd[28438]: Failed password for ubuntu from 198.51.100.42 port 47058 ssh2
+Sep 14 21:37:08 gw1 systemd-logind[612]: New session 42692 of user admin.
+Sep 14 21:40:51 gw1 sshd[6320]: Connection closed by authenticating user deploy 203.0.113.200 port 62471 [preauth]
+Sep 14 21:41:30 gw1 sshd[13152]: Failed password for invalid user guest from 192.0.2.35 port 32729 ssh2
+Sep 14 21:45:13 gw1 systemd-logind[612]: New session 22668 of user carol.
+Sep 14 21:45:39 gw1 sshd[13022]: Failed password for root from 192.0.2.11 port 31766 ssh2
+Sep 14 21:49:39 gw1 sshd[13502]: Connection reset by 192.0.2.12 port 59231 [preauth]
+Sep 14 21:49:46 gw1 sshd[19305]: Failed password for git from 192.0.2.36 port 30092 ssh2
+Sep 14 21:49:52 gw1 CRON[32777]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 21:53:12 gw1 systemd-logind[612]: New session 54079 of user deploy.
+Sep 14 21:53:31 gw1 CRON[2501]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 21:54:05 gw1 sshd[39420]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 14 21:54:20 gw1 sshd[39053]: Connection reset by 192.0.2.32 port 21411 [preauth]
+Sep 14 21:54:33 gw1 sshd[8842]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 21:56:21 gw1 sshd[21244]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 21:57:06 gw1 sshd[31983]: Server listening on 0.0.0.0 port 22.
+Sep 14 21:59:05 gw1 sshd[32665]: Failed password for invalid user pi from 192.0.2.22 port 50317 ssh2
+Sep 14 22:00:04 gw1 sshd[25148]: Connection reset by 198.51.100.19 port 14073 [preauth]
+Sep 14 22:00:47 gw1 sshd[39918]: pam_unix(sshd:session): session closed for user bob
+Sep 14 22:01:34 gw1 sshd[1692]: pam_unix(sshd:session): session closed for user bob
+Sep 14 22:02:41 gw1 sshd[2753]: Accepted publickey for carol from 198.51.100.8 port 50394 ssh2: RSA SHA256:l7m94trpn0rii7mofbxa
+Sep 14 22:02:57 gw1 sshd[32106]: Server listening on 0.0.0.0 port 22.
+Sep 14 22:08:33 gw1 CRON[13450]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 22:13:46 gw1 sshd[37173]: Server listening on 0.0.0.0 port 22.
+Sep 14 22:20:40 gw1 sshd[19713]: Failed publickey for bob from 203.0.113.200 port 63398 ssh2
+Sep 14 22:24:19 gw1 sshd[39416]: Failed password for bob from 198.51.100.54 port 33441 ssh2
+Sep 14 22:25:47 gw1 sshd[8190]: Failed password for git from 198.51.100.8 port 59450 ssh2
+Sep 14 22:26:06 gw1 sshd[19443]: Failed password for invalid user pi from 192.0.2.8 port 51024 ssh2
+Sep 14 22:27:35 gw1 sshd[24181]: pam_unix(sshd:session): session closed for user bob
+Sep 14 22:32:35 gw1 sshd[25951]: Connection reset by 192.0.2.31 port 7951 [preauth]
+Sep 14 22:37:59 gw1 sshd[28586]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 14 22:48:20 gw1 sshd[25074]: Failed password for invalid user ftpuser from 192.0.2.16 port 51720 ssh2
+Sep 14 22:55:51 gw1 sshd[18608]: Accepted publickey for bob from 198.51.100.33 port 40075 ssh2: RSA SHA256:hvyev7tvdox364lbe7vh
+Sep 14 22:58:38 gw1 sshd[23306]: Accepted publickey for root from 192.0.2.17 port 45128 ssh2: RSA SHA256:lv1f5ks9o5low0qkknlr
+Sep 14 22:59:06 gw1 sshd[13951]: Connection reset by 192.0.2.36 port 16157 [preauth]
+Sep 14 23:05:07 gw1 sshd[35463]: Failed password for admin from 198.51.100.18 port 32196 ssh2
+Sep 14 23:05:43 gw1 sshd[2794]: Failed password for admin from 198.51.100.11 port 48601 ssh2
+Sep 14 23:06:31 gw1 sshd[21119]: Server listening on 0.0.0.0 port 22.
+Sep 14 23:07:23 gw1 sshd[1254]: Accepted publickey for deploy from 192.0.2.8 port 39745 ssh2: RSA SHA256:33kv2scijl7jaeqr3yn8
+Sep 14 23:10:01 gw1 sshd[7076]: Failed password for root from 198.51.100.46 port 37652 ssh2
+Sep 14 23:10:05 gw1 sshd[7975]: Server listening on 0.0.0.0 port 22.
+Sep 14 23:10:38 gw1 sshd[27458]: Connection closed by authenticating user root 203.0.113.200 port 59968 [preauth]
+Sep 14 23:12:05 gw1 sshd[35358]: Accepted publickey for root from 192.0.2.10 port 36548 ssh2: RSA SHA256:wzoyqbi42oodtnrj5lv1
+Sep 14 23:13:00 gw1 sshd[12841]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 14 23:15:15 gw1 CRON[4312]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 23:15:50 gw1 sshd[16689]: Accepted publickey for carol from 203.0.113.77 port 31936 ssh2: RSA SHA256:m5zsotml94fw1gnzuh10
+Sep 14 23:16:54 gw1 sshd[38117]: Accepted publickey for deploy from 198.51.100.40 port 31706 ssh2: RSA SHA256:t40ts3uh1hfabchuiubd
+Sep 14 23:17:05 gw1 sshd[8878]: Received disconnect from 198.51.100.57 port 41687:11: disconnected by user
+Sep 14 23:17:17 gw1 sshd[29072]: Accepted publickey for carol from 198.51.100.49 port 53682 ssh2: RSA SHA256:vsurfdak1lbfzfcehkcc
+Sep 14 23:19:32 gw1 sshd[19219]: Failed password for postgres from 198.51.100.43 port 43319 ssh2
+Sep 14 23:22:08 gw1 sshd[20703]: Connection reset by 192.0.2.4 port 26305 [preauth]
+Sep 14 23:24:34 gw1 sshd[6713]: Failed password for admin from 203.0.113.77 port 47062 ssh2
+Sep 14 23:25:13 gw1 sshd[37295]: pam_unix(sshd:session): session closed for user admin
+Sep 14 23:26:09 gw1 sshd[33791]: Accepted publickey for admin from 192.0.2.16 port 49914 ssh2: RSA SHA256:et89tjs1nbdqql80ucvn
+Sep 14 23:26:48 gw1 sshd[18553]: Failed password for ubuntu from 192.0.2.28 port 53195 ssh2
+Sep 14 23:31:40 gw1 sshd[15707]: Failed password for invalid user pi from 198.51.100.29 port 64042 ssh2
+Sep 14 23:33:06 gw1 sshd[2281]: Failed publickey for pi from 203.0.113.200 port 49591 ssh2
+Sep 14 23:33:16 gw1 sshd[13702]: Failed password for carol from 203.0.113.77 port 48419 ssh2
+Sep 14 23:33:34 gw1 sshd[8275]: Failed password for invalid user guest from 192.0.2.24 port 37441 ssh2
+Sep 14 23:33:54 gw1 sshd[21718]: Failed password for bob from 192.0.2.36 port 51351 ssh2
+Sep 14 23:38:26 gw1 sshd[16050]: Failed password for postgres from 203.0.113.77 port 42444 ssh2
+Sep 14 23:42:08 gw1 sshd[30291]: Accepted publickey for carol from 198.51.100.16 port 32307 ssh2: RSA SHA256:jdztoyf5ogqap6x5e5l0
+Sep 14 23:42:39 gw1 sshd[36653]: Accepted publickey for bob from 198.51.100.34 port 63842 ssh2: RSA SHA256:e04n8xkwubzucyiwbxd1
+Sep 14 23:42:41 gw1 sshd[37162]: Failed password for git from 192.0.2.31 port 53487 ssh2
+Sep 14 23:44:48 gw1 systemd-logind[612]: New session 22535 of user alice.
+Sep 14 23:47:53 gw1 sshd[33160]: Failed password for invalid user oracle from 192.0.2.27 port 54517 ssh2
+Sep 14 23:50:13 gw1 systemd-logind[612]: New session 54970 of user deploy.
+Sep 14 23:50:42 gw1 CRON[25664]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 14 23:51:39 gw1 sshd[24955]: Accepted publickey for carol from 192.0.2.3 port 63560 ssh2: RSA SHA256:y0hcrzgq6lf8pg74ygu2
+Sep 14 23:55:28 gw1 sshd[26026]: Server listening on 0.0.0.0 port 22.
+Sep 14 23:56:02 gw1 sshd[19317]: Accepted publickey for deploy from 198.51.100.27 port 37614 ssh2: RSA SHA256:prfjaue78vehkl0kqiw3
+Sep 14 23:56:54 gw1 sshd[33577]: pam_unix(sshd:session): session closed for user root
+Sep 15 00:02:05 gw1 systemd-logind[612]: New session 56512 of user deploy.
+Sep 15 00:02:38 gw1 sshd[13278]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 00:05:50 gw1 sshd[8648]: Failed password for alice from 198.51.100.4 port 51856 ssh2
+Sep 15 00:06:32 gw1 sshd[8049]: Failed password for root from 198.51.100.53 port 62128 ssh2
+Sep 15 00:10:50 gw1 sshd[33076]: Failed password for invalid user guest from 192.0.2.17 port 58567 ssh2
+Sep 15 00:12:53 gw1 sshd[4934]: Failed password for invalid user guest from 192.0.2.26 port 50150 ssh2
+Sep 15 00:13:02 gw1 sshd[37097]: Failed password for deploy from 198.51.100.15 port 54216 ssh2
+Sep 15 00:13:41 gw1 CRON[28213]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 00:14:10 gw1 sshd[14550]: Server listening on 0.0.0.0 port 22.
+Sep 15 00:15:36 gw1 sshd[36597]: Failed password for invalid user pi from 198.51.100.36 port 59817 ssh2
+Sep 15 00:17:14 gw1 sshd[29283]: Failed password for root from 192.0.2.30 port 61847 ssh2
+Sep 15 00:18:16 gw1 sshd[28778]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 00:20:07 gw1 sshd[33664]: Server listening on 0.0.0.0 port 22.
+Sep 15 00:20:18 gw1 sshd[12263]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 00:25:19 gw1 sshd[27555]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 00:29:32 gw1 sshd[20174]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 00:29:58 gw1 sshd[28633]: Failed password for invalid user ftpuser from 192.0.2.33 port 54445 ssh2
+Sep 15 00:31:18 gw1 sshd[15161]: pam_unix(sshd:session): session closed for user alice
+Sep 15 00:33:43 gw1 sshd[6363]: Failed password for invalid user test from 198.51.100.49 port 37068 ssh2
+Sep 15 00:34:19 gw1 sshd[24843]: Invalid user ftpuser from 203.0.113.200 port 32809
+Sep 15 00:35:29 gw1 sshd[34650]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 00:36:24 gw1 sshd[20828]: Accepted publickey for admin from 198.51.100.8 port 43256 ssh2: RSA SHA256:0hnul8ddjibzmzbwc5xa
+Sep 15 00:38:04 gw1 sshd[3468]: Server listening on 0.0.0.0 port 22.
+Sep 15 00:38:53 gw1 sshd[36542]: Accepted publickey for alice from 198.51.100.58 port 34894 ssh2: RSA SHA256:qy24iduey8rr80kapue4
+Sep 15 00:38:58 gw1 sshd[31363]: Failed password for ubuntu from 192.0.2.2 port 61530 ssh2
+Sep 15 00:41:54 gw1 sshd[36408]: Server listening on 0.0.0.0 port 22.
+Sep 15 00:43:38 gw1 sshd[29135]: Failed password for invalid user oracle from 203.0.113.77 port 42538 ssh2
+Sep 15 00:46:48 gw1 sshd[3517]: Server listening on 0.0.0.0 port 22.
+Sep 15 00:47:47 gw1 sshd[30189]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 00:52:40 gw1 sshd[29242]: Invalid user test from 203.0.113.200 port 35594
+Sep 15 00:56:13 gw1 sshd[8473]: Received disconnect from 198.51.100.39 port 31258:11: disconnected by user
+Sep 15 01:00:56 gw1 sshd[24876]: Failed password for root from 192.0.2.25 port 31570 ssh2
+Sep 15 01:03:33 gw1 sshd[7470]: Failed password for bob from 192.0.2.10 port 62093 ssh2
+Sep 15 01:05:50 gw1 sshd[3052]: Invalid user deploy from 203.0.113.200 port 51707
+Sep 15 01:06:09 gw1 sshd[10537]: Failed password for invalid user oracle from 203.0.113.77 port 47360 ssh2
+Sep 15 01:06:52 gw1 sshd[20706]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 01:10:52 gw1 sshd[39884]: Accepted publickey for bob from 192.0.2.22 port 64822 ssh2: RSA SHA256:5pa2r1t215pxso1880qv
+Sep 15 01:16:17 gw1 sshd[33174]: Accepted publickey for bob from 198.51.100.30 port 44171 ssh2: RSA SHA256:4o8hw2kt3lhi4kc41s73
+Sep 15 01:26:51 gw1 sshd[27770]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 01:28:04 gw1 sshd[3071]: Server listening on 0.0.0.0 port 22.
+Sep 15 01:30:26 gw1 sshd[3762]: Accepted publickey for alice from 192.0.2.26 port 55521 ssh2: RSA SHA256:mnz71rns29hxtig0ry55
+Sep 15 01:32:28 gw1 sshd[37774]: pam_unix(sshd:session): session closed for user carol
+Sep 15 01:32:45 gw1 systemd-logind[612]: New session 28306 of user deploy.
+Sep 15 01:34:33 gw1 systemd-logind[612]: New session 57215 of user deploy.
+Sep 15 01:35:20 gw1 sshd[35715]: Failed password for invalid user support from 203.0.113.77 port 33695 ssh2
+Sep 15 01:36:09 gw1 sshd[36708]: Accepted publickey for root from 192.0.2.35 port 56934 ssh2: RSA SHA256:a0477igb6tqgz8oys08u
+Sep 15 01:37:00 gw1 sshd[35795]: Invalid user git from 203.0.113.200 port 33066
+Sep 15 01:38:30 gw1 sshd[29966]: Failed password for deploy from 198.51.100.54 port 49379 ssh2
+Sep 15 01:43:03 gw1 sshd[17094]: Invalid user support from 203.0.113.200 port 40215
+Sep 15 01:43:21 gw1 sshd[5091]: Failed password for invalid user test from 198.51.100.15 port 40397 ssh2
+Sep 15 01:51:59 gw1 sshd[38072]: pam_unix(sshd:session): session closed for user carol
+Sep 15 01:53:48 gw1 sshd[10639]: pam_unix(sshd:session): session closed for user alice
+Sep 15 01:55:17 gw1 sshd[17535]: Failed password for invalid user guest from 192.0.2.10 port 56973 ssh2
+Sep 15 01:58:22 gw1 sshd[33839]: Received disconnect from 198.51.100.22 port 45493:11: disconnected by user
+Sep 15 01:58:27 gw1 sshd[23764]: Accepted publickey for admin from 198.51.100.27 port 61802 ssh2: RSA SHA256:1sn4zbfenj6g55symb0o
+Sep 15 02:00:59 gw1 sshd[20039]: Failed password for git from 198.51.100.46 port 60305 ssh2
+Sep 15 02:02:36 gw1 sshd[19377]: Failed password for bob from 198.51.100.58 port 55928 ssh2
+Sep 15 02:04:20 gw1 sshd[27430]: pam_unix(sshd:session): session closed for user alice
+Sep 15 02:04:48 gw1 sshd[9459]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 02:05:04 gw1 sshd[20234]: Connection closed by authenticating user bob 203.0.113.200 port 57574 [preauth]
+Sep 15 02:05:48 gw1 systemd-logind[612]: New session 16344 of user alice.
+Sep 15 02:06:36 gw1 sshd[9506]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 02:08:13 gw1 sshd[11500]: Failed password for admin from 192.0.2.32 port 45968 ssh2
+Sep 15 02:08:43 gw1 sshd[32139]: Accepted publickey for deploy from 198.51.100.14 port 43859 ssh2: RSA SHA256:5shbxdsquf5ovk5ouj20
+Sep 15 02:09:31 gw1 sshd[22551]: Failed password for git from 198.51.100.40 port 61360 ssh2
+Sep 15 02:10:48 gw1 sshd[1333]: Failed password for postgres from 203.0.113.77 port 33090 ssh2
+Sep 15 02:12:34 gw1 sshd[34164]: Accepted publickey for root from 198.51.100.14 port 52412 ssh2: RSA SHA256:m9hgua28j381xmbxs75z
+Sep 15 02:13:15 gw1 sshd[19048]: Failed password for invalid user support from 198.51.100.40 port 49266 ssh2
+Sep 15 02:13:24 gw1 sshd[2179]: pam_unix(sshd:session): session closed for user bob
+Sep 15 02:16:27 gw1 sshd[15316]: Received disconnect from 198.51.100.56 port 24962:11: disconnected by user
+Sep 15 02:20:35 gw1 sshd[3619]: Server listening on 0.0.0.0 port 22.
+Sep 15 02:20:46 gw1 sshd[39042]: Failed password for bob from 192.0.2.5 port 48770 ssh2
+Sep 15 02:21:05 gw1 sshd[22186]: Server listening on 0.0.0.0 port 22.
+Sep 15 02:21:13 gw1 sshd[1201]: Failed password for deploy from 192.0.2.6 port 56782 ssh2
+Sep 15 02:24:31 gw1 sshd[16900]: Server listening on 0.0.0.0 port 22.
+Sep 15 02:25:04 gw1 sshd[35531]: Accepted publickey for bob from 198.51.100.54 port 50751 ssh2: RSA SHA256:2ow3hkab29w57c1sefa7
+Sep 15 02:26:58 gw1 sshd[29706]: Failed password for deploy from 198.51.100.20 port 56151 ssh2
+Sep 15 02:27:24 gw1 sshd[15214]: Failed password for root from 192.0.2.17 port 39387 ssh2
+Sep 15 02:33:51 gw1 sshd[22462]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 02:33:55 gw1 sshd[16863]: Accepted publickey for deploy from 198.51.100.23 port 41713 ssh2: RSA SHA256:7ysvroqtscyhex1udmm1
+Sep 15 02:36:49 gw1 sshd[21620]: Failed password for invalid user guest from 198.51.100.3 port 45011 ssh2
+Sep 15 02:44:47 gw1 sshd[7775]: Invalid user deploy from 203.0.113.200 port 58834
+Sep 15 02:48:25 gw1 sshd[7717]: Failed password for deploy from 198.51.100.19 port 45198 ssh2
+Sep 15 02:49:17 gw1 sshd[28922]: Failed password for invalid user guest from 192.0.2.5 port 51738 ssh2
+Sep 15 02:50:46 gw1 sshd[20383]: Connection reset by 198.51.100.40 port 43073 [preauth]
+Sep 15 02:52:07 gw1 CRON[38947]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 02:56:26 gw1 sshd[32681]: Failed password for deploy from 198.51.100.51 port 49310 ssh2
+Sep 15 02:56:55 gw1 sshd[1711]: Accepted publickey for root from 198.51.100.11 port 64142 ssh2: RSA SHA256:qrtphaxo6yw5f9tnru73
+Sep 15 02:59:50 gw1 sshd[1196]: Failed password for invalid user ftpuser from 198.51.100.36 port 55621 ssh2
+Sep 15 03:02:52 gw1 sshd[21856]: Failed password for invalid user oracle from 198.51.100.36 port 48138 ssh2
+Sep 15 03:04:47 gw1 sshd[26324]: Failed publickey for support from 203.0.113.200 port 62115 ssh2
+Sep 15 03:05:14 gw1 sshd[10333]: Failed password for invalid user support from 192.0.2.20 port 62364 ssh2
+Sep 15 03:06:47 gw1 sshd[14090]: Connection reset by 192.0.2.39 port 56251 [preauth]
+Sep 15 03:07:10 gw1 sshd[18298]: Failed password for invalid user ftpuser from 198.51.100.38 port 48474 ssh2
+Sep 15 03:13:57 gw1 sshd[1175]: Failed password for deploy from 198.51.100.38 port 37911 ssh2
+Sep 15 03:17:51 gw1 sshd[1091]: Connection closed by authenticating user support 203.0.113.200 port 50818 [preauth]
+Sep 15 03:19:21 gw1 sshd[11844]: Received disconnect from 198.51.100.51 port 38613:11: disconnected by user
+Sep 15 03:21:47 gw1 sshd[3066]: Accepted publickey for alice from 198.51.100.24 port 59099 ssh2: RSA SHA256:j91zx3ehhk5n7niitdd8
+Sep 15 03:22:13 gw1 sshd[9298]: Failed password for invalid user ftpuser from 203.0.113.77 port 32513 ssh2
+Sep 15 03:22:37 gw1 sshd[16950]: Failed password for invalid user ftpuser from 192.0.2.39 port 61676 ssh2
+Sep 15 03:24:01 gw1 sshd[34581]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 03:24:31 gw1 sshd[8996]: Connection reset by 192.0.2.10 port 19537 [preauth]
+Sep 15 03:25:01 gw1 sshd[21115]: Failed password for invalid user test from 198.51.100.22 port 38254 ssh2
+Sep 15 03:27:40 gw1 systemd-logind[612]: New session 5511 of user admin.
+Sep 15 03:30:41 gw1 sshd[39842]: Accepted publickey for bob from 192.0.2.13 port 53427 ssh2: RSA SHA256:4t3jsnhzgqoy04ohnqj2
+Sep 15 03:30:46 gw1 sshd[16365]: Accepted publickey for root from 198.51.100.7 port 35760 ssh2: RSA SHA256:bbx2q5pmw7egg0jb11rp
+Sep 15 03:35:16 gw1 sshd[37182]: Server listening on 0.0.0.0 port 22.
+Sep 15 03:35:25 gw1 sshd[20718]: Invalid user bob from 203.0.113.200 port 52121
+Sep 15 03:35:43 gw1 sshd[39114]: Failed password for invalid user support from 192.0.2.10 port 37547 ssh2
+Sep 15 03:38:32 gw1 sshd[17436]: Accepted publickey for bob from 198.51.100.29 port 54995 ssh2: RSA SHA256:4lalqhyh5caqgulex3m3
+Sep 15 03:40:32 gw1 sshd[15925]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 03:41:44 gw1 sshd[1523]: pam_unix(sshd:session): session closed for user admin
+Sep 15 03:41:51 gw1 sshd[27046]: Failed password for invalid user guest from 198.51.100.9 port 31633 ssh2
+Sep 15 03:44:20 gw1 sshd[20425]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 03:45:09 gw1 sshd[38279]: Accepted publickey for carol from 198.51.100.30 port 37396 ssh2: RSA SHA256:c37l9clbip6zi0ory8as
+Sep 15 03:49:59 gw1 systemd-logind[612]: New session 30477 of user admin.
+Sep 15 03:51:30 gw1 sshd[19760]: Failed password for ubuntu from 198.51.100.13 port 30637 ssh2
+Sep 15 03:53:33 gw1 sshd[32221]: Failed password for invalid user test from 192.0.2.4 port 44756 ssh2
+Sep 15 03:56:50 gw1 CRON[31737]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 03:57:36 gw1 sshd[30276]: Failed password for git from 192.0.2.11 port 44112 ssh2
+Sep 15 03:58:48 gw1 sshd[20309]: Failed password for invalid user ftpuser from 192.0.2.39 port 41929 ssh2
+Sep 15 04:01:17 gw1 sshd[16691]: pam_unix(sshd:session): session closed for user alice
+Sep 15 04:03:25 gw1 sshd[24250]: Accepted publickey for root from 198.51.100.39 port 58122 ssh2: RSA SHA256:hmso0opv0f00zha9sigu
+Sep 15 04:03:25 gw1 CRON[28501]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 04:05:01 gw1 CRON[28216]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 04:12:43 gw1 systemd-logind[612]: New session 1981 of user alice.
+Sep 15 04:12:57 gw1 sshd[26005]: Failed password for invalid user support from 198.51.100.46 port 53511 ssh2
+Sep 15 04:14:42 gw1 sshd[11765]: Failed password for carol from 198.51.100.24 port 53932 ssh2
+Sep 15 04:14:51 gw1 CRON[1990]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 04:18:52 gw1 sshd[7847]: Accepted publickey for alice from 198.51.100.18 port 60046 ssh2: RSA SHA256:4jh4ewn6js8juj3b5nh9
+Sep 15 04:22:44 gw1 sshd[34910]: Server listening on 0.0.0.0 port 22.
+Sep 15 04:28:24 gw1 sshd[30000]: Accepted publickey for admin from 198.51.100.29 port 47417 ssh2: RSA SHA256:4c2mr2vbcjsy592yy9lp
+Sep 15 04:33:17 gw1 systemd-logind[612]: New session 23981 of user carol.
+Sep 15 04:34:19 gw1 sshd[12554]: Accepted publickey for deploy from 192.0.2.22 port 54872 ssh2: RSA SHA256:anidsc9ipu1n8ry6oq2f
+Sep 15 04:35:28 gw1 sshd[28965]: Failed password for invalid user support from 198.51.100.9 port 37231 ssh2
+Sep 15 04:36:47 gw1 sshd[10548]: Failed password for bob from 198.51.100.10 port 64392 ssh2
+Sep 15 04:39:02 gw1 CRON[1914]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 04:40:52 gw1 sshd[36028]: Failed password for ubuntu from 203.0.113.77 port 56241 ssh2
+Sep 15 04:41:46 gw1 sshd[11940]: Received disconnect from 198.51.100.27 port 13568:11: disconnected by user
+Sep 15 04:43:01 gw1 sshd[18301]: Accepted publickey for alice from 192.0.2.7 port 35309 ssh2: RSA SHA256:0uzt5g8na7hwitxxp6a8
+Sep 15 04:43:29 gw1 sshd[23479]: Failed password for invalid user support from 192.0.2.19 port 31867 ssh2
+Sep 15 04:44:22 gw1 sshd[21876]: Accepted publickey for deploy from 198.51.100.17 port 38132 ssh2: RSA SHA256:ahbqd5z9iqgfx6orpo66
+Sep 15 04:46:45 gw1 sshd[10333]: Failed password for git from 192.0.2.10 port 51304 ssh2
+Sep 15 04:49:18 gw1 sshd[35385]: Connection closed by authenticating user support 203.0.113.200 port 53399 [preauth]
+Sep 15 04:51:25 gw1 sshd[2072]: Failed password for postgres from 192.0.2.36 port 61236 ssh2
+Sep 15 04:52:14 gw1 sshd[39241]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 04:52:18 gw1 sshd[39956]: Failed password for alice from 198.51.100.22 port 46179 ssh2
+Sep 15 04:54:14 gw1 sshd[23335]: Received disconnect from 192.0.2.11 port 17538:11: disconnected by user
+Sep 15 04:58:40 gw1 sshd[18039]: Accepted publickey for carol from 198.51.100.13 port 41906 ssh2: RSA SHA256:yymuqszjk1yss55mirg2
+Sep 15 05:00:24 gw1 sshd[25570]: Server listening on 0.0.0.0 port 22.
+Sep 15 05:00:55 gw1 sshd[35594]: Failed publickey for alice from 203.0.113.200 port 57928 ssh2
+Sep 15 05:01:14 gw1 CRON[10561]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 05:03:29 gw1 sshd[27743]: Accepted publickey for bob from 198.51.100.3 port 30856 ssh2: RSA SHA256:p75mezy5j7yqu2qqkpq8
+Sep 15 05:06:02 gw1 sshd[39320]: Failed password for invalid user oracle from 192.0.2.25 port 45418 ssh2
+Sep 15 05:08:38 gw1 CRON[35386]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 05:11:09 gw1 sshd[8293]: Invalid user deploy from 203.0.113.200 port 56103
+Sep 15 05:11:51 gw1 sshd[27415]: Failed password for bob from 192.0.2.33 port 43372 ssh2
+Sep 15 05:14:47 gw1 sshd[38892]: Received disconnect from 192.0.2.26 port 1176:11: disconnected by user
+Sep 15 05:15:27 gw1 sshd[31184]: Failed password for admin from 192.0.2.8 port 49408 ssh2
+Sep 15 05:15:58 gw1 sshd[7319]: Failed password for invalid user guest from 203.0.113.77 port 43873 ssh2
+Sep 15 05:18:47 gw1 sshd[39984]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 05:19:10 gw1 sshd[10066]: Failed password for invalid user guest from 203.0.113.77 port 55187 ssh2
+Sep 15 05:21:19 gw1 sshd[18729]: Failed password for invalid user guest from 198.51.100.36 port 48542 ssh2
+Sep 15 05:25:46 gw1 sshd[24605]: Failed password for bob from 198.51.100.10 port 32652 ssh2
+Sep 15 05:26:50 gw1 sshd[35350]: Invalid user oracle from 203.0.113.200 port 41934
+Sep 15 05:28:06 gw1 sshd[35938]: Failed password for invalid user ftpuser from 203.0.113.77 port 35025 ssh2
+Sep 15 05:28:12 gw1 sshd[20080]: Accepted publickey for deploy from 192.0.2.18 port 63534 ssh2: RSA SHA256:y5pq9phitdqdrsf9i4no
+Sep 15 05:29:10 gw1 sshd[5891]: Received disconnect from 192.0.2.32 port 15362:11: disconnected by user
+Sep 15 05:29:16 gw1 sshd[34687]: Failed password for admin from 192.0.2.19 port 44016 ssh2
+Sep 15 05:30:59 gw1 sshd[23624]: Accepted publickey for carol from 192.0.2.32 port 55116 ssh2: RSA SHA256:3j0adqp7ugo6ub0cwnon
+Sep 15 05:35:58 gw1 sshd[26506]: Server listening on 0.0.0.0 port 22.
+Sep 15 05:39:22 gw1 sshd[36326]: Failed password for bob from 192.0.2.32 port 42521 ssh2
+Sep 15 05:41:03 gw1 sshd[18170]: Failed password for admin from 198.51.100.50 port 32095 ssh2
+Sep 15 05:42:46 gw1 sshd[8097]: Connection reset by 198.51.100.7 port 40657 [preauth]
+Sep 15 05:43:39 gw1 systemd-logind[612]: New session 56395 of user admin.
+Sep 15 05:44:31 gw1 sshd[22651]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 05:47:33 gw1 systemd-logind[612]: New session 37438 of user deploy.
+Sep 15 05:48:29 gw1 sshd[30950]: Failed password for invalid user pi from 198.51.100.10 port 56636 ssh2
+Sep 15 05:48:31 gw1 sshd[17488]: Failed password for git from 198.51.100.36 port 56446 ssh2
+Sep 15 05:49:51 gw1 sshd[26096]: Server listening on 0.0.0.0 port 22.
+Sep 15 05:50:42 gw1 sshd[16645]: Failed publickey for alice from 203.0.113.200 port 60888 ssh2
+Sep 15 05:51:22 gw1 sshd[5713]: Failed publickey for alice from 203.0.113.200 port 45285 ssh2
+Sep 15 05:52:57 gw1 sshd[21536]: Connection reset by 198.51.100.30 port 18947 [preauth]
+Sep 15 05:54:14 gw1 sshd[36608]: Failed password for admin from 198.51.100.18 port 59599 ssh2
+Sep 15 05:56:03 gw1 sshd[18647]: Failed publickey for support from 203.0.113.200 port 40406 ssh2
+Sep 15 05:56:11 gw1 sshd[11713]: Failed password for alice from 192.0.2.35 port 47448 ssh2
+Sep 15 06:03:07 gw1 sshd[29783]: Received disconnect from 192.0.2.35 port 32201:11: disconnected by user
+Sep 15 06:03:33 gw1 systemd-logind[612]: New session 61743 of user admin.
+Sep 15 06:07:33 gw1 CRON[11488]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 06:09:10 gw1 sshd[26437]: Invalid user guest from 203.0.113.200 port 32718
+Sep 15 06:09:54 gw1 sshd[32282]: Connection closed by authenticating user ftpuser 203.0.113.200 port 41465 [preauth]
+Sep 15 06:10:12 gw1 sshd[18435]: Accepted publickey for bob from 198.51.100.32 port 60699 ssh2: RSA SHA256:xyack2wlkx8homjmzt76
+Sep 15 06:12:17 gw1 sshd[14443]: Failed password for deploy from 198.51.100.52 port 40551 ssh2
+Sep 15 06:12:41 gw1 sshd[34411]: Invalid user carol from 203.0.113.200 port 52755
+Sep 15 06:24:19 gw1 sshd[30559]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 06:24:20 gw1 sshd[12993]: Failed password for root from 198.51.100.25 port 48119 ssh2
+Sep 15 06:24:24 gw1 sshd[37426]: Connection closed by authenticating user bob 203.0.113.200 port 42362 [preauth]
+Sep 15 06:25:14 gw1 sshd[26687]: Failed password for invalid user ftpuser from 198.51.100.46 port 38713 ssh2
+Sep 15 06:29:01 gw1 sshd[28726]: Failed password for deploy from 198.51.100.15 port 54918 ssh2
+Sep 15 06:29:33 gw1 sshd[12491]: Server listening on 0.0.0.0 port 22.
+Sep 15 06:34:58 gw1 sshd[21862]: Failed password for postgres from 198.51.100.17 port 50278 ssh2
+Sep 15 06:38:03 gw1 CRON[28670]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 06:38:50 gw1 sshd[22974]: Invalid user ftpuser from 203.0.113.200 port 58601
+Sep 15 06:38:59 gw1 sshd[6947]: Failed password for invalid user guest from 192.0.2.22 port 47541 ssh2
+Sep 15 06:43:33 gw1 sshd[17342]: Received disconnect from 192.0.2.14 port 45746:11: disconnected by user
+Sep 15 06:48:37 gw1 sshd[6965]: Failed password for invalid user pi from 198.51.100.3 port 43496 ssh2
+Sep 15 06:51:10 gw1 sshd[19114]: Failed password for invalid user oracle from 192.0.2.8 port 42310 ssh2
+Sep 15 06:53:01 gw1 sshd[26101]: Failed password for root from 198.51.100.19 port 54128 ssh2
+Sep 15 06:53:14 gw1 sshd[19645]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 06:56:29 gw1 sshd[4888]: Failed password for postgres from 198.51.100.54 port 42353 ssh2
+Sep 15 06:58:59 gw1 sshd[36234]: Failed password for ubuntu from 198.51.100.27 port 49205 ssh2
+Sep 15 06:59:04 gw1 sshd[32798]: Received disconnect from 198.51.100.55 port 26035:11: disconnected by user
+Sep 15 07:01:34 gw1 sshd[5214]: Accepted publickey for alice from 198.51.100.7 port 47054 ssh2: RSA SHA256:3j5yfyot4f1m39vhhjg9
+Sep 15 07:02:09 gw1 sshd[21855]: Connection reset by 198.51.100.39 port 42739 [preauth]
+Sep 15 07:02:21 gw1 sshd[4561]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 07:03:08 gw1 sshd[31862]: pam_unix(sshd:session): session closed for user root
+Sep 15 07:03:58 gw1 sshd[1725]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 07:05:42 gw1 systemd-logind[612]: New session 37392 of user admin.
+Sep 15 07:07:32 gw1 sshd[20205]: Invalid user deploy from 203.0.113.200 port 48601
+Sep 15 07:14:09 gw1 sshd[20010]: Failed password for carol from 198.51.100.11 port 49507 ssh2
+Sep 15 07:14:55 gw1 sshd[14248]: Failed password for admin from 198.51.100.52 port 47859 ssh2
+Sep 15 07:18:05 gw1 sshd[8180]: Failed password for root from 203.0.113.77 port 32062 ssh2
+Sep 15 07:19:13 gw1 sshd[2882]: Failed publickey for git from 203.0.113.200 port 34807 ssh2
+Sep 15 07:20:03 gw1 systemd-logind[612]: New session 10795 of user deploy.
+Sep 15 07:26:23 gw1 sshd[3106]: Invalid user alice from 203.0.113.200 port 32676
+Sep 15 07:28:51 gw1 sshd[24865]: Failed password for bob from 198.51.100.36 port 35714 ssh2
+Sep 15 07:29:13 gw1 sshd[29150]: Server listening on 0.0.0.0 port 22.
+Sep 15 07:30:06 gw1 sshd[11932]: Server listening on 0.0.0.0 port 22.
+Sep 15 07:33:14 gw1 sshd[17857]: Server listening on 0.0.0.0 port 22.
+Sep 15 07:33:42 gw1 sshd[35429]: Invalid user support from 203.0.113.200 port 64159
+Sep 15 07:34:06 gw1 sshd[24710]: Connection reset by 198.51.100.5 port 53637 [preauth]
+Sep 15 07:34:15 gw1 systemd-logind[612]: New session 63982 of user root.
+Sep 15 07:35:21 gw1 sshd[5615]: Accepted publickey for root from 198.51.100.45 port 59363 ssh2: RSA SHA256:0sfonueddd5kd7eunafj
+Sep 15 07:38:24 gw1 sshd[32977]: Server listening on 0.0.0.0 port 22.
+Sep 15 07:43:06 gw1 sshd[31787]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 07:46:19 gw1 sshd[18030]: Failed password for bob from 192.0.2.36 port 46774 ssh2
+Sep 15 07:47:16 gw1 sshd[13546]: Failed password for invalid user ftpuser from 198.51.100.19 port 51623 ssh2
+Sep 15 07:47:33 gw1 sshd[1553]: Failed password for alice from 198.51.100.14 port 33573 ssh2
+Sep 15 07:52:34 gw1 CRON[33574]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 07:55:55 gw1 sshd[28562]: Server listening on 0.0.0.0 port 22.
+Sep 15 08:02:25 gw1 sshd[12197]: Failed password for git from 192.0.2.12 port 43377 ssh2
+Sep 15 08:02:45 gw1 sshd[22691]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 08:04:18 gw1 sshd[3250]: Failed password for admin from 192.0.2.5 port 60512 ssh2
+Sep 15 08:04:44 gw1 sshd[1634]: Failed password for invalid user support from 198.51.100.31 port 47036 ssh2
+Sep 15 08:08:05 gw1 sshd[10732]: Accepted publickey for bob from 198.51.100.57 port 49773 ssh2: RSA SHA256:4s3w7hblmemkx1uu2fcf
+Sep 15 08:08:24 gw1 sshd[5630]: Failed password for invalid user test from 192.0.2.26 port 50419 ssh2
+Sep 15 08:11:06 gw1 sshd[28046]: Failed password for alice from 198.51.100.6 port 46611 ssh2
+Sep 15 08:13:39 gw1 sshd[4331]: Failed password for carol from 198.51.100.35 port 36395 ssh2
+Sep 15 08:16:23 gw1 CRON[33484]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 08:17:14 gw1 sshd[1233]: Connection closed by authenticating user support 203.0.113.200 port 63881 [preauth]
+Sep 15 08:17:29 gw1 CRON[37213]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 08:20:12 gw1 sshd[7771]: Failed password for invalid user test from 198.51.100.52 port 62157 ssh2
+Sep 15 08:34:16 gw1 sshd[26444]: Failed password for postgres from 198.51.100.27 port 36321 ssh2
+Sep 15 08:35:01 gw1 sshd[13423]: Accepted publickey for admin from 192.0.2.12 port 53655 ssh2: RSA SHA256:4b30fse9ne4e5ilczs9r
+Sep 15 08:37:41 gw1 sshd[15617]: Failed password for carol from 192.0.2.34 port 45770 ssh2
+Sep 15 08:41:04 gw1 sshd[4400]: Failed password for invalid user oracle from 192.0.2.28 port 59681 ssh2
+Sep 15 08:43:58 gw1 sshd[10950]: pam_unix(sshd:session): session closed for user admin
+Sep 15 08:45:25 gw1 sshd[10754]: Failed password for invalid user guest from 203.0.113.77 port 62474 ssh2
+Sep 15 08:46:05 gw1 sshd[4428]: Accepted publickey for root from 198.51.100.44 port 49365 ssh2: RSA SHA256:cke2rooczwc3oq8qud4h
+Sep 15 08:53:55 gw1 sshd[18843]: Received disconnect from 198.51.100.31 port 29388:11: disconnected by user
+Sep 15 08:54:21 gw1 sshd[11699]: Connection reset by 198.51.100.40 port 17913 [preauth]
+Sep 15 08:58:27 gw1 sshd[1856]: Accepted publickey for root from 198.51.100.22 port 46023 ssh2: RSA SHA256:ve1gkchm80qalv9lp0ur
+Sep 15 09:00:09 gw1 sshd[31454]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 09:09:18 gw1 sshd[10546]: Received disconnect from 192.0.2.35 port 9087:11: disconnected by user
+Sep 15 09:10:15 gw1 sshd[2873]: Failed password for admin from 192.0.2.22 port 42150 ssh2
+Sep 15 09:21:53 gw1 sshd[21412]: Received disconnect from 198.51.100.8 port 46556:11: disconnected by user
+Sep 15 09:22:48 gw1 sshd[16494]: Invalid user admin from 203.0.113.200 port 49643
+Sep 15 09:22:54 gw1 sshd[3411]: Accepted publickey for bob from 192.0.2.4 port 54881 ssh2: RSA SHA256:12bwreboo8zdop8zv8zi
+Sep 15 09:23:05 gw1 sshd[4603]: Failed password for carol from 192.0.2.4 port 31847 ssh2
+Sep 15 09:23:12 gw1 sshd[26636]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 09:23:45 gw1 sshd[7789]: Connection closed by authenticating user support 203.0.113.200 port 57355 [preauth]
+Sep 15 09:25:17 gw1 sshd[11564]: pam_unix(sshd:session): session closed for user carol
+Sep 15 09:25:32 gw1 systemd-logind[612]: New session 20958 of user carol.
+Sep 15 09:30:50 gw1 sshd[38854]: Failed password for invalid user guest from 192.0.2.34 port 49438 ssh2
+Sep 15 09:30:51 gw1 sshd[33002]: Failed password for invalid user support from 203.0.113.77 port 64899 ssh2
+Sep 15 09:32:56 gw1 sshd[8367]: Accepted publickey for root from 192.0.2.28 port 44625 ssh2: RSA SHA256:c7rb6v1jvz4npc4p7s6z
+Sep 15 09:33:17 gw1 sshd[35715]: Failed publickey for oracle from 203.0.113.200 port 61868 ssh2
+Sep 15 09:35:49 gw1 sshd[25740]: Connection closed by authenticating user guest 203.0.113.200 port 40971 [preauth]
+Sep 15 09:37:38 gw1 sshd[26375]: Failed password for bob from 198.51.100.50 port 47185 ssh2
+Sep 15 09:42:42 gw1 systemd-logind[612]: New session 13037 of user carol.
+Sep 15 09:42:49 gw1 systemd-logind[612]: New session 22972 of user deploy.
+Sep 15 09:44:13 gw1 systemd-logind[612]: New session 3484 of user admin.
+Sep 15 09:47:30 gw1 sshd[7538]: Connection reset by 192.0.2.36 port 54889 [preauth]
+Sep 15 09:47:41 gw1 CRON[5920]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 09:49:31 gw1 sshd[39038]: pam_unix(sshd:session): session closed for user alice
+Sep 15 09:49:50 gw1 sshd[31986]: Connection closed by authenticating user test 203.0.113.200 port 55918 [preauth]
+Sep 15 09:53:03 gw1 sshd[10166]: Connection closed by authenticating user guest 203.0.113.200 port 50520 [preauth]
+Sep 15 09:53:09 gw1 CRON[29055]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 09:53:22 gw1 sshd[29919]: pam_unix(sshd:session): session closed for user admin
+Sep 15 09:57:56 gw1 systemd-logind[612]: New session 34859 of user alice.
+Sep 15 09:58:04 gw1 sshd[18401]: Failed password for ubuntu from 198.51.100.35 port 47885 ssh2
+Sep 15 09:59:49 gw1 sshd[8022]: Failed password for invalid user pi from 198.51.100.52 port 63761 ssh2
+Sep 15 10:00:57 gw1 sshd[15497]: Accepted publickey for alice from 192.0.2.14 port 48021 ssh2: RSA SHA256:weafgtgazqcbm2yinabe
+Sep 15 10:01:43 gw1 sshd[17082]: Failed password for postgres from 192.0.2.5 port 58399 ssh2
+Sep 15 10:03:08 gw1 sshd[38085]: Failed password for git from 192.0.2.4 port 59367 ssh2
+Sep 15 10:05:58 gw1 sshd[20386]: Failed password for alice from 192.0.2.3 port 48024 ssh2
+Sep 15 10:07:16 gw1 sshd[31702]: Failed password for bob from 192.0.2.36 port 40248 ssh2
+Sep 15 10:10:15 gw1 sshd[7682]: Failed password for invalid user oracle from 192.0.2.33 port 57363 ssh2
+Sep 15 10:11:30 gw1 sshd[6747]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 10:11:48 gw1 systemd-logind[612]: New session 34085 of user bob.
+Sep 15 10:12:01 gw1 sshd[17172]: Accepted publickey for deploy from 192.0.2.25 port 59772 ssh2: RSA SHA256:8c6paohwbsuruu233mhh
+Sep 15 10:12:11 gw1 sshd[11623]: Failed password for git from 192.0.2.18 port 37481 ssh2
+Sep 15 10:14:03 gw1 sshd[19923]: Failed password for alice from 192.0.2.39 port 56048 ssh2
+Sep 15 10:14:07 gw1 sshd[26263]: Invalid user bob from 203.0.113.200 port 58748
+Sep 15 10:16:18 gw1 sshd[5032]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 10:17:11 gw1 sshd[20552]: Accepted publickey for admin from 192.0.2.14 port 34383 ssh2: RSA SHA256:tl2nqwryj1sljb2aeydr
+Sep 15 10:17:25 gw1 sshd[17517]: Received disconnect from 198.51.100.38 port 39124:11: disconnected by user
+Sep 15 10:19:02 gw1 sshd[3525]: Failed password for admin from 198.51.100.16 port 50458 ssh2
+Sep 15 10:19:50 gw1 sshd[28198]: Failed password for invalid user test from 203.0.113.77 port 49335 ssh2
+Sep 15 10:20:23 gw1 CRON[14145]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 10:22:35 gw1 sshd[31209]: Failed publickey for oracle from 203.0.113.200 port 35037 ssh2
+Sep 15 10:27:08 gw1 sshd[28975]: Failed password for invalid user pi from 198.51.100.55 port 47774 ssh2
+Sep 15 10:28:24 gw1 sshd[23904]: Invalid user admin from 203.0.113.200 port 55924
+Sep 15 10:30:26 gw1 sshd[33111]: Received disconnect from 198.51.100.24 port 62861:11: disconnected by user
+Sep 15 10:31:37 gw1 CRON[11438]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 10:31:45 gw1 CRON[1513]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 10:31:54 gw1 CRON[32504]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 10:33:34 gw1 sshd[8175]: pam_unix(sshd:session): session closed for user carol
+Sep 15 10:33:55 gw1 sshd[3805]: Accepted publickey for root from 192.0.2.25 port 42560 ssh2: RSA SHA256:46r0mg50e6z1lhrr0vcq
+Sep 15 10:39:40 gw1 sshd[22622]: Accepted publickey for root from 192.0.2.9 port 39256 ssh2: RSA SHA256:o02ca5fv6av01ecp8vlw
+Sep 15 10:40:42 gw1 sshd[16585]: Failed password for ubuntu from 203.0.113.77 port 39533 ssh2
+Sep 15 10:41:36 gw1 sshd[11113]: pam_unix(sshd:session): session closed for user admin
+Sep 15 10:44:51 gw1 sshd[24927]: Failed password for admin from 198.51.100.17 port 50085 ssh2
+Sep 15 10:45:43 gw1 sshd[33206]: Failed password for invalid user guest from 192.0.2.39 port 54715 ssh2
+Sep 15 10:46:50 gw1 sshd[37751]: pam_unix(sshd:session): session closed for user bob
+Sep 15 10:48:37 gw1 sshd[25207]: Failed password for alice from 192.0.2.7 port 58527 ssh2
+Sep 15 10:49:29 gw1 sshd[16226]: Server listening on 0.0.0.0 port 22.
+Sep 15 10:53:35 gw1 sshd[26803]: Accepted publickey for deploy from 192.0.2.33 port 39995 ssh2: RSA SHA256:ske8zqnidwfb23w8fbth
+Sep 15 10:54:13 gw1 sshd[35280]: Failed password for bob from 192.0.2.18 port 33456 ssh2
+Sep 15 10:54:32 gw1 sshd[20786]: Failed password for root from 198.51.100.55 port 47874 ssh2
+Sep 15 11:00:04 gw1 sshd[29917]: Failed password for invalid user guest from 192.0.2.21 port 51296 ssh2
+Sep 15 11:00:14 gw1 sshd[20050]: Server listening on 0.0.0.0 port 22.
+Sep 15 11:01:39 gw1 sshd[28145]: Server listening on 0.0.0.0 port 22.
+Sep 15 11:02:07 gw1 sshd[4617]: Failed password for git from 198.51.100.41 port 40186 ssh2
+Sep 15 11:08:34 gw1 sshd[39373]: Connection reset by 192.0.2.23 port 62602 [preauth]
+Sep 15 11:11:02 gw1 sshd[31217]: Failed password for admin from 198.51.100.20 port 41388 ssh2
+Sep 15 11:14:33 gw1 sshd[24258]: Connection closed by authenticating user admin 203.0.113.200 port 40315 [preauth]
+Sep 15 11:16:04 gw1 sshd[13863]: Failed password for git from 192.0.2.10 port 56681 ssh2
+Sep 15 11:23:07 gw1 sshd[38010]: Failed publickey for guest from 203.0.113.200 port 60154 ssh2
+Sep 15 11:23:24 gw1 sshd[29584]: Failed password for invalid user test from 203.0.113.77 port 55339 ssh2
+Sep 15 11:23:45 gw1 sshd[35370]: Failed password for invalid user test from 198.51.100.22 port 50788 ssh2
+Sep 15 11:23:59 gw1 sshd[29623]: Failed publickey for ftpuser from 203.0.113.200 port 50763 ssh2
+Sep 15 11:24:02 gw1 sshd[15842]: Received disconnect from 192.0.2.16 port 37455:11: disconnected by user
+Sep 15 11:25:27 gw1 sshd[5005]: Received disconnect from 198.51.100.38 port 46503:11: disconnected by user
+Sep 15 11:30:40 gw1 sshd[21020]: pam_unix(sshd:session): session closed for user carol
+Sep 15 11:30:55 gw1 sshd[12956]: Accepted publickey for alice from 192.0.2.16 port 54679 ssh2: RSA SHA256:0fwsxk3s0fx97a3zkajv
+Sep 15 11:31:41 gw1 sshd[25429]: Connection reset by 192.0.2.6 port 57265 [preauth]
+Sep 15 11:32:56 gw1 sshd[14515]: Connection closed by authenticating user pi 203.0.113.200 port 44684 [preauth]
+Sep 15 11:33:32 gw1 sshd[19647]: Failed password for invalid user test from 198.51.100.58 port 42902 ssh2
+Sep 15 11:35:15 gw1 sshd[38815]: Failed password for invalid user test from 198.51.100.4 port 62557 ssh2
+Sep 15 11:38:44 gw1 sshd[18550]: Failed password for ubuntu from 203.0.113.77 port 36753 ssh2
+Sep 15 11:41:06 gw1 sshd[38998]: Received disconnect from 192.0.2.39 port 31476:11: disconnected by user
+Sep 15 11:43:28 gw1 sshd[19809]: Connection closed by authenticating user carol 203.0.113.200 port 30800 [preauth]
+Sep 15 11:46:41 gw1 sshd[4600]: Failed password for invalid user pi from 192.0.2.24 port 32881 ssh2
+Sep 15 11:49:28 gw1 systemd-logind[612]: New session 54654 of user alice.
+Sep 15 11:50:36 gw1 sshd[32326]: Connection closed by authenticating user postgres 203.0.113.200 port 36971 [preauth]
+Sep 15 11:52:15 gw1 sshd[7161]: Failed password for alice from 203.0.113.77 port 61447 ssh2
+Sep 15 11:55:28 gw1 sshd[29902]: Failed password for ubuntu from 198.51.100.20 port 64388 ssh2
+Sep 15 11:59:21 gw1 sshd[26633]: Accepted publickey for admin from 192.0.2.21 port 46111 ssh2: RSA SHA256:3fdf7klckdropwj4y4x4
+Sep 15 11:59:23 gw1 sshd[3603]: Failed password for git from 192.0.2.16 port 37345 ssh2
+Sep 15 12:00:08 gw1 sshd[38758]: pam_unix(sshd:session): session closed for user bob
+Sep 15 12:02:27 gw1 sshd[11853]: Accepted publickey for carol from 198.51.100.20 port 52656 ssh2: RSA SHA256:xpnw0yojax9a82qiy6am
+Sep 15 12:04:55 gw1 sshd[31952]: Failed password for deploy from 192.0.2.4 port 57828 ssh2
+Sep 15 12:10:37 gw1 sshd[15810]: Accepted publickey for bob from 198.51.100.21 port 43519 ssh2: RSA SHA256:elt9my4dg2y1fba697s1
+Sep 15 12:11:46 gw1 sshd[16073]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 12:14:50 gw1 sshd[3056]: Accepted publickey for root from 192.0.2.36 port 32138 ssh2: RSA SHA256:iovn1y26tq8jqdf5wmv3
+Sep 15 12:18:51 gw1 sshd[36942]: Failed password for git from 192.0.2.38 port 61089 ssh2
+Sep 15 12:25:41 gw1 sshd[39882]: Accepted publickey for deploy from 198.51.100.21 port 48282 ssh2: RSA SHA256:1pczcz0kr8yiekmvrbey
+Sep 15 12:27:43 gw1 sshd[37867]: Failed password for git from 198.51.100.51 port 55432 ssh2
+Sep 15 12:28:22 gw1 sshd[16389]: Failed password for ubuntu from 192.0.2.35 port 53943 ssh2
+Sep 15 12:28:45 gw1 sshd[28386]: Invalid user oracle from 203.0.113.200 port 40325
+Sep 15 12:30:12 gw1 sshd[18436]: Failed password for alice from 192.0.2.10 port 47009 ssh2
+Sep 15 12:31:02 gw1 sshd[8971]: Failed password for postgres from 198.51.100.11 port 52487 ssh2
+Sep 15 12:32:40 gw1 sshd[15674]: Received disconnect from 198.51.100.33 port 48914:11: disconnected by user
+Sep 15 12:34:34 gw1 sshd[33132]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 12:37:07 gw1 sshd[10013]: Failed password for carol from 192.0.2.35 port 61300 ssh2
+Sep 15 12:38:08 gw1 sshd[24155]: Failed password for ubuntu from 203.0.113.77 port 43971 ssh2
+Sep 15 12:39:41 gw1 sshd[18642]: Connection reset by 198.51.100.48 port 3744 [preauth]
+Sep 15 12:42:57 gw1 sshd[33732]: Failed password for invalid user oracle from 198.51.100.42 port 51213 ssh2
+Sep 15 12:44:44 gw1 sshd[30935]: Failed password for deploy from 192.0.2.33 port 60576 ssh2
+Sep 15 12:48:12 gw1 sshd[25963]: Accepted publickey for root from 192.0.2.26 port 36197 ssh2: RSA SHA256:uyps016km1kguj2k3bl6
+Sep 15 12:54:04 gw1 sshd[10006]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 12:54:15 gw1 sshd[26446]: Invalid user carol from 203.0.113.200 port 31136
+Sep 15 12:56:29 gw1 sshd[7008]: Accepted publickey for deploy from 198.51.100.29 port 58722 ssh2: RSA SHA256:ko16grz44gxjhthd847c
+Sep 15 12:56:32 gw1 sshd[27251]: Failed password for ubuntu from 198.51.100.37 port 54925 ssh2
+Sep 15 12:56:50 gw1 sshd[8658]: Server listening on 0.0.0.0 port 22.
+Sep 15 12:57:22 gw1 sshd[23822]: Failed password for root from 198.51.100.16 port 42749 ssh2
+Sep 15 13:03:05 gw1 sshd[16835]: Connection reset by 192.0.2.3 port 12702 [preauth]
+Sep 15 13:03:42 gw1 sshd[35378]: Server listening on 0.0.0.0 port 22.
+Sep 15 13:05:03 gw1 sshd[13937]: Received disconnect from 198.51.100.16 port 47314:11: disconnected by user
+Sep 15 13:05:42 gw1 sshd[33928]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 13:07:27 gw1 sshd[16735]: Accepted publickey for carol from 198.51.100.51 port 36572 ssh2: RSA SHA256:nrdu7t3cwwr2adt1p8o9
+Sep 15 13:07:42 gw1 sshd[24854]: Connection reset by 198.51.100.29 port 40984 [preauth]
+Sep 15 13:09:22 gw1 sshd[17996]: Received disconnect from 192.0.2.27 port 11694:11: disconnected by user
+Sep 15 13:13:21 gw1 sshd[23122]: Server listening on 0.0.0.0 port 22.
+Sep 15 13:15:17 gw1 sshd[5688]: Failed password for invalid user guest from 203.0.113.77 port 41688 ssh2
+Sep 15 13:15:34 gw1 sshd[2207]: Connection closed by authenticating user oracle 203.0.113.200 port 33835 [preauth]
+Sep 15 13:17:07 gw1 sshd[26657]: Accepted publickey for bob from 192.0.2.35 port 64663 ssh2: RSA SHA256:mmkxyxzab0mg8jk8ol2n
+Sep 15 13:19:47 gw1 sshd[2798]: Failed password for invalid user test from 198.51.100.8 port 39010 ssh2
+Sep 15 13:23:15 gw1 sshd[1695]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 13:23:29 gw1 sshd[29122]: Accepted publickey for alice from 198.51.100.31 port 34454 ssh2: RSA SHA256:e9wz2ndabgum20mxyfl0
+Sep 15 13:25:07 gw1 sshd[7480]: Failed password for invalid user guest from 198.51.100.20 port 43474 ssh2
+Sep 15 13:25:21 gw1 sshd[20568]: Received disconnect from 192.0.2.19 port 48485:11: disconnected by user
+Sep 15 13:28:20 gw1 sshd[36266]: Connection reset by 198.51.100.13 port 60177 [preauth]
+Sep 15 13:31:35 gw1 sshd[15070]: Invalid user admin from 203.0.113.200 port 30026
+Sep 15 13:42:02 gw1 sshd[30568]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 13:42:03 gw1 sshd[38169]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 13:43:50 gw1 sshd[23802]: Server listening on 0.0.0.0 port 22.
+Sep 15 13:44:16 gw1 sshd[20174]: pam_unix(sshd:session): session closed for user carol
+Sep 15 13:45:08 gw1 sshd[3946]: Server listening on 0.0.0.0 port 22.
+Sep 15 13:45:10 gw1 sshd[7698]: Accepted publickey for alice from 198.51.100.27 port 55232 ssh2: RSA SHA256:7bwdjylbk0u9dyyflzs1
+Sep 15 13:47:52 gw1 systemd-logind[612]: New session 39739 of user alice.
+Sep 15 13:49:54 gw1 systemd-logind[612]: New session 57128 of user admin.
+Sep 15 13:52:37 gw1 sshd[9202]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 13:53:26 gw1 sshd[2144]: pam_unix(sshd:session): session closed for user carol
+Sep 15 13:55:47 gw1 sshd[17984]: Server listening on 0.0.0.0 port 22.
+Sep 15 13:58:24 gw1 sshd[12759]: Failed password for invalid user guest from 198.51.100.50 port 42308 ssh2
+Sep 15 13:59:10 gw1 sshd[1431]: pam_unix(sshd:session): session closed for user admin
+Sep 15 13:59:34 gw1 systemd-logind[612]: New session 45340 of user carol.
+Sep 15 14:00:28 gw1 sshd[24992]: Failed password for alice from 198.51.100.2 port 59496 ssh2
+Sep 15 14:01:05 gw1 systemd-logind[612]: New session 63026 of user alice.
+Sep 15 14:01:33 gw1 sshd[26099]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 14:02:58 gw1 sshd[2313]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 14:03:36 gw1 sshd[19311]: Server listening on 0.0.0.0 port 22.
+Sep 15 14:03:40 gw1 sshd[14698]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 14:05:26 gw1 sshd[8835]: Connection reset by 192.0.2.19 port 41496 [preauth]
+Sep 15 14:07:44 gw1 systemd-logind[612]: New session 9425 of user alice.
+Sep 15 14:09:21 gw1 sshd[32769]: Server listening on 0.0.0.0 port 22.
+Sep 15 14:09:53 gw1 sshd[17558]: Received disconnect from 198.51.100.17 port 63725:11: disconnected by user
+Sep 15 14:13:33 gw1 sshd[28680]: Failed password for invalid user test from 203.0.113.77 port 56218 ssh2
+Sep 15 14:14:00 gw1 CRON[36101]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 14:21:36 gw1 sshd[20164]: Failed password for postgres from 203.0.113.77 port 49821 ssh2
+Sep 15 14:21:45 gw1 sshd[26822]: Server listening on 0.0.0.0 port 22.
+Sep 15 14:23:08 gw1 sshd[12354]: Accepted publickey for alice from 192.0.2.28 port 41990 ssh2: RSA SHA256:lfz67gad6qobaueldwvu
+Sep 15 14:24:26 gw1 sshd[14427]: Accepted publickey for carol from 192.0.2.21 port 30185 ssh2: RSA SHA256:paz2woq5wkkkaix2d6rw
+Sep 15 14:24:29 gw1 sshd[39652]: Accepted publickey for root from 198.51.100.15 port 32636 ssh2: RSA SHA256:7z47o8ldwhayocfhb8l3
+Sep 15 14:24:48 gw1 sshd[23239]: Failed publickey for support from 203.0.113.200 port 62679 ssh2
+Sep 15 14:25:35 gw1 sshd[39438]: Failed password for root from 203.0.113.77 port 37857 ssh2
+Sep 15 14:25:35 gw1 sshd[15078]: Failed password for invalid user oracle from 198.51.100.19 port 35281 ssh2
+Sep 15 14:27:26 gw1 sshd[32023]: Failed password for invalid user guest from 198.51.100.58 port 40426 ssh2
+Sep 15 14:31:53 gw1 sshd[1471]: Failed password for bob from 192.0.2.4 port 43510 ssh2
+Sep 15 14:33:15 gw1 sshd[21704]: Server listening on 0.0.0.0 port 22.
+Sep 15 14:34:00 gw1 sshd[22168]: Accepted publickey for carol from 198.51.100.23 port 47570 ssh2: RSA SHA256:h9a5ojkl7f7n0izm5ouo
+Sep 15 14:34:51 gw1 sshd[31408]: pam_unix(sshd:session): session closed for user alice
+Sep 15 14:36:29 gw1 sshd[15927]: Failed password for invalid user test from 198.51.100.17 port 39059 ssh2
+Sep 15 14:42:19 gw1 sshd[27811]: Connection closed by authenticating user postgres 203.0.113.200 port 40934 [preauth]
+Sep 15 14:42:38 gw1 sshd[33395]: Received disconnect from 198.51.100.48 port 1753:11: disconnected by user
+Sep 15 14:42:58 gw1 systemd-logind[612]: New session 26705 of user admin.
+Sep 15 14:43:02 gw1 sshd[28769]: pam_unix(sshd:session): session closed for user admin
+Sep 15 14:45:37 gw1 sshd[3887]: Received disconnect from 192.0.2.24 port 45385:11: disconnected by user
+Sep 15 14:46:44 gw1 sshd[25322]: Failed password for root from 198.51.100.54 port 62981 ssh2
+Sep 15 14:48:20 gw1 sshd[37326]: Received disconnect from 198.51.100.21 port 2897:11: disconnected by user
+Sep 15 14:48:34 gw1 sshd[28746]: Connection closed by authenticating user admin 203.0.113.200 port 35656 [preauth]
+Sep 15 14:52:45 gw1 systemd-logind[612]: New session 18918 of user carol.
+Sep 15 14:52:56 gw1 sshd[14433]: Failed password for postgres from 203.0.113.77 port 44784 ssh2
+Sep 15 14:55:53 gw1 sshd[4106]: Accepted publickey for carol from 198.51.100.33 port 35999 ssh2: RSA SHA256:o3r6ajpo03rjn0pbxnqs
+Sep 15 14:57:03 gw1 sshd[39697]: Accepted publickey for admin from 198.51.100.30 port 51659 ssh2: RSA SHA256:lhuyjv6sfyo06m5y0mah
+Sep 15 14:58:44 gw1 sshd[28177]: pam_unix(sshd:session): session closed for user alice
+Sep 15 14:58:57 gw1 sshd[39275]: Received disconnect from 192.0.2.3 port 46355:11: disconnected by user
+Sep 15 14:59:48 gw1 sshd[20399]: Failed password for invalid user oracle from 198.51.100.28 port 50595 ssh2
+Sep 15 15:00:03 gw1 sshd[27054]: Failed password for bob from 192.0.2.16 port 53056 ssh2
+Sep 15 15:00:31 gw1 sshd[35572]: Accepted publickey for alice from 192.0.2.5 port 30789 ssh2: RSA SHA256:1ak3nv4cymyvlz6vy9zy
+Sep 15 15:00:41 gw1 sshd[33250]: Accepted publickey for deploy from 198.51.100.11 port 34629 ssh2: RSA SHA256:ugfwgj5hn288nxzwki6d
+Sep 15 15:02:26 gw1 sshd[8647]: Invalid user pi from 203.0.113.200 port 61238
+Sep 15 15:04:15 gw1 sshd[34194]: Failed password for invalid user pi from 192.0.2.22 port 38275 ssh2
+Sep 15 15:04:55 gw1 CRON[1821]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 15:05:00 gw1 sshd[22914]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 15:05:42 gw1 sshd[20828]: Received disconnect from 192.0.2.19 port 29238:11: disconnected by user
+Sep 15 15:06:48 gw1 sshd[17880]: Invalid user support from 203.0.113.200 port 38077
+Sep 15 15:08:15 gw1 sshd[9159]: Connection reset by 198.51.100.3 port 60260 [preauth]
+Sep 15 15:08:48 gw1 sshd[16874]: Connection reset by 192.0.2.3 port 52409 [preauth]
+Sep 15 15:10:22 gw1 sshd[8983]: Failed publickey for deploy from 203.0.113.200 port 40776 ssh2
+Sep 15 15:11:00 gw1 sshd[29560]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 15:11:51 gw1 sshd[18910]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 15:11:57 gw1 sshd[36091]: Connection closed by authenticating user carol 203.0.113.200 port 39174 [preauth]
+Sep 15 15:12:15 gw1 sshd[38026]: Server listening on 0.0.0.0 port 22.
+Sep 15 15:12:38 gw1 sshd[22790]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 15:15:02 gw1 CRON[34153]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 15:16:38 gw1 sshd[38121]: Connection closed by authenticating user oracle 203.0.113.200 port 63465 [preauth]
+Sep 15 15:16:58 gw1 sshd[37869]: Invalid user deploy from 203.0.113.200 port 56749
+Sep 15 15:17:46 gw1 sshd[24921]: Accepted publickey for root from 192.0.2.6 port 39895 ssh2: RSA SHA256:zgwejif8sxi9qug5nvci
+Sep 15 15:20:28 gw1 sshd[3695]: Accepted publickey for bob from 198.51.100.22 port 49368 ssh2: RSA SHA256:o6j8nneb5241pfugp6e9
+Sep 15 15:23:27 gw1 sshd[19850]: Failed password for bob from 203.0.113.77 port 59736 ssh2
+Sep 15 15:26:01 gw1 systemd-logind[612]: New session 26117 of user bob.
+Sep 15 15:28:07 gw1 sshd[15547]: Failed password for carol from 192.0.2.4 port 39928 ssh2
+Sep 15 15:28:50 gw1 sshd[8861]: Failed password for ubuntu from 198.51.100.38 port 38158 ssh2
+Sep 15 15:34:28 gw1 sshd[26838]: Failed password for bob from 198.51.100.8 port 36853 ssh2
+Sep 15 15:35:32 gw1 sshd[38512]: Connection closed by authenticating user postgres 203.0.113.200 port 43785 [preauth]
+Sep 15 15:36:21 gw1 sshd[28229]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 15:36:29 gw1 systemd-logind[612]: New session 38595 of user carol.
+Sep 15 15:37:12 gw1 sshd[23783]: Server listening on 0.0.0.0 port 22.
+Sep 15 15:37:52 gw1 sshd[35645]: Failed publickey for test from 203.0.113.200 port 49865 ssh2
+Sep 15 15:45:49 gw1 sshd[13172]: Server listening on 0.0.0.0 port 22.
+Sep 15 15:47:58 gw1 CRON[8214]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 15:50:30 gw1 sshd[5287]: Failed password for invalid user support from 198.51.100.54 port 60125 ssh2
+Sep 15 15:53:50 gw1 sshd[12631]: Failed password for invalid user support from 198.51.100.21 port 58625 ssh2
+Sep 15 15:54:32 gw1 sshd[39160]: Accepted publickey for admin from 198.51.100.22 port 55517 ssh2: RSA SHA256:nka0uvfsgof27cyd12oo
+Sep 15 15:56:41 gw1 sshd[25601]: pam_unix(sshd:session): session closed for user bob
+Sep 15 16:01:08 gw1 sshd[32859]: Failed password for ubuntu from 198.51.100.52 port 55492 ssh2
+Sep 15 16:04:39 gw1 sshd[3374]: Accepted publickey for deploy from 192.0.2.18 port 34191 ssh2: RSA SHA256:iixn1gjhiefypz5fnxse
+Sep 15 16:05:59 gw1 sshd[20409]: Failed password for git from 192.0.2.27 port 32224 ssh2
+Sep 15 16:06:38 gw1 sshd[2349]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 16:10:03 gw1 sshd[24350]: Failed password for bob from 198.51.100.30 port 37428 ssh2
+Sep 15 16:10:27 gw1 sshd[29344]: Failed password for invalid user pi from 192.0.2.19 port 54008 ssh2
+Sep 15 16:10:40 gw1 systemd-logind[612]: New session 62921 of user admin.
+Sep 15 16:11:02 gw1 sshd[38998]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 16:14:12 gw1 sshd[39015]: Failed publickey for pi from 203.0.113.200 port 32069 ssh2
+Sep 15 16:15:34 gw1 sshd[7450]: Accepted publickey for alice from 198.51.100.54 port 42564 ssh2: RSA SHA256:2djw6aq9xyqfnrcjsic2
+Sep 15 16:16:09 gw1 sshd[20809]: Invalid user support from 203.0.113.200 port 46574
+Sep 15 16:16:45 gw1 sshd[1855]: Failed publickey for ftpuser from 203.0.113.200 port 49220 ssh2
+Sep 15 16:21:51 gw1 sshd[24734]: Received disconnect from 198.51.100.58 port 17154:11: disconnected by user
+Sep 15 16:26:20 gw1 CRON[39214]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 16:27:46 gw1 sshd[32684]: Failed password for invalid user oracle from 198.51.100.7 port 42215 ssh2
+Sep 15 16:28:43 gw1 sshd[33808]: Failed password for invalid user oracle from 203.0.113.77 port 30159 ssh2
+Sep 15 16:29:12 gw1 sshd[4222]: Received disconnect from 198.51.100.21 port 23994:11: disconnected by user
+Sep 15 16:30:10 gw1 sshd[13455]: Failed password for invalid user ftpuser from 192.0.2.11 port 57773 ssh2
+Sep 15 16:30:32 gw1 sshd[14342]: Connection reset by 192.0.2.22 port 6770 [preauth]
+Sep 15 16:33:30 gw1 sshd[3722]: Failed password for admin from 192.0.2.5 port 37870 ssh2
+Sep 15 16:33:36 gw1 CRON[8444]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 16:34:10 gw1 sshd[12804]: Accepted publickey for alice from 198.51.100.2 port 53372 ssh2: RSA SHA256:z9zlstjwd7ff2bqi2lsl
+Sep 15 16:38:19 gw1 sshd[15692]: Received disconnect from 192.0.2.25 port 62113:11: disconnected by user
+Sep 15 16:39:49 gw1 sshd[36311]: Server listening on 0.0.0.0 port 22.
+Sep 15 16:40:34 gw1 sshd[34318]: Received disconnect from 198.51.100.47 port 28989:11: disconnected by user
+Sep 15 16:41:11 gw1 sshd[9300]: Connection closed by authenticating user ftpuser 203.0.113.200 port 52354 [preauth]
+Sep 15 16:43:07 gw1 sshd[20435]: Received disconnect from 192.0.2.33 port 4310:11: disconnected by user
+Sep 15 16:47:04 gw1 sshd[34330]: Failed password for postgres from 198.51.100.4 port 35965 ssh2
+Sep 15 16:48:13 gw1 sshd[2839]: Received disconnect from 198.51.100.13 port 41256:11: disconnected by user
+Sep 15 16:54:43 gw1 sshd[11585]: Accepted publickey for deploy from 192.0.2.24 port 47396 ssh2: RSA SHA256:29tlzk6ln1kzlu2s2sdk
+Sep 15 16:57:21 gw1 sshd[4441]: Failed password for admin from 198.51.100.55 port 47187 ssh2
+Sep 15 17:02:48 gw1 sshd[36139]: Failed password for invalid user ftpuser from 192.0.2.2 port 62006 ssh2
+Sep 15 17:03:42 gw1 sshd[3123]: Server listening on 0.0.0.0 port 22.
+Sep 15 17:03:44 gw1 sshd[21886]: Accepted publickey for alice from 198.51.100.47 port 52852 ssh2: RSA SHA256:gw5pvammx1w840w4z28u
+Sep 15 17:05:03 gw1 sshd[5282]: Failed password for ubuntu from 198.51.100.40 port 47613 ssh2
+Sep 15 17:09:11 gw1 sshd[15151]: Failed password for invalid user oracle from 198.51.100.57 port 46908 ssh2
+Sep 15 17:12:05 gw1 sshd[31383]: Failed password for deploy from 198.51.100.48 port 52932 ssh2
+Sep 15 17:13:01 gw1 sshd[17909]: Failed password for bob from 192.0.2.35 port 59914 ssh2
+Sep 15 17:13:20 gw1 sshd[32005]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 17:14:47 gw1 sshd[2745]: Server listening on 0.0.0.0 port 22.
+Sep 15 17:15:19 gw1 sshd[3190]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 17:23:11 gw1 sshd[31387]: Accepted publickey for admin from 192.0.2.9 port 47262 ssh2: RSA SHA256:m2twsruxij9v6zzgmvhl
+Sep 15 17:23:18 gw1 systemd-logind[612]: New session 27461 of user deploy.
+Sep 15 17:25:50 gw1 sshd[13795]: Invalid user ubuntu from 203.0.113.200 port 45404
+Sep 15 17:26:38 gw1 sshd[25318]: Failed password for deploy from 192.0.2.5 port 33899 ssh2
+Sep 15 17:27:01 gw1 sshd[10411]: Failed password for git from 192.0.2.30 port 57262 ssh2
+Sep 15 17:27:04 gw1 sshd[11718]: Invalid user bob from 203.0.113.200 port 37530
+Sep 15 17:29:20 gw1 sshd[9176]: Accepted publickey for bob from 192.0.2.9 port 37993 ssh2: RSA SHA256:prcnd5dcnu2qph8ppfes
+Sep 15 17:30:12 gw1 sshd[28894]: Failed password for git from 192.0.2.8 port 57247 ssh2
+Sep 15 17:31:41 gw1 sshd[28393]: Server listening on 0.0.0.0 port 22.
+Sep 15 17:37:00 gw1 sshd[11042]: Failed password for ubuntu from 198.51.100.9 port 40849 ssh2
+Sep 15 17:38:57 gw1 sshd[36664]: Failed publickey for test from 203.0.113.200 port 64735 ssh2
+Sep 15 17:39:30 gw1 systemd-logind[612]: New session 17399 of user root.
+Sep 15 17:41:08 gw1 sshd[9471]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 17:50:01 gw1 systemd-logind[612]: New session 59648 of user admin.
+Sep 15 17:51:42 gw1 sshd[22181]: Failed password for postgres from 198.51.100.22 port 45144 ssh2
+Sep 15 17:59:05 gw1 sshd[23404]: Connection closed by authenticating user oracle 203.0.113.200 port 34988 [preauth]
+Sep 15 18:00:37 gw1 sshd[4082]: Accepted publickey for alice from 192.0.2.17 port 61942 ssh2: RSA SHA256:ui3i5yz4yoqvp9b19rvu
+Sep 15 18:02:24 gw1 CRON[15238]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 18:04:04 gw1 sshd[20893]: Failed password for invalid user test from 192.0.2.37 port 43756 ssh2
+Sep 15 18:04:18 gw1 sshd[32893]: Failed password for ubuntu from 192.0.2.3 port 47885 ssh2
+Sep 15 18:10:31 gw1 sshd[31853]: Failed password for invalid user pi from 198.51.100.56 port 31412 ssh2
+Sep 15 18:10:39 gw1 sshd[7683]: Failed password for admin from 198.51.100.52 port 40653 ssh2
+Sep 15 18:10:46 gw1 sshd[15389]: Accepted publickey for admin from 192.0.2.39 port 45837 ssh2: RSA SHA256:manqwernqmpvf65k7isd
+Sep 15 18:11:22 gw1 sshd[35205]: Failed password for alice from 192.0.2.32 port 64634 ssh2
+Sep 15 18:11:44 gw1 sshd[21173]: Accepted publickey for bob from 192.0.2.4 port 61270 ssh2: RSA SHA256:xvo9fujez6krisyhcznd
+Sep 15 18:12:04 gw1 sshd[31476]: Failed password for root from 192.0.2.30 port 32486 ssh2
+Sep 15 18:13:01 gw1 sshd[32138]: Failed password for invalid user oracle from 198.51.100.24 port 49133 ssh2
+Sep 15 18:16:33 gw1 sshd[3099]: Failed password for bob from 198.51.100.36 port 32104 ssh2
+Sep 15 18:17:14 gw1 sshd[1858]: Failed password for alice from 198.51.100.13 port 55648 ssh2
+Sep 15 18:23:40 gw1 sshd[7837]: Accepted publickey for carol from 198.51.100.52 port 30584 ssh2: RSA SHA256:uelxteqgbvf2j8och427
+Sep 15 18:23:59 gw1 sshd[29311]: Failed password for git from 203.0.113.77 port 64161 ssh2
+Sep 15 18:30:42 gw1 CRON[30377]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 18:31:15 gw1 sshd[31793]: Server listening on 0.0.0.0 port 22.
+Sep 15 18:34:31 gw1 sshd[31469]: Server listening on 0.0.0.0 port 22.
+Sep 15 18:40:56 gw1 sshd[15846]: Failed password for invalid user ftpuser from 198.51.100.27 port 48845 ssh2
+Sep 15 18:43:38 gw1 sshd[18238]: Failed password for bob from 192.0.2.10 port 60880 ssh2
+Sep 15 18:45:30 gw1 CRON[6962]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 18:47:28 gw1 sshd[5454]: Failed password for invalid user oracle from 203.0.113.77 port 48288 ssh2
+Sep 15 18:49:55 gw1 sshd[28569]: Failed password for root from 198.51.100.14 port 57743 ssh2
+Sep 15 18:50:19 gw1 sshd[10532]: Failed password for invalid user ftpuser from 198.51.100.46 port 37905 ssh2
+Sep 15 18:50:47 gw1 sshd[28120]: Connection reset by 192.0.2.34 port 58500 [preauth]
+Sep 15 18:52:51 gw1 sshd[34223]: Failed password for deploy from 198.51.100.45 port 53028 ssh2
+Sep 15 18:57:43 gw1 CRON[4227]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 18:58:52 gw1 sshd[37014]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 19:02:34 gw1 CRON[21446]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 19:03:09 gw1 sshd[12092]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 19:07:07 gw1 sshd[17798]: Failed password for admin from 198.51.100.17 port 46501 ssh2
+Sep 15 19:07:24 gw1 CRON[29548]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 19:08:30 gw1 sshd[28964]: Failed publickey for root from 203.0.113.200 port 34751 ssh2
+Sep 15 19:14:44 gw1 sshd[2448]: Failed password for invalid user oracle from 198.51.100.35 port 35729 ssh2
+Sep 15 19:17:45 gw1 sshd[37964]: Received disconnect from 192.0.2.25 port 39098:11: disconnected by user
+Sep 15 19:18:14 gw1 sshd[16407]: Failed password for invalid user support from 198.51.100.55 port 57227 ssh2
+Sep 15 19:19:25 gw1 sshd[29417]: pam_unix(sshd:session): session closed for user admin
+Sep 15 19:19:52 gw1 sshd[1886]: pam_unix(sshd:session): session closed for user root
+Sep 15 19:19:53 gw1 sshd[21836]: Failed password for deploy from 192.0.2.10 port 60885 ssh2
+Sep 15 19:23:50 gw1 sshd[19214]: Connection reset by 192.0.2.18 port 45124 [preauth]
+Sep 15 19:26:01 gw1 sshd[39824]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 19:26:52 gw1 sshd[20696]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 19:28:51 gw1 sshd[30344]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 19:41:00 gw1 sshd[22388]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 15 19:41:53 gw1 sshd[38340]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 19:42:02 gw1 sshd[18966]: Accepted publickey for carol from 192.0.2.16 port 39146 ssh2: RSA SHA256:qdxee7jhfbn1zoiq2om6
+Sep 15 19:42:23 gw1 sshd[38231]: Accepted publickey for deploy from 198.51.100.24 port 49273 ssh2: RSA SHA256:brk8pix4heim742vjmlv
+Sep 15 19:43:07 gw1 sshd[24478]: Connection closed by authenticating user postgres 203.0.113.200 port 47751 [preauth]
+Sep 15 19:46:52 gw1 CRON[22916]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 19:47:32 gw1 sshd[19893]: Accepted publickey for alice from 192.0.2.24 port 37558 ssh2: RSA SHA256:d89irgtmrzctlgrnbclr
+Sep 15 19:48:56 gw1 sshd[33222]: Failed password for root from 192.0.2.29 port 38930 ssh2
+Sep 15 19:49:26 gw1 sshd[17192]: Failed password for postgres from 198.51.100.3 port 49979 ssh2
+Sep 15 19:56:29 gw1 sshd[36095]: Failed password for invalid user guest from 192.0.2.39 port 49106 ssh2
+Sep 15 19:56:32 gw1 sshd[35208]: Failed password for invalid user guest from 198.51.100.8 port 44813 ssh2
+Sep 15 19:58:43 gw1 sshd[28671]: Accepted publickey for carol from 192.0.2.12 port 51887 ssh2: RSA SHA256:oied4nbhnvah8kvolien
+Sep 15 20:01:27 gw1 sshd[3154]: Failed password for invalid user guest from 198.51.100.34 port 38154 ssh2
+Sep 15 20:01:41 gw1 sshd[20799]: Failed password for invalid user test from 192.0.2.21 port 51036 ssh2
+Sep 15 20:05:12 gw1 systemd-logind[612]: New session 42575 of user carol.
+Sep 15 20:06:29 gw1 sshd[16979]: Failed password for invalid user ftpuser from 192.0.2.19 port 35692 ssh2
+Sep 15 20:08:12 gw1 sshd[1033]: Failed password for invalid user ftpuser from 192.0.2.16 port 61013 ssh2
+Sep 15 20:08:48 gw1 CRON[15297]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 20:10:34 gw1 sshd[25929]: Server listening on 0.0.0.0 port 22.
+Sep 15 20:10:44 gw1 sshd[19137]: pam_unix(sshd:session): session closed for user alice
+Sep 15 20:14:37 gw1 sshd[25507]: Failed password for ubuntu from 192.0.2.19 port 42097 ssh2
+Sep 15 20:14:52 gw1 systemd-logind[612]: New session 5425 of user bob.
+Sep 15 20:17:19 gw1 systemd-logind[612]: New session 63272 of user admin.
+Sep 15 20:20:20 gw1 CRON[37730]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 20:20:40 gw1 sshd[35012]: Failed password for carol from 198.51.100.41 port 50404 ssh2
+Sep 15 20:23:39 gw1 sshd[30215]: Failed password for deploy from 198.51.100.36 port 58546 ssh2
+Sep 15 20:24:36 gw1 sshd[28018]: Received disconnect from 198.51.100.27 port 59127:11: disconnected by user
+Sep 15 20:25:33 gw1 systemd-logind[612]: New session 22242 of user root.
+Sep 15 20:26:00 gw1 sshd[12159]: Connection reset by 192.0.2.4 port 56757 [preauth]
+Sep 15 20:26:51 gw1 sshd[31705]: Failed password for invalid user support from 198.51.100.5 port 32409 ssh2
+Sep 15 20:31:39 gw1 sshd[10643]: Accepted publickey for admin from 198.51.100.56 port 53520 ssh2: RSA SHA256:8zywbu1zsz2t31si45q5
+Sep 15 20:35:36 gw1 sshd[9354]: Accepted publickey for root from 192.0.2.10 port 59162 ssh2: RSA SHA256:ox2o3zbt263w7hvb5erj
+Sep 15 20:36:20 gw1 sshd[28732]: Received disconnect from 198.51.100.42 port 56469:11: disconnected by user
+Sep 15 20:37:35 gw1 sshd[37728]: Accepted publickey for root from 198.51.100.29 port 35570 ssh2: RSA SHA256:gwg1q7c62k7awryg7gse
+Sep 15 20:37:41 gw1 sshd[33049]: Server listening on 0.0.0.0 port 22.
+Sep 15 20:38:59 gw1 sshd[17097]: Failed password for carol from 192.0.2.33 port 42166 ssh2
+Sep 15 20:43:17 gw1 sshd[24489]: Server listening on 0.0.0.0 port 22.
+Sep 15 20:46:28 gw1 sshd[32460]: Failed password for deploy from 192.0.2.16 port 45872 ssh2
+Sep 15 20:46:45 gw1 CRON[15390]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 20:50:23 gw1 sshd[21921]: Accepted publickey for deploy from 192.0.2.34 port 61166 ssh2: RSA SHA256:xscy2ol9bamibl5indhh
+Sep 15 20:50:26 gw1 sshd[34266]: Failed password for alice from 192.0.2.18 port 39071 ssh2
+Sep 15 20:51:04 gw1 sshd[15305]: Failed password for git from 192.0.2.34 port 46707 ssh2
+Sep 15 20:56:29 gw1 sshd[21425]: Failed password for postgres from 192.0.2.30 port 43355 ssh2
+Sep 15 20:58:11 gw1 sshd[36757]: Failed password for ubuntu from 192.0.2.29 port 56221 ssh2
+Sep 15 20:59:59 gw1 sshd[6626]: Invalid user carol from 203.0.113.200 port 35314
+Sep 15 21:00:08 gw1 sshd[32282]: Failed password for admin from 198.51.100.22 port 40751 ssh2
+Sep 15 21:00:09 gw1 sshd[8928]: Connection closed by authenticating user carol 203.0.113.200 port 37303 [preauth]
+Sep 15 21:01:12 gw1 sshd[36882]: Connection reset by 192.0.2.23 port 10376 [preauth]
+Sep 15 21:03:01 gw1 sshd[18178]: Failed password for git from 198.51.100.44 port 42780 ssh2
+Sep 15 21:04:21 gw1 sshd[21312]: Failed password for admin from 192.0.2.22 port 36210 ssh2
+Sep 15 21:05:50 gw1 sshd[19243]: Server listening on 0.0.0.0 port 22.
+Sep 15 21:05:59 gw1 sshd[3299]: Server listening on 0.0.0.0 port 22.
+Sep 15 21:14:33 gw1 CRON[10919]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 21:16:50 gw1 sshd[31057]: Connection reset by 198.51.100.54 port 10450 [preauth]
+Sep 15 21:17:16 gw1 sshd[1201]: Invalid user support from 203.0.113.200 port 51343
+Sep 15 21:21:45 gw1 sshd[5207]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 21:23:07 gw1 sshd[10805]: Server listening on 0.0.0.0 port 22.
+Sep 15 21:25:29 gw1 CRON[29397]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 21:28:33 gw1 sshd[27391]: pam_unix(sshd:session): session closed for user deploy
+Sep 15 21:29:24 gw1 sshd[20312]: Accepted publickey for deploy from 198.51.100.33 port 46448 ssh2: RSA SHA256:2g4awcu8yn36lqh9edbd
+Sep 15 21:29:30 gw1 sshd[20855]: Failed password for invalid user ftpuser from 198.51.100.13 port 35406 ssh2
+Sep 15 21:30:54 gw1 sshd[29859]: Accepted publickey for bob from 198.51.100.50 port 55222 ssh2: RSA SHA256:bpxwmvcwev6a6r064zvj
+Sep 15 21:33:59 gw1 sshd[7712]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 15 21:34:47 gw1 CRON[6683]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 21:34:55 gw1 sshd[16273]: Accepted publickey for alice from 198.51.100.24 port 45907 ssh2: RSA SHA256:okbp1f7btmmgtvqmslin
+Sep 15 21:36:20 gw1 sshd[5905]: Failed password for ubuntu from 192.0.2.37 port 50831 ssh2
+Sep 15 21:36:21 gw1 systemd-logind[612]: New session 38187 of user deploy.
+Sep 15 21:37:45 gw1 sshd[26033]: Failed password for invalid user support from 192.0.2.24 port 59885 ssh2
+Sep 15 21:38:11 gw1 systemd-logind[612]: New session 1723 of user admin.
+Sep 15 21:42:46 gw1 sshd[15625]: Failed password for invalid user guest from 198.51.100.58 port 53203 ssh2
+Sep 15 21:45:28 gw1 sshd[17262]: Received disconnect from 192.0.2.32 port 53378:11: disconnected by user
+Sep 15 21:49:09 gw1 CRON[22205]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 21:55:13 gw1 sshd[5748]: Connection reset by 198.51.100.55 port 25003 [preauth]
+Sep 15 22:00:40 gw1 sshd[2129]: Failed password for alice from 192.0.2.26 port 30376 ssh2
+Sep 15 22:01:25 gw1 sshd[36777]: Connection closed by authenticating user test 203.0.113.200 port 52297 [preauth]
+Sep 15 22:02:00 gw1 sshd[15059]: Failed password for admin from 192.0.2.34 port 43606 ssh2
+Sep 15 22:03:10 gw1 sshd[30484]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 22:03:18 gw1 sshd[24465]: Failed password for root from 203.0.113.77 port 58364 ssh2
+Sep 15 22:04:37 gw1 sshd[20878]: Invalid user postgres from 203.0.113.200 port 40731
+Sep 15 22:06:22 gw1 sshd[12433]: Failed password for invalid user support from 203.0.113.77 port 35753 ssh2
+Sep 15 22:06:59 gw1 sshd[15624]: Failed publickey for git from 203.0.113.200 port 33654 ssh2
+Sep 15 22:07:51 gw1 sshd[3983]: Failed password for invalid user support from 198.51.100.32 port 40332 ssh2
+Sep 15 22:07:55 gw1 sshd[2740]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 15 22:12:08 gw1 sshd[31485]: Failed password for invalid user test from 198.51.100.7 port 46181 ssh2
+Sep 15 22:12:56 gw1 sshd[11693]: Received disconnect from 198.51.100.30 port 39345:11: disconnected by user
+Sep 15 22:20:07 gw1 sshd[21748]: Failed password for postgres from 192.0.2.36 port 36905 ssh2
+Sep 15 22:21:49 gw1 sshd[38581]: Received disconnect from 192.0.2.30 port 30398:11: disconnected by user
+Sep 15 22:22:23 gw1 sshd[1380]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 22:23:16 gw1 sshd[7811]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 22:24:10 gw1 sshd[29740]: pam_unix(sshd:session): session closed for user admin
+Sep 15 22:29:02 gw1 sshd[16472]: Failed password for invalid user ftpuser from 198.51.100.16 port 55492 ssh2
+Sep 15 22:29:02 gw1 sshd[8987]: Accepted publickey for admin from 198.51.100.55 port 51552 ssh2: RSA SHA256:p9mkkn25dhm3oeelunvl
+Sep 15 22:32:51 gw1 sshd[26974]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 15 22:32:53 gw1 sshd[19140]: Invalid user alice from 203.0.113.200 port 46957
+Sep 15 22:33:02 gw1 systemd-logind[612]: New session 10798 of user alice.
+Sep 15 22:33:22 gw1 sshd[16308]: Failed password for postgres from 198.51.100.2 port 48605 ssh2
+Sep 15 22:33:50 gw1 sshd[9377]: Failed password for invalid user guest from 203.0.113.77 port 47756 ssh2
+Sep 15 22:38:19 gw1 sshd[10197]: Failed password for alice from 192.0.2.32 port 46098 ssh2
+Sep 15 22:38:32 gw1 sshd[25959]: Server listening on 0.0.0.0 port 22.
+Sep 15 22:38:56 gw1 sshd[20096]: Connection reset by 198.51.100.45 port 11193 [preauth]
+Sep 15 22:40:04 gw1 sshd[25612]: Connection reset by 198.51.100.27 port 27888 [preauth]
+Sep 15 22:40:14 gw1 sshd[27263]: Failed password for postgres from 198.51.100.24 port 30352 ssh2
+Sep 15 22:40:49 gw1 systemd-logind[612]: New session 32020 of user alice.
+Sep 15 22:40:59 gw1 sshd[7821]: pam_unix(sshd:session): session closed for user carol
+Sep 15 22:41:18 gw1 sshd[26105]: Failed publickey for pi from 203.0.113.200 port 39346 ssh2
+Sep 15 22:43:49 gw1 sshd[11273]: Failed password for invalid user oracle from 198.51.100.44 port 35620 ssh2
+Sep 15 22:45:08 gw1 sshd[25046]: Connection reset by 198.51.100.3 port 60048 [preauth]
+Sep 15 22:45:39 gw1 sshd[1589]: pam_unix(sshd:session): session closed for user root
+Sep 15 22:45:45 gw1 sshd[22885]: Server listening on 0.0.0.0 port 22.
+Sep 15 22:49:31 gw1 sshd[22350]: Received disconnect from 192.0.2.19 port 44506:11: disconnected by user
+Sep 15 22:49:36 gw1 sshd[10719]: Failed password for invalid user pi from 192.0.2.36 port 39172 ssh2
+Sep 15 22:54:25 gw1 systemd-logind[612]: New session 42548 of user root.
+Sep 15 22:54:58 gw1 sshd[37886]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 15 22:57:53 gw1 sshd[17181]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 15 23:04:37 gw1 sshd[34229]: Failed password for admin from 198.51.100.35 port 38498 ssh2
+Sep 15 23:05:23 gw1 sshd[10143]: Accepted publickey for bob from 198.51.100.2 port 57141 ssh2: RSA SHA256:hjin6f1xi9ictjg6gj3k
+Sep 15 23:09:54 gw1 sshd[21645]: Received disconnect from 198.51.100.57 port 35363:11: disconnected by user
+Sep 15 23:15:24 gw1 sshd[23055]: Failed password for invalid user test from 198.51.100.24 port 30868 ssh2
+Sep 15 23:17:19 gw1 CRON[22190]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 15 23:19:27 gw1 sshd[35551]: Accepted publickey for admin from 192.0.2.3 port 51015 ssh2: RSA SHA256:cscjh6nqr8d7ve3fdkll
+Sep 15 23:23:00 gw1 sshd[16032]: Failed password for invalid user oracle from 192.0.2.4 port 50905 ssh2
+Sep 15 23:23:59 gw1 sshd[2246]: Received disconnect from 198.51.100.44 port 59160:11: disconnected by user
+Sep 15 23:24:10 gw1 sshd[7319]: pam_unix(sshd:session): session closed for user bob
+Sep 15 23:24:12 gw1 sshd[5437]: Failed publickey for test from 203.0.113.200 port 43305 ssh2
+Sep 15 23:26:58 gw1 sshd[19170]: Failed password for admin from 198.51.100.46 port 58596 ssh2
+Sep 15 23:27:11 gw1 sshd[11863]: Accepted publickey for alice from 198.51.100.57 port 55059 ssh2: RSA SHA256:7ly2mgbqz1s69h8cl9a4
+Sep 15 23:35:49 gw1 sshd[29640]: Failed publickey for test from 203.0.113.200 port 50378 ssh2
+Sep 15 23:37:19 gw1 sshd[13263]: Received disconnect from 192.0.2.37 port 62166:11: disconnected by user
+Sep 15 23:48:48 gw1 sshd[38028]: Failed password for postgres from 192.0.2.23 port 60506 ssh2
+Sep 15 23:49:01 gw1 sshd[8674]: Failed password for ubuntu from 192.0.2.25 port 41401 ssh2
+Sep 15 23:49:54 gw1 sshd[17395]: Received disconnect from 198.51.100.8 port 15824:11: disconnected by user
+Sep 15 23:54:15 gw1 sshd[4665]: Failed password for bob from 198.51.100.28 port 32888 ssh2
+Sep 15 23:55:21 gw1 sshd[33835]: Connection reset by 198.51.100.47 port 63307 [preauth]
+Sep 15 23:56:36 gw1 sshd[7513]: Connection reset by 192.0.2.9 port 47775 [preauth]
+Sep 15 23:58:44 gw1 sshd[18856]: Failed publickey for alice from 203.0.113.200 port 35620 ssh2
+Sep 15 23:59:39 gw1 sshd[34054]: Connection reset by 192.0.2.13 port 64226 [preauth]
+Sep 16 00:05:02 gw1 sshd[26672]: Connection closed by authenticating user carol 203.0.113.200 port 45055 [preauth]
+Sep 16 00:12:07 gw1 sshd[16058]: Accepted publickey for admin from 192.0.2.37 port 53045 ssh2: RSA SHA256:ec6ollmff9l0hcmfxy6o
+Sep 16 00:14:56 gw1 sshd[20894]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 16 00:17:24 gw1 CRON[35306]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 00:21:48 gw1 sshd[32549]: Connection closed by authenticating user guest 203.0.113.200 port 55209 [preauth]
+Sep 16 00:23:50 gw1 sshd[34278]: Received disconnect from 198.51.100.35 port 47204:11: disconnected by user
+Sep 16 00:29:36 gw1 sshd[20995]: Accepted publickey for admin from 198.51.100.39 port 37306 ssh2: RSA SHA256:z9w4mqtbwlc8rubgrh71
+Sep 16 00:34:21 gw1 sshd[35000]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 00:37:06 gw1 sshd[17202]: pam_unix(sshd:session): session closed for user carol
+Sep 16 00:38:47 gw1 CRON[19596]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 00:42:07 gw1 sshd[36882]: Server listening on 0.0.0.0 port 22.
+Sep 16 00:44:48 gw1 sshd[12142]: Connection reset by 198.51.100.28 port 45674 [preauth]
+Sep 16 00:45:01 gw1 sshd[22871]: Failed password for invalid user ftpuser from 198.51.100.42 port 52280 ssh2
+Sep 16 00:49:49 gw1 sshd[22282]: Failed password for git from 192.0.2.21 port 52809 ssh2
+Sep 16 00:50:48 gw1 sshd[6393]: Accepted publickey for alice from 192.0.2.35 port 62708 ssh2: RSA SHA256:gnja2xh9whwisx1nithm
+Sep 16 00:55:15 gw1 sshd[39009]: Failed password for deploy from 192.0.2.28 port 55253 ssh2
+Sep 16 00:57:23 gw1 sshd[31337]: Accepted publickey for alice from 198.51.100.38 port 41708 ssh2: RSA SHA256:37tbp2vwmdxabdgxi8yl
+Sep 16 01:00:50 gw1 CRON[4539]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 01:02:24 gw1 systemd-logind[612]: New session 56115 of user bob.
+Sep 16 01:02:57 gw1 sshd[20408]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 01:07:09 gw1 systemd-logind[612]: New session 51596 of user deploy.
+Sep 16 01:09:25 gw1 sshd[34411]: Failed password for postgres from 198.51.100.18 port 58379 ssh2
+Sep 16 01:10:30 gw1 sshd[3555]: Accepted publickey for alice from 192.0.2.24 port 49899 ssh2: RSA SHA256:ytukeiviacs1o6n6igy9
+Sep 16 01:18:02 gw1 sshd[11069]: Connection reset by 198.51.100.7 port 8547 [preauth]
+Sep 16 01:19:32 gw1 sshd[16766]: Failed publickey for git from 203.0.113.200 port 60109 ssh2
+Sep 16 01:20:20 gw1 sshd[31584]: Failed password for root from 198.51.100.20 port 54949 ssh2
+Sep 16 01:21:58 gw1 sshd[39200]: Failed password for ubuntu from 203.0.113.77 port 54701 ssh2
+Sep 16 01:22:23 gw1 sshd[3645]: Failed password for invalid user support from 198.51.100.57 port 56354 ssh2
+Sep 16 01:27:02 gw1 sshd[27030]: Accepted publickey for alice from 192.0.2.17 port 42740 ssh2: RSA SHA256:tdhhejxl1k2gu3q5btuk
+Sep 16 01:30:19 gw1 sshd[35408]: Failed password for invalid user guest from 198.51.100.59 port 54258 ssh2
+Sep 16 01:31:00 gw1 sshd[30847]: Accepted publickey for deploy from 192.0.2.13 port 32679 ssh2: RSA SHA256:1wejpl0oc4rdcu6zucl5
+Sep 16 01:32:57 gw1 sshd[16316]: Server listening on 0.0.0.0 port 22.
+Sep 16 01:38:36 gw1 sshd[34732]: Failed password for invalid user pi from 198.51.100.13 port 52429 ssh2
+Sep 16 01:39:27 gw1 sshd[35545]: Failed password for invalid user pi from 198.51.100.8 port 39897 ssh2
+Sep 16 01:48:08 gw1 sshd[38221]: Failed password for invalid user support from 192.0.2.32 port 49997 ssh2
+Sep 16 01:48:37 gw1 sshd[12035]: Failed publickey for postgres from 203.0.113.200 port 34347 ssh2
+Sep 16 01:52:57 gw1 sshd[11552]: Failed password for invalid user pi from 192.0.2.27 port 35088 ssh2
+Sep 16 02:00:17 gw1 sshd[35939]: Invalid user alice from 203.0.113.200 port 61872
+Sep 16 02:00:33 gw1 sshd[11271]: Accepted publickey for carol from 198.51.100.54 port 40312 ssh2: RSA SHA256:bije5e9bata4t6onpa25
+Sep 16 02:00:39 gw1 systemd-logind[612]: New session 46733 of user admin.
+Sep 16 02:06:46 gw1 sshd[21106]: Failed password for invalid user pi from 198.51.100.50 port 37795 ssh2
+Sep 16 02:12:34 gw1 sshd[11706]: Accepted publickey for carol from 192.0.2.35 port 30639 ssh2: RSA SHA256:0gdploe6nabcb9fr1z0y
+Sep 16 02:16:29 gw1 sshd[34274]: Failed password for admin from 198.51.100.25 port 58052 ssh2
+Sep 16 02:16:54 gw1 CRON[11466]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 02:18:06 gw1 sshd[34414]: Received disconnect from 198.51.100.6 port 58795:11: disconnected by user
+Sep 16 02:20:00 gw1 sshd[20762]: Failed password for invalid user ftpuser from 198.51.100.41 port 48157 ssh2
+Sep 16 02:26:37 gw1 sshd[15094]: Failed password for ubuntu from 192.0.2.6 port 48755 ssh2
+Sep 16 02:37:41 gw1 sshd[27361]: Failed password for invalid user pi from 203.0.113.77 port 42713 ssh2
+Sep 16 02:37:41 gw1 sshd[11260]: Connection closed by authenticating user carol 203.0.113.200 port 49223 [preauth]
+Sep 16 02:39:32 gw1 sshd[39934]: Server listening on 0.0.0.0 port 22.
+Sep 16 02:39:56 gw1 sshd[3008]: Failed password for admin from 192.0.2.16 port 30766 ssh2
+Sep 16 02:42:48 gw1 sshd[38325]: Received disconnect from 198.51.100.21 port 11165:11: disconnected by user
+Sep 16 02:44:23 gw1 sshd[30971]: Failed password for deploy from 198.51.100.41 port 59803 ssh2
+Sep 16 02:46:14 gw1 sshd[29681]: Failed password for ubuntu from 203.0.113.77 port 35000 ssh2
+Sep 16 02:50:05 gw1 sshd[9260]: Failed password for admin from 192.0.2.27 port 64938 ssh2
+Sep 16 02:51:41 gw1 sshd[6460]: Accepted publickey for root from 192.0.2.10 port 49046 ssh2: RSA SHA256:la83p2ryn8u5d3nw9jh3
+Sep 16 02:56:29 gw1 sshd[30772]: Failed password for admin from 198.51.100.17 port 58882 ssh2
+Sep 16 02:58:16 gw1 sshd[32386]: Connection closed by authenticating user pi 203.0.113.200 port 52714 [preauth]
+Sep 16 03:00:04 gw1 systemd-logind[612]: New session 58782 of user admin.
+Sep 16 03:03:53 gw1 sshd[23850]: Server listening on 0.0.0.0 port 22.
+Sep 16 03:07:18 gw1 sshd[14478]: Received disconnect from 198.51.100.44 port 38107:11: disconnected by user
+Sep 16 03:08:48 gw1 sshd[6862]: Failed password for deploy from 198.51.100.29 port 30020 ssh2
+Sep 16 03:10:20 gw1 sshd[24398]: Failed password for invalid user pi from 198.51.100.58 port 43711 ssh2
+Sep 16 03:11:57 gw1 sshd[28595]: Failed password for alice from 198.51.100.44 port 51366 ssh2
+Sep 16 03:12:05 gw1 sshd[16284]: Failed password for alice from 192.0.2.32 port 42615 ssh2
+Sep 16 03:12:37 gw1 sshd[30152]: Accepted publickey for alice from 198.51.100.26 port 31782 ssh2: RSA SHA256:2h6j9pfbqlt2ddo88yoj
+Sep 16 03:19:51 gw1 sshd[27429]: Failed password for postgres from 198.51.100.55 port 34636 ssh2
+Sep 16 03:20:11 gw1 sshd[5491]: Connection reset by 192.0.2.29 port 29810 [preauth]
+Sep 16 03:21:50 gw1 sshd[4071]: Failed password for carol from 198.51.100.57 port 63074 ssh2
+Sep 16 03:22:02 gw1 sshd[32408]: Failed password for invalid user oracle from 198.51.100.2 port 46065 ssh2
+Sep 16 03:23:05 gw1 sshd[19897]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 03:26:38 gw1 CRON[2360]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 03:30:23 gw1 sshd[26354]: Accepted publickey for admin from 192.0.2.7 port 55081 ssh2: RSA SHA256:1pgwsjp1ll2ryucmmpio
+Sep 16 03:37:40 gw1 sshd[19535]: Failed password for admin from 198.51.100.37 port 46743 ssh2
+Sep 16 03:38:40 gw1 sshd[24783]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 16 03:42:19 gw1 sshd[3122]: Failed password for invalid user ftpuser from 198.51.100.7 port 31978 ssh2
+Sep 16 03:43:29 gw1 sshd[8077]: Accepted publickey for admin from 198.51.100.55 port 53477 ssh2: RSA SHA256:qfo0yzao228krc87wljo
+Sep 16 03:49:32 gw1 sshd[1498]: Failed password for invalid user oracle from 192.0.2.29 port 38883 ssh2
+Sep 16 03:49:34 gw1 sshd[20041]: Failed password for invalid user oracle from 198.51.100.29 port 50954 ssh2
+Sep 16 03:53:05 gw1 sshd[3970]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 03:53:38 gw1 sshd[3927]: pam_unix(sshd:session): session closed for user bob
+Sep 16 04:07:37 gw1 sshd[9711]: pam_unix(sshd:session): session closed for user carol
+Sep 16 04:08:26 gw1 sshd[2644]: Failed publickey for bob from 203.0.113.200 port 40197 ssh2
+Sep 16 04:08:41 gw1 sshd[3436]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 04:14:32 gw1 sshd[15552]: Accepted publickey for deploy from 192.0.2.12 port 42620 ssh2: RSA SHA256:9ktzjde6nnoitgm9zs20
+Sep 16 04:16:12 gw1 systemd-logind[612]: New session 58683 of user alice.
+Sep 16 04:17:38 gw1 sshd[25232]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 04:19:00 gw1 sshd[15257]: Accepted publickey for alice from 192.0.2.16 port 51747 ssh2: RSA SHA256:4ycwufaf46ul0v1jpyxg
+Sep 16 04:22:06 gw1 systemd-logind[612]: New session 5084 of user alice.
+Sep 16 04:24:21 gw1 sshd[1024]: Accepted publickey for admin from 198.51.100.27 port 49884 ssh2: RSA SHA256:u0v7tc62ogl2j32innjh
+Sep 16 04:25:33 gw1 sshd[20313]: Failed password for postgres from 198.51.100.52 port 36731 ssh2
+Sep 16 04:27:45 gw1 sshd[23836]: Accepted publickey for alice from 198.51.100.43 port 52945 ssh2: RSA SHA256:ndu7rk1y9gs62q3sxt45
+Sep 16 04:32:11 gw1 sshd[20468]: Connection reset by 198.51.100.12 port 32692 [preauth]
+Sep 16 04:33:21 gw1 sshd[9023]: Failed password for carol from 198.51.100.26 port 51318 ssh2
+Sep 16 04:33:32 gw1 sshd[18796]: Received disconnect from 198.51.100.51 port 14325:11: disconnected by user
+Sep 16 04:37:36 gw1 sshd[2111]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 04:42:03 gw1 sshd[20464]: Connection closed by authenticating user support 203.0.113.200 port 50713 [preauth]
+Sep 16 04:42:07 gw1 sshd[37187]: Failed password for invalid user ftpuser from 192.0.2.32 port 52649 ssh2
+Sep 16 04:44:10 gw1 sshd[12388]: Failed password for carol from 198.51.100.6 port 30434 ssh2
+Sep 16 04:47:40 gw1 sshd[23731]: Received disconnect from 192.0.2.29 port 50235:11: disconnected by user
+Sep 16 04:51:47 gw1 sshd[11459]: Connection reset by 198.51.100.24 port 24816 [preauth]
+Sep 16 04:53:21 gw1 sshd[35718]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 04:56:45 gw1 sshd[3467]: pam_unix(sshd:session): session closed for user alice
+Sep 16 04:58:50 gw1 sshd[38860]: Failed password for ubuntu from 198.51.100.58 port 32480 ssh2
+Sep 16 05:00:22 gw1 systemd-logind[612]: New session 59798 of user deploy.
+Sep 16 05:00:35 gw1 sshd[28787]: Failed password for invalid user ftpuser from 198.51.100.57 port 45997 ssh2
+Sep 16 05:03:07 gw1 sshd[19967]: Failed password for deploy from 192.0.2.4 port 36031 ssh2
+Sep 16 05:09:20 gw1 sshd[28922]: Failed password for invalid user guest from 198.51.100.3 port 44946 ssh2
+Sep 16 05:14:06 gw1 sshd[38466]: Connection reset by 198.51.100.40 port 29353 [preauth]
+Sep 16 05:14:20 gw1 sshd[35424]: Failed password for invalid user ftpuser from 192.0.2.26 port 55140 ssh2
+Sep 16 05:15:35 gw1 sshd[18336]: Accepted publickey for alice from 198.51.100.38 port 38049 ssh2: RSA SHA256:anqflcow3upqo92xq8fd
+Sep 16 05:15:51 gw1 sshd[8811]: Invalid user alice from 203.0.113.200 port 39117
+Sep 16 05:17:42 gw1 CRON[23001]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 05:19:05 gw1 sshd[27891]: Failed password for git from 198.51.100.2 port 60286 ssh2
+Sep 16 05:19:53 gw1 sshd[39188]: Failed password for root from 198.51.100.58 port 49197 ssh2
+Sep 16 05:23:20 gw1 systemd-logind[612]: New session 7747 of user alice.
+Sep 16 05:24:38 gw1 sshd[38073]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 05:32:56 gw1 sshd[22178]: Connection reset by 198.51.100.24 port 3618 [preauth]
+Sep 16 05:35:02 gw1 systemd-logind[612]: New session 10849 of user root.
+Sep 16 05:35:11 gw1 CRON[19810]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 05:35:26 gw1 systemd-logind[612]: New session 51961 of user bob.
+Sep 16 05:37:49 gw1 sshd[14719]: Connection closed by authenticating user guest 203.0.113.200 port 35301 [preauth]
+Sep 16 05:37:59 gw1 sshd[12282]: Failed password for invalid user support from 192.0.2.33 port 35385 ssh2
+Sep 16 05:38:03 gw1 systemd-logind[612]: New session 42420 of user carol.
+Sep 16 05:38:12 gw1 sshd[1595]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 05:40:52 gw1 sshd[18578]: Failed password for invalid user pi from 192.0.2.14 port 37804 ssh2
+Sep 16 05:42:22 gw1 sshd[37485]: Failed password for invalid user oracle from 203.0.113.77 port 42820 ssh2
+Sep 16 05:42:30 gw1 sshd[14368]: Failed password for postgres from 203.0.113.77 port 51133 ssh2
+Sep 16 05:44:29 gw1 sshd[13334]: Accepted publickey for carol from 198.51.100.49 port 34387 ssh2: RSA SHA256:mu9q5yjigrwi5x9mbhyc
+Sep 16 05:49:02 gw1 sshd[35395]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 05:54:48 gw1 sshd[11299]: Failed password for invalid user test from 192.0.2.19 port 56527 ssh2
+Sep 16 05:54:49 gw1 sshd[19191]: Failed password for root from 198.51.100.36 port 59876 ssh2
+Sep 16 05:56:11 gw1 CRON[39876]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 05:56:29 gw1 sshd[27013]: Failed password for postgres from 192.0.2.6 port 55165 ssh2
+Sep 16 05:58:01 gw1 sshd[24229]: Connection closed by authenticating user support 203.0.113.200 port 40858 [preauth]
+Sep 16 06:07:21 gw1 sshd[9353]: Accepted publickey for alice from 198.51.100.37 port 45930 ssh2: RSA SHA256:1pdnj5lg86pl3swkxfu7
+Sep 16 06:08:22 gw1 sshd[9836]: pam_unix(sshd:session): session closed for user bob
+Sep 16 06:09:14 gw1 sshd[4906]: Connection closed by authenticating user ftpuser 203.0.113.200 port 45881 [preauth]
+Sep 16 06:13:14 gw1 systemd-logind[612]: New session 24252 of user admin.
+Sep 16 06:16:14 gw1 sshd[2554]: Failed password for postgres from 198.51.100.32 port 60535 ssh2
+Sep 16 06:16:22 gw1 sshd[10923]: Failed password for ubuntu from 198.51.100.18 port 41247 ssh2
+Sep 16 06:16:25 gw1 sshd[22614]: Failed password for bob from 198.51.100.3 port 61235 ssh2
+Sep 16 06:16:35 gw1 CRON[31194]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 06:16:56 gw1 sshd[6202]: Server listening on 0.0.0.0 port 22.
+Sep 16 06:20:09 gw1 systemd-logind[612]: New session 42080 of user deploy.
+Sep 16 06:25:08 gw1 CRON[14857]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 06:26:27 gw1 sshd[8997]: Accepted publickey for bob from 198.51.100.26 port 47291 ssh2: RSA SHA256:lw2astkyetkc1o0z670x
+Sep 16 06:30:11 gw1 sshd[15443]: Connection closed by authenticating user deploy 203.0.113.200 port 30665 [preauth]
+Sep 16 06:35:57 gw1 CRON[31128]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 06:36:29 gw1 sshd[12912]: Server listening on 0.0.0.0 port 22.
+Sep 16 06:41:02 gw1 sshd[9889]: pam_unix(sshd:session): session closed for user bob
+Sep 16 06:42:52 gw1 sshd[21652]: Failed password for invalid user ftpuser from 198.51.100.49 port 48649 ssh2
+Sep 16 06:44:25 gw1 sshd[3118]: Received disconnect from 192.0.2.18 port 29153:11: disconnected by user
+Sep 16 06:45:46 gw1 sshd[3062]: Failed password for root from 198.51.100.32 port 37302 ssh2
+Sep 16 06:46:32 gw1 CRON[25274]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 06:47:35 gw1 sshd[8886]: Accepted publickey for carol from 198.51.100.57 port 42504 ssh2: RSA SHA256:q1xp12br0037tbygapeh
+Sep 16 06:48:20 gw1 CRON[5839]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 06:56:28 gw1 sshd[14658]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 16 06:56:37 gw1 sshd[14778]: Connection reset by 198.51.100.18 port 18096 [preauth]
+Sep 16 06:59:52 gw1 sshd[31455]: Failed password for admin from 192.0.2.33 port 34562 ssh2
+Sep 16 07:00:24 gw1 sshd[19448]: Received disconnect from 192.0.2.9 port 55635:11: disconnected by user
+Sep 16 07:00:51 gw1 sshd[8514]: Failed password for bob from 198.51.100.6 port 54140 ssh2
+Sep 16 07:03:37 gw1 sshd[5511]: Failed password for deploy from 192.0.2.18 port 32385 ssh2
+Sep 16 07:04:26 gw1 sshd[10213]: Failed password for bob from 192.0.2.2 port 37967 ssh2
+Sep 16 07:07:32 gw1 sshd[39674]: Received disconnect from 192.0.2.8 port 63311:11: disconnected by user
+Sep 16 07:10:27 gw1 sshd[9219]: Invalid user support from 203.0.113.200 port 64943
+Sep 16 07:12:15 gw1 sshd[27404]: pam_unix(sshd:session): session closed for user root
+Sep 16 07:15:40 gw1 sshd[10167]: Failed password for deploy from 192.0.2.11 port 54976 ssh2
+Sep 16 07:17:24 gw1 sshd[7251]: Failed password for invalid user pi from 198.51.100.31 port 49402 ssh2
+Sep 16 07:19:44 gw1 CRON[13877]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 07:20:29 gw1 CRON[11859]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 07:21:12 gw1 sshd[26708]: Failed password for invalid user support from 192.0.2.16 port 48962 ssh2
+Sep 16 07:22:08 gw1 CRON[27880]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 07:23:14 gw1 sshd[2751]: Failed password for invalid user pi from 203.0.113.77 port 30537 ssh2
+Sep 16 07:29:50 gw1 sshd[37664]: Failed password for deploy from 198.51.100.6 port 47650 ssh2
+Sep 16 07:30:06 gw1 sshd[23119]: Failed password for admin from 198.51.100.35 port 52140 ssh2
+Sep 16 07:32:40 gw1 sshd[15274]: Failed password for git from 198.51.100.10 port 58256 ssh2
+Sep 16 07:33:09 gw1 sshd[38132]: Accepted publickey for alice from 198.51.100.46 port 35460 ssh2: RSA SHA256:57u41rh8avas7zz55j45
+Sep 16 07:33:28 gw1 sshd[26924]: Failed password for carol from 198.51.100.27 port 62713 ssh2
+Sep 16 07:34:42 gw1 sshd[17480]: Failed password for invalid user ftpuser from 198.51.100.58 port 33755 ssh2
+Sep 16 07:35:23 gw1 sshd[2508]: Server listening on 0.0.0.0 port 22.
+Sep 16 07:35:45 gw1 sshd[12927]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 07:41:20 gw1 sshd[30815]: pam_unix(sshd:session): session closed for user admin
+Sep 16 07:41:33 gw1 sshd[34015]: pam_unix(sshd:session): session closed for user carol
+Sep 16 07:44:15 gw1 systemd-logind[612]: New session 34813 of user admin.
+Sep 16 07:56:41 gw1 sshd[26881]: Failed password for root from 192.0.2.37 port 57409 ssh2
+Sep 16 07:59:26 gw1 sshd[30881]: Accepted publickey for carol from 198.51.100.53 port 31889 ssh2: RSA SHA256:jygpmcietc16ozt6c3z5
+Sep 16 08:00:23 gw1 sshd[31593]: Failed password for invalid user pi from 198.51.100.23 port 57839 ssh2
+Sep 16 08:02:30 gw1 sshd[38785]: Failed password for git from 203.0.113.77 port 57349 ssh2
+Sep 16 08:05:16 gw1 sshd[35004]: Failed password for postgres from 192.0.2.30 port 46788 ssh2
+Sep 16 08:06:03 gw1 sshd[34367]: Failed password for bob from 198.51.100.24 port 53518 ssh2
+Sep 16 08:06:05 gw1 sshd[29296]: Failed password for invalid user guest from 198.51.100.8 port 56132 ssh2
+Sep 16 08:09:43 gw1 sshd[14146]: Accepted publickey for root from 198.51.100.9 port 30698 ssh2: RSA SHA256:xyj7zrt8pjb8exoixuir
+Sep 16 08:10:14 gw1 sshd[26100]: Received disconnect from 198.51.100.9 port 20530:11: disconnected by user
+Sep 16 08:12:49 gw1 sshd[4057]: Invalid user oracle from 203.0.113.200 port 43623
+Sep 16 08:13:33 gw1 sshd[32082]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 16 08:14:19 gw1 sshd[26669]: Connection reset by 198.51.100.7 port 53874 [preauth]
+Sep 16 08:14:24 gw1 sshd[29283]: Received disconnect from 198.51.100.35 port 22532:11: disconnected by user
+Sep 16 08:18:40 gw1 sshd[8876]: Accepted publickey for bob from 198.51.100.35 port 63340 ssh2: RSA SHA256:ysq8ywgufddbfb3sj6iu
+Sep 16 08:19:47 gw1 sshd[11254]: Connection reset by 198.51.100.2 port 18510 [preauth]
+Sep 16 08:21:21 gw1 sshd[6638]: Failed password for postgres from 198.51.100.8 port 52094 ssh2
+Sep 16 08:26:09 gw1 sshd[28656]: Failed password for carol from 198.51.100.36 port 40921 ssh2
+Sep 16 08:27:16 gw1 sshd[29484]: Accepted publickey for deploy from 198.51.100.49 port 42763 ssh2: RSA SHA256:njzoh9cwa39bib006yc7
+Sep 16 08:27:32 gw1 sshd[15040]: Connection reset by 192.0.2.24 port 54113 [preauth]
+Sep 16 08:28:07 gw1 sshd[30226]: Server listening on 0.0.0.0 port 22.
+Sep 16 08:29:50 gw1 sshd[37506]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 16 08:29:57 gw1 sshd[3456]: Received disconnect from 198.51.100.57 port 19598:11: disconnected by user
+Sep 16 08:31:37 gw1 sshd[28458]: Failed password for postgres from 192.0.2.29 port 30584 ssh2
+Sep 16 08:35:35 gw1 sshd[19831]: Failed password for invalid user oracle from 198.51.100.22 port 64260 ssh2
+Sep 16 08:37:03 gw1 sshd[23298]: Connection closed by authenticating user pi 203.0.113.200 port 35141 [preauth]
+Sep 16 08:37:15 gw1 sshd[3255]: Failed password for invalid user ftpuser from 198.51.100.19 port 54517 ssh2
+Sep 16 08:37:28 gw1 sshd[16074]: pam_unix(sshd:session): session closed for user bob
+Sep 16 08:38:36 gw1 systemd-logind[612]: New session 64262 of user bob.
+Sep 16 08:45:02 gw1 sshd[15473]: Accepted publickey for alice from 192.0.2.30 port 33579 ssh2: RSA SHA256:f6hn2p7tiaw7c58c2ktz
+Sep 16 08:50:07 gw1 sshd[19211]: Received disconnect from 192.0.2.23 port 45554:11: disconnected by user
+Sep 16 08:53:44 gw1 sshd[2299]: Accepted publickey for root from 192.0.2.23 port 36593 ssh2: RSA SHA256:czc9jsfwtkpk2lhbb889
+Sep 16 08:53:47 gw1 CRON[7944]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 08:54:34 gw1 systemd-logind[612]: New session 49139 of user bob.
+Sep 16 08:56:21 gw1 sshd[9452]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 08:57:40 gw1 sshd[36402]: Accepted publickey for alice from 198.51.100.42 port 30064 ssh2: RSA SHA256:ie7g7t6s4diskk2g50ch
+Sep 16 08:58:10 gw1 sshd[31007]: Accepted publickey for admin from 198.51.100.24 port 59535 ssh2: RSA SHA256:t6a1zrxks43nb0fhv74g
+Sep 16 09:00:29 gw1 systemd-logind[612]: New session 19706 of user deploy.
+Sep 16 09:04:55 gw1 sshd[11090]: Accepted publickey for alice from 198.51.100.55 port 57565 ssh2: RSA SHA256:xcgr27twfi855kkkrvwe
+Sep 16 09:05:54 gw1 sshd[26534]: Received disconnect from 198.51.100.43 port 56478:11: disconnected by user
+Sep 16 09:06:19 gw1 sshd[29757]: Failed password for carol from 198.51.100.57 port 47772 ssh2
+Sep 16 09:07:19 gw1 sshd[29769]: Server listening on 0.0.0.0 port 22.
+Sep 16 09:14:16 gw1 sshd[21100]: Failed password for invalid user test from 203.0.113.77 port 51673 ssh2
+Sep 16 09:14:42 gw1 sshd[12363]: Failed password for ubuntu from 192.0.2.16 port 60964 ssh2
+Sep 16 09:18:07 gw1 sshd[12782]: Received disconnect from 198.51.100.42 port 34208:11: disconnected by user
+Sep 16 09:19:19 gw1 sshd[25044]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 09:20:05 gw1 sshd[11038]: Accepted publickey for deploy from 192.0.2.32 port 59635 ssh2: RSA SHA256:cokf1xgk6zeyaedpm8y2
+Sep 16 09:20:36 gw1 sshd[35800]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 09:23:01 gw1 sshd[9630]: Accepted publickey for deploy from 198.51.100.32 port 51788 ssh2: RSA SHA256:bui8zs0h28sxibq2j35z
+Sep 16 09:33:46 gw1 sshd[37135]: Failed password for invalid user test from 198.51.100.15 port 36425 ssh2
+Sep 16 09:34:59 gw1 sshd[31387]: Failed password for invalid user oracle from 198.51.100.31 port 49105 ssh2
+Sep 16 09:36:54 gw1 sshd[29553]: Failed password for invalid user guest from 198.51.100.7 port 55318 ssh2
+Sep 16 09:36:58 gw1 sshd[25397]: Server listening on 0.0.0.0 port 22.
+Sep 16 09:37:21 gw1 sshd[10855]: Failed password for ubuntu from 192.0.2.27 port 36909 ssh2
+Sep 16 09:39:28 gw1 sshd[17708]: Accepted publickey for deploy from 192.0.2.23 port 35373 ssh2: RSA SHA256:b40werc7aficbbq25huq
+Sep 16 09:44:03 gw1 sshd[36443]: Received disconnect from 198.51.100.54 port 58185:11: disconnected by user
+Sep 16 09:45:07 gw1 sshd[34165]: Received disconnect from 192.0.2.9 port 38831:11: disconnected by user
+Sep 16 09:46:40 gw1 systemd-logind[612]: New session 31337 of user root.
+Sep 16 09:47:17 gw1 sshd[19178]: Failed password for alice from 198.51.100.2 port 52982 ssh2
+Sep 16 09:50:32 gw1 sshd[23481]: Failed password for deploy from 203.0.113.77 port 33963 ssh2
+Sep 16 09:52:18 gw1 sshd[20909]: Accepted publickey for bob from 198.51.100.42 port 62056 ssh2: RSA SHA256:hhjn0psdes6s9h9071km
+Sep 16 09:52:22 gw1 sshd[38227]: Connection reset by 198.51.100.59 port 36602 [preauth]
+Sep 16 09:56:33 gw1 CRON[10746]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 09:57:39 gw1 sshd[17297]: Failed password for admin from 192.0.2.33 port 60959 ssh2
+Sep 16 10:03:14 gw1 CRON[6980]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 10:03:28 gw1 sshd[4110]: Connection reset by 198.51.100.21 port 1226 [preauth]
+Sep 16 10:04:52 gw1 CRON[16912]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 10:11:23 gw1 sshd[22358]: Failed password for bob from 203.0.113.77 port 42931 ssh2
+Sep 16 10:16:24 gw1 sshd[3657]: Invalid user test from 203.0.113.200 port 50000
+Sep 16 10:17:43 gw1 sshd[24724]: Failed password for root from 192.0.2.18 port 47358 ssh2
+Sep 16 10:21:13 gw1 systemd-logind[612]: New session 39356 of user deploy.
+Sep 16 10:23:45 gw1 sshd[3159]: Invalid user admin from 203.0.113.200 port 48080
+Sep 16 10:25:28 gw1 sshd[24712]: Accepted publickey for deploy from 192.0.2.32 port 33116 ssh2: RSA SHA256:l7320gd5c4mtyl15xpmx
+Sep 16 10:27:46 gw1 sshd[28586]: Failed publickey for git from 203.0.113.200 port 45406 ssh2
+Sep 16 10:27:56 gw1 systemd-logind[612]: New session 52920 of user alice.
+Sep 16 10:28:35 gw1 sshd[30914]: Received disconnect from 192.0.2.11 port 28815:11: disconnected by user
+Sep 16 10:29:05 gw1 sshd[27476]: Connection reset by 192.0.2.14 port 44973 [preauth]
+Sep 16 10:33:30 gw1 sshd[37685]: Failed password for ubuntu from 198.51.100.46 port 33053 ssh2
+Sep 16 10:36:07 gw1 sshd[36509]: Failed password for invalid user pi from 203.0.113.77 port 53313 ssh2
+Sep 16 10:38:21 gw1 CRON[28812]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 10:41:34 gw1 sshd[32711]: Connection reset by 198.51.100.32 port 10602 [preauth]
+Sep 16 10:41:51 gw1 sshd[1382]: Failed password for invalid user guest from 198.51.100.55 port 47026 ssh2
+Sep 16 10:42:45 gw1 sshd[34255]: Failed password for invalid user ftpuser from 198.51.100.3 port 50500 ssh2
+Sep 16 10:45:29 gw1 sshd[38074]: Server listening on 0.0.0.0 port 22.
+Sep 16 10:46:29 gw1 sshd[1695]: Failed password for root from 198.51.100.37 port 49020 ssh2
+Sep 16 10:47:56 gw1 sshd[37900]: Accepted publickey for deploy from 198.51.100.4 port 42755 ssh2: RSA SHA256:tmfpxs2b4dmtyoc4z1ad
+Sep 16 10:48:27 gw1 sshd[7469]: Failed password for postgres from 192.0.2.35 port 54694 ssh2
+Sep 16 10:48:30 gw1 sshd[32720]: Failed password for git from 192.0.2.35 port 42145 ssh2
+Sep 16 10:52:53 gw1 sshd[29160]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 10:55:40 gw1 sshd[13282]: Failed password for git from 198.51.100.15 port 32641 ssh2
+Sep 16 10:56:11 gw1 sshd[27401]: pam_unix(sshd:session): session closed for user alice
+Sep 16 11:03:02 gw1 sshd[37528]: Server listening on 0.0.0.0 port 22.
+Sep 16 11:03:38 gw1 CRON[20641]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 11:09:32 gw1 sshd[38085]: Failed publickey for guest from 203.0.113.200 port 30679 ssh2
+Sep 16 11:12:05 gw1 sshd[22857]: Failed password for invalid user ftpuser from 198.51.100.23 port 45093 ssh2
+Sep 16 11:12:33 gw1 sshd[31596]: Failed password for git from 192.0.2.26 port 58671 ssh2
+Sep 16 11:13:11 gw1 sshd[30299]: Server listening on 0.0.0.0 port 22.
+Sep 16 11:13:57 gw1 sshd[29436]: Failed password for invalid user ftpuser from 192.0.2.25 port 41308 ssh2
+Sep 16 11:15:43 gw1 sshd[19434]: Connection reset by 198.51.100.28 port 46900 [preauth]
+Sep 16 11:20:31 gw1 sshd[24759]: Received disconnect from 192.0.2.39 port 52572:11: disconnected by user
+Sep 16 11:29:24 gw1 sshd[37598]: Connection reset by 198.51.100.11 port 51307 [preauth]
+Sep 16 11:30:16 gw1 sshd[5759]: Failed publickey for ftpuser from 203.0.113.200 port 49911 ssh2
+Sep 16 11:31:29 gw1 sshd[11328]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 11:32:51 gw1 sshd[39253]: Failed password for invalid user oracle from 192.0.2.9 port 42976 ssh2
+Sep 16 11:33:21 gw1 systemd-logind[612]: New session 40491 of user root.
+Sep 16 11:39:28 gw1 sshd[3417]: Failed password for alice from 198.51.100.51 port 52878 ssh2
+Sep 16 11:41:54 gw1 sshd[30884]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 11:43:50 gw1 sshd[7179]: Failed password for bob from 198.51.100.10 port 58810 ssh2
+Sep 16 11:44:47 gw1 sshd[39056]: Accepted publickey for root from 192.0.2.13 port 41104 ssh2: RSA SHA256:iw18h3d2qwf4mwsxi3ia
+Sep 16 11:47:13 gw1 sshd[34593]: Invalid user ubuntu from 203.0.113.200 port 35460
+Sep 16 11:49:13 gw1 sshd[15672]: Server listening on 0.0.0.0 port 22.
+Sep 16 11:52:11 gw1 sshd[34374]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 11:52:26 gw1 sshd[4526]: Accepted publickey for alice from 198.51.100.34 port 59578 ssh2: RSA SHA256:7tctchrn0lslfn7htmql
+Sep 16 11:57:02 gw1 sshd[7939]: Failed password for postgres from 198.51.100.36 port 53101 ssh2
+Sep 16 12:00:02 gw1 sshd[2149]: Connection reset by 192.0.2.25 port 57522 [preauth]
+Sep 16 12:00:47 gw1 sshd[8754]: Connection closed by authenticating user test 203.0.113.200 port 41160 [preauth]
+Sep 16 12:03:26 gw1 sshd[22668]: Failed password for invalid user ftpuser from 192.0.2.6 port 52448 ssh2
+Sep 16 12:03:43 gw1 sshd[18544]: Failed password for deploy from 192.0.2.28 port 64259 ssh2
+Sep 16 12:04:23 gw1 sshd[35640]: Received disconnect from 198.51.100.8 port 55843:11: disconnected by user
+Sep 16 12:07:29 gw1 sshd[15637]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 12:07:42 gw1 sshd[4454]: Accepted publickey for bob from 198.51.100.4 port 55899 ssh2: RSA SHA256:m4kgep9qh2tuyfrew0xa
+Sep 16 12:14:47 gw1 sshd[36256]: Failed password for admin from 203.0.113.77 port 36978 ssh2
+Sep 16 12:17:16 gw1 systemd-logind[612]: New session 12478 of user deploy.
+Sep 16 12:18:24 gw1 sshd[27481]: Failed password for invalid user pi from 203.0.113.77 port 64797 ssh2
+Sep 16 12:24:10 gw1 sshd[28711]: Failed password for bob from 198.51.100.5 port 36280 ssh2
+Sep 16 12:25:07 gw1 sshd[33939]: Failed password for invalid user ftpuser from 198.51.100.16 port 57695 ssh2
+Sep 16 12:25:22 gw1 sshd[31915]: Connection reset by 192.0.2.16 port 55597 [preauth]
+Sep 16 12:27:00 gw1 sshd[22047]: Invalid user support from 203.0.113.200 port 47189
+Sep 16 12:29:29 gw1 sshd[14702]: Received disconnect from 198.51.100.5 port 21173:11: disconnected by user
+Sep 16 12:30:30 gw1 sshd[19113]: Accepted publickey for deploy from 192.0.2.24 port 34616 ssh2: RSA SHA256:ny5u9d8hu2xre2awii1f
+Sep 16 12:31:09 gw1 sshd[3283]: Failed password for invalid user oracle from 192.0.2.30 port 31371 ssh2
+Sep 16 12:36:07 gw1 sshd[7612]: Server listening on 0.0.0.0 port 22.
+Sep 16 12:37:34 gw1 sshd[29685]: pam_unix(sshd:session): session closed for user root
+Sep 16 12:39:36 gw1 sshd[26400]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 12:40:43 gw1 sshd[16137]: Failed password for admin from 198.51.100.10 port 50240 ssh2
+Sep 16 12:42:46 gw1 sshd[14685]: Connection reset by 198.51.100.20 port 61889 [preauth]
+Sep 16 12:43:21 gw1 sshd[17410]: Connection reset by 198.51.100.11 port 51177 [preauth]
+Sep 16 12:44:07 gw1 sshd[3876]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 12:44:44 gw1 sshd[21252]: Failed password for carol from 198.51.100.7 port 44304 ssh2
+Sep 16 12:46:09 gw1 CRON[13738]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 12:48:14 gw1 sshd[16531]: Failed password for bob from 198.51.100.13 port 40525 ssh2
+Sep 16 12:49:54 gw1 sshd[21959]: Server listening on 0.0.0.0 port 22.
+Sep 16 12:51:12 gw1 sshd[12984]: Failed password for git from 203.0.113.77 port 51724 ssh2
+Sep 16 12:55:38 gw1 sshd[29022]: Failed password for bob from 198.51.100.31 port 56651 ssh2
+Sep 16 12:56:57 gw1 sshd[14199]: Server listening on 0.0.0.0 port 22.
+Sep 16 13:00:16 gw1 sshd[20631]: Failed password for root from 198.51.100.18 port 36924 ssh2
+Sep 16 13:00:50 gw1 sshd[23116]: Server listening on 0.0.0.0 port 22.
+Sep 16 13:03:40 gw1 systemd-logind[612]: New session 51464 of user carol.
+Sep 16 13:03:58 gw1 sshd[2986]: Failed password for git from 192.0.2.20 port 35747 ssh2
+Sep 16 13:05:15 gw1 sshd[4616]: Accepted publickey for admin from 198.51.100.24 port 32252 ssh2: RSA SHA256:on9de9tn8favdmmlhvdy
+Sep 16 13:05:38 gw1 sshd[13454]: Failed password for bob from 192.0.2.25 port 30841 ssh2
+Sep 16 13:06:30 gw1 sshd[19277]: pam_unix(sshd:session): session closed for user alice
+Sep 16 13:07:53 gw1 systemd-logind[612]: New session 7080 of user admin.
+Sep 16 13:09:30 gw1 systemd-logind[612]: New session 17198 of user deploy.
+Sep 16 13:10:46 gw1 sshd[18020]: Connection closed by authenticating user ftpuser 203.0.113.200 port 32144 [preauth]
+Sep 16 13:11:16 gw1 systemd-logind[612]: New session 24685 of user admin.
+Sep 16 13:12:46 gw1 sshd[35565]: Connection closed by authenticating user test 203.0.113.200 port 61683 [preauth]
+Sep 16 13:13:48 gw1 sshd[9117]: Connection reset by 192.0.2.6 port 38820 [preauth]
+Sep 16 13:14:18 gw1 CRON[38741]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 13:19:21 gw1 sshd[15566]: Accepted publickey for deploy from 198.51.100.24 port 54834 ssh2: RSA SHA256:fam464dwens0s3d6fsro
+Sep 16 13:21:00 gw1 CRON[7733]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 13:23:04 gw1 sshd[23103]: Accepted publickey for deploy from 192.0.2.31 port 62143 ssh2: RSA SHA256:n0lsgzk579p2b7ya1dxh
+Sep 16 13:31:36 gw1 sshd[24090]: Received disconnect from 198.51.100.37 port 34685:11: disconnected by user
+Sep 16 13:38:59 gw1 sshd[10128]: Server listening on 0.0.0.0 port 22.
+Sep 16 13:40:08 gw1 systemd-logind[612]: New session 41937 of user alice.
+Sep 16 13:43:11 gw1 sshd[31937]: Failed password for deploy from 198.51.100.32 port 64201 ssh2
+Sep 16 13:52:35 gw1 sshd[7220]: Failed password for admin from 203.0.113.77 port 60227 ssh2
+Sep 16 13:53:28 gw1 sshd[24440]: Failed publickey for pi from 203.0.113.200 port 57175 ssh2
+Sep 16 13:58:06 gw1 sshd[4038]: Failed password for ubuntu from 192.0.2.39 port 55860 ssh2
+Sep 16 13:58:35 gw1 sshd[2858]: Failed password for bob from 203.0.113.77 port 62581 ssh2
+Sep 16 13:58:39 gw1 sshd[29179]: Accepted publickey for admin from 198.51.100.7 port 41789 ssh2: RSA SHA256:nalzvvmsagyf3dg3irpm
+Sep 16 14:00:03 gw1 sshd[34680]: Failed password for deploy from 198.51.100.50 port 60494 ssh2
+Sep 16 14:01:29 gw1 sshd[26687]: Failed password for carol from 198.51.100.55 port 63750 ssh2
+Sep 16 14:02:26 gw1 sshd[30638]: Failed password for admin from 192.0.2.6 port 36251 ssh2
+Sep 16 14:10:05 gw1 sshd[3741]: Failed password for invalid user test from 192.0.2.17 port 54720 ssh2
+Sep 16 14:11:09 gw1 sshd[14694]: Failed password for bob from 198.51.100.54 port 37284 ssh2
+Sep 16 14:11:27 gw1 sshd[11128]: Server listening on 0.0.0.0 port 22.
+Sep 16 14:12:36 gw1 sshd[36531]: Failed password for root from 198.51.100.41 port 30753 ssh2
+Sep 16 14:13:01 gw1 systemd-logind[612]: New session 33958 of user alice.
+Sep 16 14:15:29 gw1 sshd[11321]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 14:15:56 gw1 sshd[30772]: Received disconnect from 198.51.100.8 port 59066:11: disconnected by user
+Sep 16 14:16:21 gw1 sshd[17621]: Failed publickey for git from 203.0.113.200 port 45754 ssh2
+Sep 16 14:16:42 gw1 sshd[23245]: Failed password for git from 198.51.100.29 port 47018 ssh2
+Sep 16 14:17:39 gw1 sshd[25453]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 14:20:25 gw1 sshd[25393]: Accepted publickey for alice from 198.51.100.15 port 58834 ssh2: RSA SHA256:gor9jkjuslpgtobvomts
+Sep 16 14:31:29 gw1 sshd[11617]: Failed password for invalid user pi from 192.0.2.33 port 40613 ssh2
+Sep 16 14:37:13 gw1 sshd[35321]: Failed password for invalid user guest from 198.51.100.50 port 41243 ssh2
+Sep 16 14:37:37 gw1 sshd[8507]: pam_unix(sshd:session): session closed for user carol
+Sep 16 14:39:15 gw1 sshd[20338]: Failed password for invalid user guest from 198.51.100.26 port 63227 ssh2
+Sep 16 14:42:19 gw1 sshd[16508]: Failed password for root from 198.51.100.25 port 39386 ssh2
+Sep 16 14:44:21 gw1 sshd[4881]: Accepted publickey for carol from 198.51.100.28 port 52418 ssh2: RSA SHA256:s0t53p5qm35mp5u0ushf
+Sep 16 14:44:34 gw1 sshd[35158]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 14:44:59 gw1 systemd-logind[612]: New session 14408 of user bob.
+Sep 16 14:48:37 gw1 sshd[26741]: Failed password for invalid user ftpuser from 192.0.2.39 port 61548 ssh2
+Sep 16 14:48:53 gw1 sshd[24503]: Failed password for invalid user guest from 198.51.100.39 port 40737 ssh2
+Sep 16 14:49:29 gw1 sshd[1923]: Accepted publickey for alice from 192.0.2.39 port 40537 ssh2: RSA SHA256:9zm6skv25uj9ktm3or5j
+Sep 16 14:51:15 gw1 sshd[12400]: Received disconnect from 198.51.100.11 port 22385:11: disconnected by user
+Sep 16 14:52:40 gw1 sshd[30156]: Accepted publickey for carol from 198.51.100.28 port 47494 ssh2: RSA SHA256:n9dvimvncc22ano3jr1l
+Sep 16 14:53:57 gw1 sshd[27653]: Server listening on 0.0.0.0 port 22.
+Sep 16 14:55:07 gw1 sshd[32188]: Failed password for git from 203.0.113.77 port 36757 ssh2
+Sep 16 15:01:34 gw1 sshd[22703]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 16 15:02:06 gw1 sshd[12258]: Server listening on 0.0.0.0 port 22.
+Sep 16 15:02:20 gw1 sshd[38439]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 15:04:15 gw1 sshd[28808]: Received disconnect from 192.0.2.5 port 3717:11: disconnected by user
+Sep 16 15:04:48 gw1 sshd[28642]: Failed password for postgres from 192.0.2.34 port 50705 ssh2
+Sep 16 15:05:00 gw1 sshd[5029]: Failed password for git from 198.51.100.12 port 54734 ssh2
+Sep 16 15:11:56 gw1 sshd[39215]: Failed password for deploy from 192.0.2.32 port 42306 ssh2
+Sep 16 15:13:22 gw1 sshd[14313]: Failed password for invalid user test from 192.0.2.29 port 62028 ssh2
+Sep 16 15:16:35 gw1 sshd[30419]: Received disconnect from 198.51.100.41 port 47859:11: disconnected by user
+Sep 16 15:17:07 gw1 systemd-logind[612]: New session 33869 of user root.
+Sep 16 15:21:43 gw1 CRON[27356]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 15:25:05 gw1 sshd[8506]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 15:26:51 gw1 sshd[31525]: Received disconnect from 198.51.100.53 port 54863:11: disconnected by user
+Sep 16 15:26:58 gw1 sshd[22906]: Failed password for git from 198.51.100.46 port 41325 ssh2
+Sep 16 15:28:18 gw1 sshd[33620]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 15:28:43 gw1 sshd[34393]: Failed password for root from 192.0.2.16 port 51068 ssh2
+Sep 16 15:30:41 gw1 sshd[38089]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 15:32:06 gw1 sshd[34914]: Failed password for postgres from 198.51.100.16 port 62199 ssh2
+Sep 16 15:33:47 gw1 sshd[9479]: Failed password for invalid user ftpuser from 192.0.2.6 port 37854 ssh2
+Sep 16 15:34:06 gw1 sshd[18801]: Received disconnect from 192.0.2.27 port 41525:11: disconnected by user
+Sep 16 15:34:43 gw1 systemd-logind[612]: New session 6557 of user deploy.
+Sep 16 15:38:06 gw1 sshd[2199]: Failed password for alice from 203.0.113.77 port 61883 ssh2
+Sep 16 15:40:03 gw1 sshd[29770]: Failed password for invalid user support from 192.0.2.25 port 47595 ssh2
+Sep 16 15:40:30 gw1 sshd[3200]: Failed password for postgres from 192.0.2.36 port 53847 ssh2
+Sep 16 15:41:52 gw1 sshd[24497]: Failed password for invalid user guest from 192.0.2.33 port 38371 ssh2
+Sep 16 15:42:10 gw1 sshd[24466]: Failed password for invalid user test from 198.51.100.9 port 63063 ssh2
+Sep 16 15:47:20 gw1 systemd-logind[612]: New session 12899 of user carol.
+Sep 16 15:47:54 gw1 sshd[5620]: Server listening on 0.0.0.0 port 22.
+Sep 16 15:49:43 gw1 sshd[7698]: Failed password for invalid user pi from 203.0.113.77 port 58856 ssh2
+Sep 16 15:51:10 gw1 sshd[3226]: Failed password for postgres from 198.51.100.13 port 58278 ssh2
+Sep 16 15:51:35 gw1 sshd[14187]: Connection reset by 198.51.100.44 port 19313 [preauth]
+Sep 16 15:52:51 gw1 sshd[12940]: Received disconnect from 198.51.100.51 port 9527:11: disconnected by user
+Sep 16 15:52:54 gw1 sshd[29056]: Failed password for invalid user pi from 203.0.113.77 port 46451 ssh2
+Sep 16 15:53:49 gw1 sshd[37526]: Accepted publickey for root from 198.51.100.5 port 51181 ssh2: RSA SHA256:pbifzqa9o6xp5xtfladz
+Sep 16 16:03:15 gw1 systemd-logind[612]: New session 63256 of user carol.
+Sep 16 16:06:39 gw1 sshd[8314]: Failed password for postgres from 192.0.2.34 port 36961 ssh2
+Sep 16 16:08:21 gw1 sshd[2688]: Server listening on 0.0.0.0 port 22.
+Sep 16 16:08:37 gw1 sshd[33457]: pam_unix(sshd:session): session closed for user admin
+Sep 16 16:13:54 gw1 sshd[22852]: Failed password for invalid user guest from 198.51.100.51 port 49417 ssh2
+Sep 16 16:17:06 gw1 sshd[22661]: Failed password for postgres from 198.51.100.20 port 48349 ssh2
+Sep 16 16:21:11 gw1 sshd[9888]: Failed password for invalid user pi from 203.0.113.77 port 45687 ssh2
+Sep 16 16:22:04 gw1 sshd[37917]: Accepted publickey for admin from 198.51.100.13 port 36792 ssh2: RSA SHA256:44wgq9vvzx8072n6ofdw
+Sep 16 16:25:03 gw1 sshd[38203]: Accepted publickey for admin from 192.0.2.21 port 61705 ssh2: RSA SHA256:2yg4c3800d2jcxti90q8
+Sep 16 16:25:26 gw1 systemd-logind[612]: New session 57511 of user bob.
+Sep 16 16:25:49 gw1 sshd[6371]: Server listening on 0.0.0.0 port 22.
+Sep 16 16:28:56 gw1 sshd[7942]: Failed password for root from 198.51.100.44 port 61986 ssh2
+Sep 16 16:29:18 gw1 sshd[3261]: Connection closed by authenticating user ubuntu 203.0.113.200 port 36174 [preauth]
+Sep 16 16:33:37 gw1 sshd[7903]: Accepted publickey for bob from 198.51.100.29 port 39439 ssh2: RSA SHA256:w4bbe9nc41s97bbvd70o
+Sep 16 16:35:45 gw1 sshd[13157]: Connection reset by 198.51.100.52 port 53847 [preauth]
+Sep 16 16:41:01 gw1 sshd[32693]: Connection reset by 192.0.2.19 port 64258 [preauth]
+Sep 16 16:45:05 gw1 sshd[38959]: pam_unix(sshd:session): session closed for user root
+Sep 16 16:53:43 gw1 sshd[7129]: Failed password for postgres from 192.0.2.25 port 41713 ssh2
+Sep 16 16:54:32 gw1 sshd[34999]: Invalid user git from 203.0.113.200 port 62208
+Sep 16 16:58:28 gw1 sshd[5390]: Connection reset by 198.51.100.54 port 52148 [preauth]
+Sep 16 17:15:44 gw1 sshd[34789]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 17:18:20 gw1 sshd[21489]: Server listening on 0.0.0.0 port 22.
+Sep 16 17:20:42 gw1 sshd[1006]: pam_unix(sshd:session): session opened for user root(uid=1001) by (uid=0)
+Sep 16 17:24:09 gw1 sshd[35910]: Failed password for admin from 198.51.100.10 port 34144 ssh2
+Sep 16 17:26:27 gw1 sshd[19554]: Accepted publickey for bob from 198.51.100.7 port 41534 ssh2: RSA SHA256:lpbmb2nwzbftazqpu86t
+Sep 16 17:37:10 gw1 sshd[10655]: Failed password for invalid user test from 198.51.100.24 port 59662 ssh2
+Sep 16 17:37:21 gw1 sshd[3994]: Server listening on 0.0.0.0 port 22.
+Sep 16 17:37:46 gw1 sshd[6024]: Failed password for root from 198.51.100.36 port 43006 ssh2
+Sep 16 17:40:59 gw1 sshd[26452]: Connection closed by authenticating user ftpuser 203.0.113.200 port 43993 [preauth]
+Sep 16 17:42:24 gw1 sshd[2939]: Failed password for invalid user ftpuser from 198.51.100.3 port 32889 ssh2
+Sep 16 17:44:46 gw1 CRON[11912]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 17:47:18 gw1 sshd[4316]: Accepted publickey for admin from 198.51.100.6 port 53155 ssh2: RSA SHA256:man4jfqb2egcmm3zlfm5
+Sep 16 17:53:38 gw1 sshd[9199]: Accepted publickey for bob from 198.51.100.40 port 40796 ssh2: RSA SHA256:0s7wi6yln7efw4bqp1u9
+Sep 16 17:55:27 gw1 sshd[19710]: Invalid user admin from 203.0.113.200 port 32807
+Sep 16 17:56:40 gw1 sshd[3792]: Failed password for invalid user guest from 192.0.2.10 port 52048 ssh2
+Sep 16 17:59:33 gw1 CRON[11146]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 17:59:59 gw1 sshd[12104]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 18:00:14 gw1 sshd[35018]: Failed password for alice from 192.0.2.29 port 42605 ssh2
+Sep 16 18:01:51 gw1 sshd[20244]: pam_unix(sshd:session): session closed for user bob
+Sep 16 18:12:33 gw1 sshd[17090]: Server listening on 0.0.0.0 port 22.
+Sep 16 18:20:41 gw1 sshd[32399]: pam_unix(sshd:session): session closed for user deploy
+Sep 16 18:21:43 gw1 sshd[29601]: Failed password for root from 198.51.100.26 port 62164 ssh2
+Sep 16 18:22:54 gw1 sshd[27374]: Failed password for invalid user guest from 192.0.2.13 port 32931 ssh2
+Sep 16 18:25:08 gw1 sshd[32382]: Failed password for bob from 198.51.100.20 port 39751 ssh2
+Sep 16 18:27:48 gw1 sshd[32869]: Failed password for invalid user oracle from 198.51.100.59 port 52768 ssh2
+Sep 16 18:27:52 gw1 systemd-logind[612]: New session 48433 of user alice.
+Sep 16 18:28:17 gw1 sshd[25215]: Accepted publickey for carol from 192.0.2.36 port 52300 ssh2: RSA SHA256:m1xu1hv633ld8aki24pm
+Sep 16 18:33:08 gw1 sshd[6788]: Failed publickey for oracle from 203.0.113.200 port 42538 ssh2
+Sep 16 18:36:13 gw1 sshd[21898]: Connection closed by authenticating user git 203.0.113.200 port 57397 [preauth]
+Sep 16 18:37:24 gw1 sshd[18097]: Failed password for ubuntu from 192.0.2.5 port 59194 ssh2
+Sep 16 18:38:30 gw1 sshd[2476]: Failed password for invalid user oracle from 192.0.2.8 port 62184 ssh2
+Sep 16 18:43:36 gw1 sshd[18223]: Failed password for alice from 192.0.2.15 port 35035 ssh2
+Sep 16 18:44:59 gw1 sshd[11923]: Failed password for invalid user ftpuser from 192.0.2.32 port 43010 ssh2
+Sep 16 18:46:35 gw1 sshd[34934]: Failed password for admin from 198.51.100.45 port 46475 ssh2
+Sep 16 18:49:31 gw1 sshd[13636]: Failed password for admin from 198.51.100.59 port 45920 ssh2
+Sep 16 18:55:28 gw1 sshd[2507]: Failed password for invalid user test from 198.51.100.22 port 36390 ssh2
+Sep 16 18:58:32 gw1 sshd[17311]: Connection reset by 192.0.2.22 port 34201 [preauth]
+Sep 16 18:59:13 gw1 sshd[23311]: pam_unix(sshd:session): session opened for user alice(uid=1001) by (uid=0)
+Sep 16 18:59:56 gw1 systemd-logind[612]: New session 14241 of user root.
+Sep 16 19:00:49 gw1 sshd[22165]: Failed password for bob from 192.0.2.35 port 56619 ssh2
+Sep 16 19:03:21 gw1 sshd[18148]: Failed password for invalid user ftpuser from 203.0.113.77 port 46718 ssh2
+Sep 16 19:05:00 gw1 sshd[17042]: Failed password for alice from 198.51.100.43 port 64350 ssh2
+Sep 16 19:05:01 gw1 sshd[6291]: Connection reset by 192.0.2.34 port 42131 [preauth]
+Sep 16 19:12:28 gw1 systemd-logind[612]: New session 10348 of user deploy.
+Sep 16 19:15:32 gw1 sshd[28228]: Failed password for invalid user pi from 203.0.113.77 port 30046 ssh2
+Sep 16 19:20:03 gw1 sshd[39251]: Received disconnect from 198.51.100.51 port 42303:11: disconnected by user
+Sep 16 19:20:20 gw1 sshd[39479]: Connection closed by authenticating user postgres 203.0.113.200 port 50154 [preauth]
+Sep 16 19:20:57 gw1 sshd[18974]: Failed password for admin from 203.0.113.77 port 36757 ssh2
+Sep 16 19:24:28 gw1 sshd[3277]: Failed password for invalid user ftpuser from 198.51.100.52 port 36431 ssh2
+Sep 16 19:25:40 gw1 sshd[9755]: Failed password for invalid user pi from 192.0.2.8 port 56682 ssh2
+Sep 16 19:27:00 gw1 sshd[24478]: Accepted publickey for bob from 198.51.100.55 port 43519 ssh2: RSA SHA256:3ucqx8aqkxe9cj4an3b7
+Sep 16 19:27:21 gw1 CRON[4500]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 19:33:30 gw1 sshd[7456]: Failed password for invalid user pi from 198.51.100.41 port 59284 ssh2
+Sep 16 19:35:27 gw1 sshd[38466]: Received disconnect from 192.0.2.11 port 50627:11: disconnected by user
+Sep 16 19:36:40 gw1 sshd[3277]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Sep 16 19:38:06 gw1 sshd[31536]: pam_unix(sshd:session): session closed for user alice
+Sep 16 19:38:50 gw1 sshd[12212]: pam_unix(sshd:session): session opened for user admin(uid=1001) by (uid=0)
+Sep 16 19:39:30 gw1 sshd[13421]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 19:39:58 gw1 sshd[32354]: Failed password for alice from 198.51.100.33 port 31954 ssh2
+Sep 16 19:41:48 gw1 sshd[14566]: Failed password for invalid user test from 198.51.100.57 port 44635 ssh2
+Sep 16 19:43:59 gw1 sshd[32083]: Failed password for ubuntu from 198.51.100.43 port 40341 ssh2
+Sep 16 19:45:40 gw1 sshd[37893]: Failed password for git from 198.51.100.22 port 64339 ssh2
+Sep 16 19:50:57 gw1 sshd[15223]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 16 19:52:53 gw1 sshd[26891]: Connection reset by 198.51.100.36 port 4127 [preauth]
+Sep 16 19:54:16 gw1 sshd[4362]: Received disconnect from 198.51.100.27 port 43955:11: disconnected by user
+Sep 16 19:55:22 gw1 sshd[9176]: Failed password for root from 198.51.100.58 port 45573 ssh2
+Sep 16 19:56:07 gw1 sshd[1954]: Failed password for alice from 198.51.100.27 port 63357 ssh2
+Sep 16 19:58:57 gw1 CRON[15957]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 19:59:03 gw1 sshd[11919]: Failed password for invalid user ftpuser from 192.0.2.38 port 45465 ssh2
+Sep 16 20:04:52 gw1 sshd[1889]: pam_unix(sshd:session): session closed for user carol
+Sep 16 20:04:53 gw1 sshd[19965]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 16 20:09:50 gw1 sshd[1143]: Connection closed by authenticating user alice 203.0.113.200 port 40135 [preauth]
+Sep 16 20:11:57 gw1 sshd[36643]: Failed password for admin from 192.0.2.5 port 37052 ssh2
+Sep 16 20:16:00 gw1 sshd[18098]: Received disconnect from 198.51.100.34 port 1930:11: disconnected by user
+Sep 16 20:30:58 gw1 sshd[12779]: Accepted publickey for admin from 192.0.2.20 port 63016 ssh2: RSA SHA256:ickg1pz5wx4fqinjxr8f
+Sep 16 20:37:36 gw1 sshd[20567]: Accepted publickey for bob from 198.51.100.22 port 55036 ssh2: RSA SHA256:jfikj7mpige7sxiaj5wt
+Sep 16 20:41:26 gw1 sshd[3404]: Failed password for invalid user pi from 192.0.2.4 port 51025 ssh2
+Sep 16 20:43:10 gw1 sshd[23520]: Accepted publickey for admin from 192.0.2.14 port 59538 ssh2: RSA SHA256:mtz5ijghl8vpje99ml0w
+Sep 16 20:45:12 gw1 sshd[10516]: Accepted publickey for bob from 192.0.2.19 port 44962 ssh2: RSA SHA256:057fkne8svmxvpq8f1u3
+Sep 16 20:46:51 gw1 sshd[10097]: Failed password for invalid user pi from 192.0.2.30 port 57516 ssh2
+Sep 16 20:48:47 gw1 sshd[7100]: Failed password for admin from 198.51.100.14 port 61022 ssh2
+Sep 16 20:51:44 gw1 sshd[2612]: Failed password for alice from 198.51.100.35 port 41786 ssh2
+Sep 16 20:52:54 gw1 systemd-logind[612]: New session 46526 of user admin.
+Sep 16 20:53:55 gw1 CRON[39573]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 20:54:36 gw1 sshd[38085]: Failed password for invalid user ftpuser from 198.51.100.31 port 34652 ssh2
+Sep 16 20:54:48 gw1 sshd[12982]: Accepted publickey for bob from 198.51.100.32 port 30354 ssh2: RSA SHA256:zw41h9c9bagd5w3clq33
+Sep 16 20:58:42 gw1 sshd[22289]: Failed password for invalid user guest from 198.51.100.27 port 36760 ssh2
+Sep 16 21:02:12 gw1 sshd[4444]: Failed password for bob from 198.51.100.2 port 35668 ssh2
+Sep 16 21:03:56 gw1 sshd[33289]: Connection closed by authenticating user admin 203.0.113.200 port 49232 [preauth]
+Sep 16 21:03:59 gw1 sshd[36490]: Failed password for invalid user oracle from 198.51.100.32 port 30596 ssh2
+Sep 16 21:10:49 gw1 sshd[31685]: Failed password for git from 192.0.2.35 port 41916 ssh2
+Sep 16 21:16:07 gw1 CRON[34397]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 21:24:56 gw1 sshd[28233]: Accepted publickey for carol from 192.0.2.37 port 60033 ssh2: RSA SHA256:rmu547bpynz51clrn0u0
+Sep 16 21:30:31 gw1 sshd[12343]: Failed password for postgres from 192.0.2.30 port 34486 ssh2
+Sep 16 21:31:29 gw1 sshd[12675]: Server listening on 0.0.0.0 port 22.
+Sep 16 21:37:09 gw1 sshd[4386]: Failed publickey for bob from 203.0.113.200 port 44081 ssh2
+Sep 16 21:40:16 gw1 sshd[30689]: Failed password for bob from 198.51.100.9 port 39038 ssh2
+Sep 16 21:40:22 gw1 sshd[19704]: Connection reset by 198.51.100.37 port 22165 [preauth]
+Sep 16 21:46:40 gw1 sshd[16292]: Failed password for invalid user pi from 203.0.113.77 port 62867 ssh2
+Sep 16 21:53:18 gw1 sshd[25359]: Failed password for admin from 198.51.100.51 port 49174 ssh2
+Sep 16 21:54:51 gw1 sshd[29479]: Server listening on 0.0.0.0 port 22.
+Sep 16 21:55:48 gw1 CRON[7649]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 21:56:03 gw1 sshd[23910]: Failed password for deploy from 198.51.100.19 port 43048 ssh2
+Sep 16 21:57:08 gw1 sshd[32527]: Server listening on 0.0.0.0 port 22.
+Sep 16 21:58:19 gw1 sshd[26774]: Accepted publickey for alice from 198.51.100.15 port 48101 ssh2: RSA SHA256:6iw28mx9ga0uiz03my5z
+Sep 16 22:01:40 gw1 sshd[4235]: Received disconnect from 198.51.100.39 port 53782:11: disconnected by user
+Sep 16 22:01:41 gw1 sshd[13014]: Failed password for invalid user pi from 198.51.100.6 port 36876 ssh2
+Sep 16 22:02:10 gw1 sshd[22773]: Received disconnect from 198.51.100.22 port 47568:11: disconnected by user
+Sep 16 22:02:47 gw1 sshd[26242]: Failed password for carol from 198.51.100.26 port 64259 ssh2
+Sep 16 22:04:11 gw1 sshd[1296]: Connection closed by authenticating user ftpuser 203.0.113.200 port 41586 [preauth]
+Sep 16 22:04:58 gw1 sshd[35187]: Failed password for invalid user pi from 198.51.100.6 port 46879 ssh2
+Sep 16 22:05:54 gw1 sshd[33160]: Failed password for invalid user ftpuser from 198.51.100.4 port 46692 ssh2
+Sep 16 22:07:21 gw1 sshd[26078]: Failed password for admin from 198.51.100.17 port 30618 ssh2
+Sep 16 22:07:36 gw1 sshd[18222]: pam_unix(sshd:session): session closed for user carol
+Sep 16 22:10:26 gw1 sshd[27409]: Failed password for invalid user oracle from 198.51.100.13 port 54508 ssh2
+Sep 16 22:11:54 gw1 sshd[25228]: Failed password for git from 192.0.2.3 port 64335 ssh2
+Sep 16 22:13:35 gw1 systemd-logind[612]: New session 14601 of user deploy.
+Sep 16 22:24:38 gw1 sshd[39327]: Received disconnect from 198.51.100.52 port 3272:11: disconnected by user
+Sep 16 22:25:19 gw1 systemd-logind[612]: New session 52047 of user deploy.
+Sep 16 22:25:42 gw1 sshd[14722]: Invalid user deploy from 203.0.113.200 port 33135
+Sep 16 22:28:12 gw1 sshd[21859]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 22:29:58 gw1 sshd[8450]: Failed password for invalid user oracle from 198.51.100.18 port 39451 ssh2
+Sep 16 22:33:45 gw1 sshd[21681]: Server listening on 0.0.0.0 port 22.
+Sep 16 22:34:24 gw1 sshd[17705]: Failed password for invalid user pi from 203.0.113.77 port 54807 ssh2
+Sep 16 22:35:21 gw1 sshd[18853]: Invalid user ubuntu from 203.0.113.200 port 36604
+Sep 16 22:38:41 gw1 sshd[32330]: Failed password for carol from 203.0.113.77 port 64368 ssh2
+Sep 16 22:39:21 gw1 sshd[30573]: Accepted publickey for root from 198.51.100.42 port 40090 ssh2: RSA SHA256:20w43hvwmjjps347xem7
+Sep 16 22:39:52 gw1 sshd[37821]: Failed password for invalid user guest from 203.0.113.77 port 50262 ssh2
+Sep 16 22:41:17 gw1 sshd[14858]: Accepted publickey for admin from 198.51.100.55 port 43275 ssh2: RSA SHA256:dvqmzv21gnpcystk4xrw
+Sep 16 22:41:18 gw1 sshd[12098]: Failed password for invalid user oracle from 198.51.100.29 port 46339 ssh2
+Sep 16 22:42:43 gw1 sshd[27270]: Failed password for invalid user guest from 198.51.100.13 port 63895 ssh2
+Sep 16 22:43:21 gw1 sshd[9487]: Server listening on 0.0.0.0 port 22.
+Sep 16 22:44:53 gw1 sshd[1775]: Connection reset by 198.51.100.53 port 34617 [preauth]
+Sep 16 22:50:12 gw1 sshd[15590]: Connection closed by authenticating user admin 203.0.113.200 port 39561 [preauth]
+Sep 16 22:58:43 gw1 sshd[36023]: Accepted publickey for root from 198.51.100.48 port 63153 ssh2: RSA SHA256:9f1n89u7nvfinq6rna24
+Sep 16 23:00:00 gw1 sshd[2438]: Received disconnect from 198.51.100.6 port 38465:11: disconnected by user
+Sep 16 23:03:41 gw1 CRON[31448]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 23:03:55 gw1 sshd[27180]: Received disconnect from 198.51.100.17 port 22117:11: disconnected by user
+Sep 16 23:04:48 gw1 sshd[17803]: Failed password for admin from 198.51.100.51 port 36279 ssh2
+Sep 16 23:05:45 gw1 sshd[26093]: Failed password for invalid user ftpuser from 192.0.2.29 port 30011 ssh2
+Sep 16 23:07:40 gw1 CRON[8211]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 23:09:01 gw1 sshd[31020]: Server listening on 0.0.0.0 port 22.
+Sep 16 23:09:52 gw1 sshd[7817]: Accepted publickey for alice from 198.51.100.14 port 48882 ssh2: RSA SHA256:hzv4s0je525g85gliwmq
+Sep 16 23:11:37 gw1 sshd[23459]: Failed publickey for git from 203.0.113.200 port 38900 ssh2
+Sep 16 23:12:40 gw1 CRON[15586]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 23:14:58 gw1 sshd[14361]: Failed password for invalid user oracle from 192.0.2.5 port 47985 ssh2
+Sep 16 23:15:48 gw1 sshd[20609]: Failed password for git from 198.51.100.20 port 41147 ssh2
+Sep 16 23:16:49 gw1 sshd[26092]: pam_unix(sshd:session): session closed for user carol
+Sep 16 23:19:10 gw1 sshd[5235]: Connection reset by 198.51.100.39 port 30678 [preauth]
+Sep 16 23:19:19 gw1 sshd[19848]: Failed password for git from 198.51.100.52 port 31036 ssh2
+Sep 16 23:21:38 gw1 sshd[18329]: Received disconnect from 192.0.2.34 port 24778:11: disconnected by user
+Sep 16 23:21:44 gw1 sshd[5071]: Failed password for invalid user oracle from 192.0.2.36 port 53169 ssh2
+Sep 16 23:21:45 gw1 systemd-logind[612]: New session 62077 of user root.
+Sep 16 23:26:44 gw1 sshd[1268]: Connection reset by 198.51.100.40 port 52869 [preauth]
+Sep 16 23:28:41 gw1 sshd[18579]: Accepted publickey for carol from 198.51.100.50 port 42182 ssh2: RSA SHA256:y8z41auszr64qbiilh9y
+Sep 16 23:31:33 gw1 sshd[21529]: Received disconnect from 198.51.100.5 port 13991:11: disconnected by user
+Sep 16 23:35:03 gw1 systemd-logind[612]: New session 44441 of user root.
+Sep 16 23:36:21 gw1 sshd[17652]: Failed password for invalid user guest from 192.0.2.6 port 63228 ssh2
+Sep 16 23:36:33 gw1 CRON[6359]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Sep 16 23:37:40 gw1 sshd[11910]: pam_unix(sshd:session): session closed for user alice
+Sep 16 23:45:53 gw1 sshd[27658]: pam_unix(sshd:session): session opened for user bob(uid=1001) by (uid=0)
+Sep 16 23:47:04 gw1 sshd[34862]: Accepted publickey for bob from 198.51.100.52 port 49140 ssh2: RSA SHA256:uuo0jz2iaup08wen3raq
+Sep 16 23:48:01 gw1 sshd[29694]: Failed password for root from 198.51.100.44 port 45742 ssh2
+Sep 16 23:48:27 gw1 sshd[34284]: Accepted publickey for carol from 198.51.100.20 port 57427 ssh2: RSA SHA256:pe8dgsa3au4wd3e9k9tg
+Sep 16 23:50:21 gw1 sshd[13103]: pam_unix(sshd:session): session closed for user root
+Sep 16 23:58:27 gw1 sshd[2642]: pam_unix(sshd:session): session opened for user carol(uid=1001) by (uid=0)
+Sep 16 23:58:29 gw1 sshd[8466]: Received disconnect from 198.51.100.51 port 42243:11: disconnected by user
