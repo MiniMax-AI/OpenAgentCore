@@ -22,7 +22,7 @@ func (ConfigurationAdapter) DiscoverSelection(context.Context, sandbox.DirectCon
 }
 
 // VerifyCredential is read-only and bounded: the key must list sandboxes, and
-// every Core-owned reference must resolve to sandboxes of this installation.
+// every Core-owned reference must list sandboxes of this installation.
 func (ConfigurationAdapter) VerifyCredential(ctx context.Context, c sandbox.DirectConfig, refs []sandbox.Reference) error {
 	p, err := newProvider(c)
 	if err != nil || len(refs) > maxCredentialReferences {
@@ -44,12 +44,14 @@ func (ConfigurationAdapter) VerifyCredential(ctx context.Context, c sandbox.Dire
 		return sandbox.ErrConfigurationUnconfirmed
 	}
 	for _, r := range refs {
-		switch _, err := p.owned(ctx, r); {
+		// An empty listing never proves the key sees the reference's sandboxes:
+		// a key of another OpenSandbox tenant lists nothing too.
+		switch items, err := p.owned(ctx, r); {
 		case errors.Is(err, sandbox.ErrOwnership):
 			return sandbox.ErrCredentialOwnership
 		case errors.Is(err, sandbox.ErrCredentialRejected):
 			return err
-		case err != nil:
+		case err != nil || len(items) == 0:
 			return sandbox.ErrConfigurationUnconfirmed
 		}
 	}

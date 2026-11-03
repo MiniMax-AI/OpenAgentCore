@@ -32,7 +32,7 @@ func Setup() sandbox.SetupDeclaration {
 		Fields: []sandbox.SetupField{
 			{Name: "api_url", Label: sandbox.Text{EN: "Server URL", ZHCN: "服务地址"}},
 			{Name: "image", Label: sandbox.Text{EN: "Runtime image", ZHCN: "Runtime 镜像"},
-				Help: sandbox.Text{EN: "Build it from the OpenAgentCore Runtime image with deploy/opensandbox/Dockerfile.", ZHCN: "用 deploy/opensandbox/Dockerfile 从 OpenAgentCore Runtime 镜像构建。"}},
+				Help: sandbox.Text{EN: "Build it from the OpenAgentCore Runtime image with services/core/deploy/opensandbox/Dockerfile.", ZHCN: "用 services/core/deploy/opensandbox/Dockerfile 从 OpenAgentCore Runtime 镜像构建。"}},
 			{Name: "api_key", Secret: true, Label: sandbox.Text{EN: "API key", ZHCN: "API 密钥"}},
 		},
 	}

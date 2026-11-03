@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 9a668c5872eaed4bd0b7d33a228d87e2897ffa5fa7d9dde4deae7aa3b1b66725
+source_hash: d58c78e62c5d4ac3a3bf6d231de8fc1e26ce33d95ff276df0cc2bc428824355b
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -77,7 +77,7 @@ microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/enviro
 
 默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止，但 E2B 无法阻止元数据地址 169.254.169.254，且 E2B 沙箱根本无法访问私有网络。沙箱保留创建它的代次的上限。
 
-每个 Provider 声明自己能强制执行什么（[Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md#network-egress)）：microsandbox 支持两个字段，E2B 支持 `public: false` 但不支持 `domains`，因为 E2B 沙箱无法访问私有网络，OpenSandbox 支持 `public: false` 但不支持 `domains`，因为其对私有网段的拒绝规则优先于域名解析出的私有地址。出于同一原因，可访问公网的 OpenSandbox 沙箱需要安装公开 URL 解析到全局地址；解析到私有地址时，可访问公网地址的沙箱无法启动，`public: false` 上限可以让部署的 Session 在没有公网访问的情况下运行。所选 Provider 未声明的上限会返回 400 `invalid_sandbox_configuration`，`param` 为 `network.public` 或 `network.domains`。
+每个 Provider 声明自己能强制执行什么（[Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md#network-egress)）：microsandbox 支持两个字段，E2B 支持 `public: false` 但不支持 `domains`，因为 E2B 沙箱无法访问私有网络，OpenSandbox 支持 `public: false` 但不支持 `domains`，因为其对私有网段的拒绝规则优先于域名解析出的私有地址。这些拒绝规则同样优先于到 Core 的连接，因此 OpenSandbox 需要安装公开 URL 解析到全局地址。解析到私有地址时，所有 OpenSandbox 沙箱都无法启动。所选 Provider 未声明的上限会返回 400 `invalid_sandbox_configuration`，`param` 为 `network.public` 或 `network.domains`。
 
 ### E2B 配置 {#e2b-configuration}
 
@@ -85,7 +85,7 @@ E2B 使用 `template-id:build-uuid` 形式的 `configuration.template`；构建 
 
 ### OpenSandbox 配置 {#opensandbox-configuration}
 
-OpenSandbox 使用 `configuration.api_url` 和 `configuration.image`：前者是 OpenSandbox 服务器的 HTTP 或 HTTPS 源地址，不含路径、查询、片段或凭据；后者是按其 [adapter 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md#build-the-runtime-image)所述为 OpenSandbox 构建的 Runtime 镜像。API 密钥在 PostgreSQL 中加密，绝不会出现在响应、引导配置、命令参数或日志中。Core 保存选择时既不检查镜像也不检查服务器；镜像无法启动或服务器的出口 sidecar 未以 `dns+nft` 模式运行时，每次 Create 都会失败。
+OpenSandbox 使用 `configuration.api_url` 和 `configuration.image`：前者是 OpenSandbox 服务器的 HTTP 或 HTTPS 源地址，不含路径、查询、片段或凭据；后者是按其 [adapter 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md#build-the-runtime-image)所述为 OpenSandbox 构建的 Runtime 镜像。API 密钥在 PostgreSQL 中加密，绝不会出现在响应、引导配置、命令参数或日志中。Core 不检查镜像。首次选择时不会联系服务器，之后的更改会按[密钥替换](#opensandbox-key-replacement)所述校验已保存的或新的密钥。镜像无法启动、服务器的出口 sidecar 未以 `dns+nft` 模式运行，或安装公开 URL 解析到非全局地址时，每次 Create 都会失败。
 
 ### 配置发现 {#configuration-discovery}
 
@@ -132,7 +132,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 ### OpenSandbox 密钥替换 {#opensandbox-key-replacement}
 
-请求规则与 E2B 密钥替换相同。OpenSandbox 服务器只有一个密钥，因此检查的是访问权限：候选密钥必须能通过每个保留代次的服务器的身份验证，并列出每个未释放分配的 sandbox。401 或 403 返回 400 `sandbox_credential_invalid`，任何其他失败返回 503 `sandbox_verification_unconfirmed`。服务地址和镜像的更改不会排空生命周期。
+请求规则与 E2B 密钥替换相同。候选密钥必须能通过每个保留代次的服务器的身份验证，并列出每个未释放分配的 sandbox，因此列不出任何 sandbox 的密钥（例如另一个 OpenSandbox 租户的密钥）会被拒绝。401 或 403 返回 400 `sandbox_credential_invalid`，属于其他安装的 sandbox 返回 409 `sandbox_credential_ownership`，其他任何失败（包括某个分配的 sandbox 已不存在）返回 503 `sandbox_verification_unconfirmed`。服务地址和镜像的更改不会排空生命周期。
 
 ## 挂起策略 {#suspension-policy}
 

@@ -74,7 +74,7 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 
 The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. A sandbox keeps the cap of the generation that created it.
 
-Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks, and OpenSandbox supports `public: false` but not `domains` because its deny rules for private ranges win over a domain's private answers. For the same reason an OpenSandbox sandbox with public access needs the installation public URL at global addresses; when it resolves to a private one, a sandbox that may reach public addresses fails to start, and a `public: false` cap runs the deployment's Sessions without public access. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
+Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks, and OpenSandbox supports `public: false` but not `domains` because its deny rules for private ranges win over a domain's private answers. Those deny rules also win over the connection to Core, so OpenSandbox needs the installation public URL at global addresses. When it resolves to a private one, every OpenSandbox sandbox fails to start. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 
 ### E2B configuration
 
@@ -82,7 +82,7 @@ E2B uses `configuration.template` in `template-id:build-uuid` form; the build UU
 
 ### OpenSandbox configuration
 
-OpenSandbox uses `configuration.api_url`, the HTTP or HTTPS origin of the OpenSandbox server without path, query, fragment or credentials, and `configuration.image`, the Runtime image built for OpenSandbox as its [adapter guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md#build-the-runtime-image) describes. The API key is encrypted in PostgreSQL and never appears in a response, bootstrap configuration, command argument or log. Core checks neither the image nor the server when it saves the selection; each Create fails when the image cannot start or the server's egress sidecar does not run in `dns+nft` mode.
+OpenSandbox uses `configuration.api_url`, the HTTP or HTTPS origin of the OpenSandbox server without path, query, fragment or credentials, and `configuration.image`, the Runtime image built for OpenSandbox as its [adapter guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md#build-the-runtime-image) describes. The API key is encrypted in PostgreSQL and never appears in a response, bootstrap configuration, command argument or log. Core does not check the image. The initial selection does not contact the server, and a later change verifies the saved or new key as [key replacement](#opensandbox-key-replacement) describes. Each Create fails when the image cannot start, the server's egress sidecar does not run in `dns+nft` mode or the installation public URL resolves to a non-global address.
 
 ### Configuration discovery
 
@@ -129,7 +129,7 @@ No provider text or credential is returned. The write and its `change` or `repla
 
 ### OpenSandbox key replacement
 
-The request rules are those of E2B key replacement. An OpenSandbox server has one key, so the check is access: the candidate key must authenticate with the server of every retained generation and list the sandboxes of each unreleased allocation. A 401 or 403 returns 400 `sandbox_credential_invalid`, and any other failure 503 `sandbox_verification_unconfirmed`. Server URL and image changes do not drain lifecycles.
+The request rules are those of E2B key replacement. The candidate key must authenticate with the server of every retained generation and list the sandboxes of each unreleased allocation, so a key that lists none, such as one of another OpenSandbox tenant, is refused. A 401 or 403 returns 400 `sandbox_credential_invalid`, sandboxes of another installation 409 `sandbox_credential_ownership`, and any other failure 503 `sandbox_verification_unconfirmed`, including an allocation whose sandboxes are gone. Server URL and image changes do not drain lifecycles.
 
 ## Suspension policy
 

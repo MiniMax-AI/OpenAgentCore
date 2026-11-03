@@ -313,7 +313,7 @@ Limits ([adapter rules](../../docs/sandbox-provider.md#network-egress)):
 
 - A model provider host that the cap lists, by name or through a `*.` entry, is reachable like a listed domain, not only on its port.
 - On E2B, a restricted domain is reachable only on ports 80 and 443, and a model provider on another port is reachable on every port of its public addresses.
-- On microsandbox and OpenSandbox, an allowed name is reachable on every address it resolves to, private ones included.
+- On OpenSandbox, an allowed domain and the model provider host are reachable on every port of their public addresses.
 
 `disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.
 

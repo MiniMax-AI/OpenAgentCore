@@ -6,13 +6,14 @@ Core's OpenSandbox Sandbox Provider ([`sandbox/opensandbox`](../../internal/sand
 
 | Setting | Requirement |
 | --- | --- |
-| Version | OpenSandbox server 1.2.0 or newer |
+| Version | OpenSandbox release 1.2.0 or newer |
 | `server.api_key` | Set; Core sends it as `OPEN-SANDBOX-API-KEY` ([Configuration](https://open-sandbox.ai/getting-started/configuration)) |
 | `[egress] mode` | `dns+nft`. Core's network policy needs packet-level enforcement ([Egress](https://open-sandbox.ai/architecture/network/egress)), and Create fails on a server that reports another mode |
 | `server.max_sandbox_timeout_seconds` | Unset or at least 3600: Core creates each sandbox with a one-hour lease and renews it |
-| Network | Core reaches the server URL; sandboxes reach Core's [public address](../../../../docs/getting-started/public-address.md) |
+| `[docker] publish_host` | `127.0.0.1` on the Docker runtime, with the server on the host network. execd answers on each sandbox's published port without authentication, and Core reaches it only through the server's proxy |
+| Network | Core reaches the server URL; sandboxes reach Core's [public address](../../../../docs/getting-started/public-address.md), which must resolve to global addresses ([network cap](../../../../contracts/agents-api/sandbox-deployment.md#network)) |
 
-The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. Core reaches each sandbox's execd through the server's proxy, so restrict who can reach the server and its sandbox ports as OpenSandbox's [Secure Access](https://open-sandbox.ai/guides/secure-access) and [Single-Host Network](https://open-sandbox.ai/architecture/network/single-host-network) describe.
+The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. Restrict who can reach the server; on Kubernetes, [Secure Access](https://open-sandbox.ai/guides/secure-access) protects the sandbox endpoints.
 
 ## Build the Runtime image
 
@@ -39,7 +40,7 @@ Rebuild it with every Core release and select the new image in the deployment. T
 | `RunCommand` | execd `POST /command` as the Runtime user; confidential input goes through a private file that the command reads and removes |
 | `Observe` | execd `GET /metrics`; see [Runtime observability](../../../../contracts/agents-api/runtime-observability.md) |
 
-Every sandbox carries `io.oac.installation`, `io.oac.tenant`, `io.oac.environment` and `io.oac.allocation`, and the adapter acts only on a sandbox whose four values match. It keeps no local state. One create request yields at most one sandbox, every later step of the attempt runs inside it, and Kill removes it, so an owned sandbox observed in any state but `Pending` settles the creation; Core records that before cleanup. A create that OpenSandbox rejects with a 4xx status settles as absent. Any other unknown outcome stays unsettled until a sandbox appears, and the one-hour timeout ends a late one.
+Every sandbox carries `io.oac.installation`, `io.oac.tenant`, `io.oac.environment` and `io.oac.allocation`, and the adapter acts only on a sandbox whose four values match. It keeps no local state. One create request yields at most one sandbox, every later step of the attempt runs inside it, and Kill removes it, so an owned sandbox observed in any state but `Pending` settles the creation; Core records that before cleanup. A create that OpenSandbox rejects with a 4xx status, or that never reaches the server because the dial, name lookup or certificate check fails, settles as absent. Any other unknown outcome stays unsettled until a sandbox appears, and the one-hour timeout ends a late one.
 
 The checkpoint operations are not mapped. OpenSandbox's [pause](https://open-sandbox.ai/guides/pause-resume) differs by runtime: Docker freezes the container in place, Kubernetes keeps only the root filesystem, and only Fast Sandbox checkpoints memory. The preparation cache is not mapped either. [Network egress](../../../../docs/sandbox-provider.md#network-egress) describes how Core's egress maps to the network policy.
 

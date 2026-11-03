@@ -3,6 +3,7 @@ package opensandbox
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -93,6 +94,15 @@ func nativeErr(err error) error {
 		return sandbox.ErrCredentialRejected
 	}
 	return sandbox.ErrComputeUnconfirmed
+}
+
+// notSent reports a failure before the request reached the server: the dial,
+// the name lookup or the server certificate failed.
+func notSent(err error) bool {
+	var lookup *net.DNSError
+	var dial *net.OpError
+	var certificate *tls.CertificateVerificationError
+	return errors.As(err, &lookup) || errors.As(err, &dial) && dial.Op == "dial" || errors.As(err, &certificate)
 }
 
 // statusOf is the HTTP status of a native error response, or 0.
@@ -230,7 +240,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return sandbox.Info{Reference: r, State: "absent", CreateSettled: true}, err
 	}
 	if b.Workspace != nil {
-		return rejected(unsupported("Create"))
+		return rejected(sandbox.ErrInvalid)
 	}
 	connection := b.RuntimeConnection()
 	if !validReference(r) || !validID(b.SessionID) || !validID(b.DeviceID) || connection.Validate() != nil || b.Egress.Validate() != nil || len(b.Egress.PrivateDomains) > 0 {
@@ -262,6 +272,8 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return rejected(sandbox.ErrCredentialRejected)
 		case status >= 400 && status < 500:
 			return rejected(sandbox.ErrInvalid)
+		case notSent(err):
+			return rejected(sandbox.ErrComputeUnconfirmed)
 		}
 		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
 	}

@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -112,6 +115,63 @@ func TestCreateWaitsForTheEgressSidecar(t *testing.T) {
 	p, r := testProvider(t, f)
 	if got, err := p.Create(bounded(t), bootstrap(r)); err != nil || !got.BootstrapComplete {
 		t.Fatalf("create = %+v, %v", got, err)
+	}
+}
+
+func TestOnlyAnUnsentCreateIsAbsent(t *testing.T) {
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	if _, err := (&http.Client{Transport: &http.Transport{}}).Post(closed.URL, "text/plain", nil); !notSent(err) {
+		t.Fatal("refused dial not classified as unsent:", err)
+	}
+	// A connection dropped after the request was sent proves nothing.
+	f := newFake(t)
+	p, r := testProvider(t, f)
+	f.fault = func(call string, w http.ResponseWriter) bool {
+		if call != "create" {
+			return false
+		}
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+		return true
+	}
+	if got, err := p.Create(bounded(t), bootstrap(r)); !errors.Is(err, sandbox.ErrComputeUnconfirmed) || got.CreateSettled {
+		t.Fatalf("create = %+v, %v", got, err)
+	}
+}
+
+func TestVerifyCredentialNeedsListedOwnership(t *testing.T) {
+	f := newFake(t)
+	config := testConfig(f.server.URL)
+	r := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+	verify := func(refs ...sandbox.Reference) error {
+		return ConfigurationAdapter{}.VerifyCredential(t.Context(), config, refs)
+	}
+	if err := verify(r); !errors.Is(err, sandbox.ErrConfigurationUnconfirmed) {
+		t.Fatal("empty listing accepted:", err)
+	}
+	f.add(r, config.InstallationID, nil)
+	if err := verify(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(make([]sandbox.Reference, maxCredentialReferences+1)...); !errors.Is(err, sandbox.ErrInvalid) {
+		t.Fatal("unbounded references accepted:", err)
+	}
+	f.fault = func(call string, w http.ResponseWriter) bool {
+		writeJSON(w, 401, map[string]string{"code": "UNAUTHORIZED", "message": "bad key"})
+		return true
+	}
+	if err := verify(r); !errors.Is(err, sandbox.ErrCredentialRejected) {
+		t.Fatal(err)
+	}
+	f.fault = func(call string, w http.ResponseWriter) bool {
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "x", "status": map[string]any{"state": "Running"},
+			"metadata": map[string]string{keyInstallation: config.InstallationID, keyTenant: r.TenantID, keyEnvironment: r.EnvironmentID, keyAllocation: "foreign"}}},
+			"pagination": map[string]any{"hasNextPage": false}})
+		return true
+	}
+	if err := verify(r); !errors.Is(err, sandbox.ErrCredentialOwnership) {
+		t.Fatal(err)
 	}
 }
 

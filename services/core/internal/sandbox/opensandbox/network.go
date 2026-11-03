@@ -14,7 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// privatePrefixes are the addresses a public-internet sandbox must not reach.
+// privatePrefixes are the addresses no sandbox may reach.
 // Loopback is not among them: inside the sandbox's network namespace it is the
 // sandbox itself (execd and the sidecar's DNS proxy), never the host.
 var privatePrefixes = []netip.Prefix{
@@ -25,9 +25,11 @@ var privatePrefixes = []netip.Prefix{
 type resolver func(ctx context.Context, host string) ([]netip.Addr, error)
 
 // networkPolicy maps Egress to the OpenSandbox egress policy. The sidecar lets a
-// deny rule win over any allow, so a public sandbox, which denies the private
-// ranges, needs Core at global addresses; any other sandbox denies by default
-// and allows Core, the model provider endpoints and the named domains.
+// deny rule win over any allow and opens every port of an allowed name's
+// addresses, so every sandbox denies the private ranges and Core must be at
+// global addresses. A public sandbox allows the rest by default; any other
+// denies by default and allows Core, the model provider endpoints and the
+// named domains.
 func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (*osdk.NetworkPolicy, error) {
 	core, err := url.Parse(b.CoreURL)
 	if err != nil || core.Hostname() == "" {
@@ -42,27 +44,25 @@ func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (
 			return nil, sandbox.ErrInvalid
 		}
 	}
+	addrs, err := hostAddrs(ctx, coreHost, resolve)
+	if err != nil {
+		return nil, err
+	}
+	if slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !isGlobal(a) }) {
+		return nil, fmt.Errorf("%w: OpenSandbox sandboxes reach Core only at global addresses", sandbox.ErrInvalid)
+	}
 	var rules []osdk.NetworkRule
+	for _, prefix := range privatePrefixes {
+		rules = append(rules, osdk.NetworkRule{Action: "deny", Target: prefix.String()})
+	}
 	if b.Egress.Public {
-		addrs, err := hostAddrs(ctx, coreHost, resolve)
-		if err != nil {
-			return nil, err
-		}
-		// Opening a private Core address would open all of its ports.
-		if slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !isGlobal(a) }) {
-			return nil, fmt.Errorf("%w: a public OpenSandbox sandbox reaches Core only at global addresses", sandbox.ErrInvalid)
-		}
-		for _, prefix := range privatePrefixes {
-			rules = append(rules, osdk.NetworkRule{Action: "deny", Target: prefix.String()})
-		}
 		return &osdk.NetworkPolicy{DefaultAction: "allow", Egress: rules}, nil
 	}
-	// allow adds a domain rule, or an IP rule on the TCP port. Only Core's own
-	// address may be non-global.
-	allow := func(host string, port int, isCore bool) {
+	// allow adds a domain rule, or an IP rule on the TCP port for a global address.
+	allow := func(host string, port int) {
 		rule := osdk.NetworkRule{Action: "allow", Target: host}
 		if addr, err := netip.ParseAddr(host); err == nil {
-			if !isCore && !isGlobal(addr) {
+			if !isGlobal(addr) {
 				return
 			}
 			rule.Ports = []int{port}
@@ -71,16 +71,16 @@ func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (
 			rules = append(rules, rule)
 		}
 	}
-	allow(coreHost, corePort, true)
+	allow(coreHost, corePort)
 	for _, endpoint := range b.Egress.Endpoints {
 		host, port, err := sandbox.SplitEndpoint(endpoint)
 		if err != nil {
 			return nil, err
 		}
-		allow(strings.ToLower(host), port, false)
+		allow(strings.ToLower(host), port)
 	}
 	for _, domain := range b.Egress.Domains {
-		allow(strings.ToLower(domain), 0, false)
+		allow(strings.ToLower(domain), 0)
 	}
 	return &osdk.NetworkPolicy{DefaultAction: "deny", Egress: rules}, nil
 }

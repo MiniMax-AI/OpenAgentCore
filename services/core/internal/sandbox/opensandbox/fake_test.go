@@ -235,12 +235,7 @@ func (f *fake) command(w http.ResponseWriter, r *http.Request) {
 
 func testProvider(t *testing.T, f *fake) (*Provider, sandbox.Reference) {
 	t.Helper()
-	installation := uuid.NewString()
-	p, err := newProvider(sandbox.DirectConfig{InstallationID: installation, Selection: sandbox.Selection{
-		Provider:       "opensandbox",
-		DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 4096}, Network: sandbox.DefaultNetwork()},
-		Configuration:  &DeploymentConfiguration{APIURL: f.server.URL, Image: "runtime:test", APIKey: "synthetic-key"},
-	}})
+	p, err := newProvider(testConfig(f.server.URL))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,6 +243,14 @@ func testProvider(t *testing.T, f *fake) (*Provider, sandbox.Reference) {
 		return []netip.Addr{netip.MustParseAddr("203.0.113.5")}, nil
 	}
 	return p, sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+}
+
+func testConfig(apiURL string) sandbox.DirectConfig {
+	return sandbox.DirectConfig{InstallationID: uuid.NewString(), Selection: sandbox.Selection{
+		Provider:       "opensandbox",
+		DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 4096}, Network: sandbox.DefaultNetwork()},
+		Configuration:  &DeploymentConfiguration{APIURL: apiURL, Image: "runtime:test", APIKey: "synthetic-key"},
+	}}
 }
 
 func bootstrap(r sandbox.Reference) sandbox.Bootstrap {

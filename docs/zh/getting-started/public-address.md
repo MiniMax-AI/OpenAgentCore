@@ -1,7 +1,7 @@
 ---
 title: "配置公开地址"
 source: docs/getting-started/public-address.md
-source_hash: ba97e492fde66f4bbc0c6c4af68b9910dcf28b57228950988aaa68785cd6d5c6
+source_hash: f9cb56d297618abd5c226e5417c41a69c46ee45c46f8b4c25b6d220faafd9f09
 ---
 
 设置浏览器、节点、沙箱和应用访问 Core 所用的唯一源地址，并在其前面放置带 HTTPS 的反向代理。本指南面向将 Core 暴露到其所在机器之外的运维人员。
@@ -16,7 +16,7 @@ source_hash: ba97e492fde66f4bbc0c6c4af68b9910dcf28b57228950988aaa68785cd6d5c6
 | 本地网络 | `http://<private address>:8080`，`--host` 为 `0.0.0.0` 且默认路由带有私有网络地址时由安装程序选用 |
 | 本地网络之外 | 反向代理提供的 HTTPS 源地址，例如 `https://core.example` |
 | E2B 提供商 | 可从互联网访问且不是回环地址的 HTTPS 源地址，因为 E2B 沙箱会从 E2B 云端调用 Core |
-| OpenSandbox 提供商 | OpenSandbox 服务器的沙箱可访问且不是回环地址的源地址 |
+| OpenSandbox 提供商 | OpenSandbox 服务器的沙箱可在全局地址上访问的源地址 |
 
 安装时用 `--public-url` 传入该源地址，或按[更改公开 URL](#changing-the-public-url)稍后修改。使用选项安装，参阅[安装选项](./install-options.md#pass-flags)。
 

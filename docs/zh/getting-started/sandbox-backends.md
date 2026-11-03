@@ -1,7 +1,7 @@
 ---
 title: "选择沙箱提供商"
 source: docs/getting-started/sandbox-backends.md
-source_hash: 13d81221aac68a2edde3434c1ae51b76c052d034f55a8a7162d9eac5d7a602d5
+source_hash: 6ff014aa67c43fc73e2ed049d8ec5ceb65f771511af0ba2ec0d692d6d529191a
 ---
 
 比较 microsandbox、E2B 和 OpenSandbox，然后在 Web 中选择一个。本指南面向已完成[安装 Core 和 Web](./install.md)、需要为 Core 托管的 Session 提供计算资源的运维人员。
@@ -46,13 +46,13 @@ E2B 不需要节点，但其沙箱会从 E2B 云端调用 Core，因此 Core 需
 
 ## 使用 OpenSandbox {#use-opensandbox}
 
-OpenSandbox 不需要节点。其沙箱会调用 Core 的公共地址，该地址不能是回环地址；参阅[配置公开地址](./public-address.md)。可访问公网的沙箱需要它是全局地址（[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network)）。
+OpenSandbox 不需要节点。其沙箱会调用 Core 的公共地址，该地址不能是回环地址；参阅[配置公开地址](./public-address.md)。它还必须解析到全局地址（[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network)）。
 
 1. 按 [OpenSandbox adapter 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md)准备服务器并构建 Runtime 镜像。
 2. 在设置向导中选择 **OpenSandbox**。在 **连接 OpenSandbox** 页输入 **服务地址**、**Runtime 镜像** 和 **API 密钥**。
 3. 在 **确认并保存** 页，保留推荐的规格，或在 **高级设置** 中修改，然后选择 **保存配置**。Core 加密保存该密钥，且不会再返回它。
 
-Core 保存时不会联系服务器。URL、密钥或镜像有误，会在首个 Session 的沙箱创建时暴露。编辑已保存的 OpenSandbox 配置时，**API 密钥** 留空即保留已保存的密钥。
+Core 首次保存时不会联系服务器，因此 URL、密钥或镜像有误，会在首个 Session 的沙箱创建时暴露。之后的更改会向服务器校验密钥。编辑已保存的 OpenSandbox 配置时，**API 密钥** 留空即保留已保存的密钥。
 
 ## 后续步骤 {#next-steps}
 

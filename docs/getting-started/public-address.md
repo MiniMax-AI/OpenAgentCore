@@ -14,7 +14,7 @@ Set the one origin that browsers, nodes, sandboxes and applications use to reach
 | Local network | `http://<private address>:8080`, which the installer picks when `--host` is `0.0.0.0` and the default route has a private-network address |
 | Beyond the local network | The HTTPS origin your reverse proxy serves, for example `https://core.example` |
 | E2B backend | An HTTPS origin reachable from the internet and not loopback, because E2B's sandboxes call Core from E2B's cloud |
-| OpenSandbox backend | An origin that the OpenSandbox server's sandboxes reach and that is not loopback |
+| OpenSandbox backend | An origin that the OpenSandbox server's sandboxes reach at global addresses |
 
 Pass the origin as `--public-url` when you install, or change it later as described in [Change the public URL](#changing-the-public-url). To install with a flag, see [Installation options](./install-options.md#pass-flags).
 

@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: f49f6012ac8d7309520a6b71c20288fdf61ae035d20023a3fcd705727a5d639e
+source_hash: db29e6b679d41900e5369e625844f0096cfdf7614ae73007b43de1cb00843a24
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -315,7 +315,7 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 
 - 上限按名称或 `*.` 条目列出的模型提供商主机与所列域名一样可达，不限于其端口。
 - 在 E2B 上，受限域名只能通过 80 和 443 端口访问；模型提供商使用其他端口时，其公网地址的所有端口均可达。
-- 在 microsandbox 和 OpenSandbox 上，允许的名称在其解析出的每个地址上都可达，包括私有地址。
+- 在 OpenSandbox 上，允许的域名和模型提供商主机在其公网地址的每个端口上都可达。
 
 部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。
 

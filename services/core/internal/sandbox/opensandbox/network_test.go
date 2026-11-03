@@ -41,15 +41,29 @@ func targets(policy *osdk.NetworkPolicy) []string {
 	return out
 }
 
+const privateDenies = "deny 10.0.0.0/8,deny 172.16.0.0/12,deny 192.168.0.0/16,deny 100.64.0.0/10,deny 169.254.0.0/16,deny fc00::/7,deny fe80::/10"
+
 func TestPublicNetworkDeniesPrivateRanges(t *testing.T) {
 	policy := policyFor(t, "https://core.example/api/v1", sandbox.Egress{Public: true}, "203.0.113.5")
-	want := "deny 10.0.0.0/8,deny 172.16.0.0/12,deny 192.168.0.0/16,deny 100.64.0.0/10,deny 169.254.0.0/16,deny fc00::/7,deny fe80::/10"
-	if policy.DefaultAction != "allow" || strings.Join(targets(policy), ",") != want {
+	if policy.DefaultAction != "allow" || strings.Join(targets(policy), ",") != privateDenies {
 		t.Fatalf("%s rules = %v", policy.DefaultAction, targets(policy))
 	}
 }
 
-func TestPublicNetworkRejectsPrivateCore(t *testing.T) {
+func TestRestrictedNetworkAllowsOnlyNamedDestinations(t *testing.T) {
+	egress := sandbox.Egress{Domains: []string{"Docs.Example.com"}, Endpoints: []string{"api.model.example:443", "203.0.113.9:8443", "10.0.0.7:9000", "api.model.example:8443"}}
+	policy := policyFor(t, "https://core.example/api/v1", egress, "203.0.113.5")
+	// The private denies win over the private answers of every allowed name.
+	want := privateDenies + ",allow core.example,allow api.model.example,allow 203.0.113.9:8443,allow docs.example.com"
+	if policy.DefaultAction != "deny" || strings.Join(targets(policy), ",") != want {
+		t.Fatalf("%s rules = %v, want %v", policy.DefaultAction, targets(policy), want)
+	}
+	if policy := policyFor(t, "http://203.0.113.4:8080/api/v1", sandbox.Egress{}); strings.Join(targets(policy), ",") != privateDenies+",allow 203.0.113.4:8080" {
+		t.Fatalf("core literal rules = %v", targets(policy))
+	}
+}
+
+func TestNetworkRejectsPrivateCore(t *testing.T) {
 	for name, tc := range map[string]struct {
 		url      string
 		resolved []string
@@ -61,21 +75,11 @@ func TestPublicNetworkRejectsPrivateCore(t *testing.T) {
 			}
 			return out, nil
 		}
-		if _, err := networkPolicy(t.Context(), sandbox.Bootstrap{CoreURL: tc.url, Egress: sandbox.Egress{Public: true}}, resolve); !errors.Is(err, sandbox.ErrInvalid) {
-			t.Fatalf("%s: %v", name, err)
+		for _, public := range []bool{true, false} {
+			if _, err := networkPolicy(t.Context(), sandbox.Bootstrap{CoreURL: tc.url, Egress: sandbox.Egress{Public: public}}, resolve); !errors.Is(err, sandbox.ErrInvalid) {
+				t.Fatalf("%s public=%v: %v", name, public, err)
+			}
 		}
-	}
-}
-
-func TestRestrictedNetworkAllowsOnlyNamedDestinations(t *testing.T) {
-	egress := sandbox.Egress{Domains: []string{"Docs.Example.com"}, Endpoints: []string{"api.model.example:443", "203.0.113.9:8443", "10.0.0.7:9000", "api.model.example:8443"}}
-	got := targets(policyFor(t, "https://core.example/api/v1", egress))
-	want := []string{"allow core.example", "allow api.model.example", "allow 203.0.113.9:8443", "allow docs.example.com"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("rules = %v, want %v", got, want)
-	}
-	if policy := policyFor(t, "http://10.2.3.4:8080/api/v1", sandbox.Egress{}); policy.DefaultAction != "deny" || strings.Join(targets(policy), ",") != "allow 10.2.3.4:8080" {
-		t.Fatalf("core literal rules = %v", targets(policy))
 	}
 }
 
