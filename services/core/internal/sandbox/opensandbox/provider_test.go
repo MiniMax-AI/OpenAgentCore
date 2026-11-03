@@ -66,7 +66,7 @@ func TestCreateBootstrapsOnce(t *testing.T) {
 	if !got.BootstrapComplete || !got.CreateSettled {
 		t.Fatalf("created sandbox not reported complete: %+v", got)
 	}
-	if want := []string{"list", "create", "get", "networkpolicy", "endpoint", "execd/files/upload", "execd/command", "patch", "list"}; !reflect.DeepEqual(f.calls, want) {
+	if want := []string{"list", "create", "get", "endpoint", "execd/ping", "networkpolicy", "execd/files/upload", "execd/command", "patch", "list"}; !reflect.DeepEqual(f.calls, want) {
 		t.Fatalf("calls = %v, want %v", f.calls, want)
 	}
 	data, _ := b.RuntimeConnection().Marshal()
@@ -94,6 +94,23 @@ func TestCreateRejectsEgressWithoutNftEnforcement(t *testing.T) {
 	p, r := testProvider(t, f)
 	got, err := p.Create(bounded(t), bootstrap(r))
 	if !errors.Is(err, sandbox.ErrInvalid) || !got.CreateSettled || got.BootstrapComplete || len(f.uploads) != 0 {
+		t.Fatalf("create = %+v, %v", got, err)
+	}
+}
+
+func TestCreateWaitsForTheEgressSidecar(t *testing.T) {
+	f := newFake(t)
+	starting := true
+	f.fault = func(call string, w http.ResponseWriter) bool {
+		if call != "networkpolicy" || !starting {
+			return false
+		}
+		starting = false
+		writeJSON(w, 502, map[string]string{"code": "BAD_GATEWAY", "message": "egress starting"})
+		return true
+	}
+	p, r := testProvider(t, f)
+	if got, err := p.Create(bounded(t), bootstrap(r)); err != nil || !got.BootstrapComplete {
 		t.Fatalf("create = %+v, %v", got, err)
 	}
 }

@@ -164,6 +164,8 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"status": "ok", "enforcementMode": f.mode})
 	case "endpoint":
 		writeJSON(w, 200, map[string]any{"endpoint": strings.TrimPrefix(f.server.URL, "http://") + "/v1/sandboxes/" + id + "/proxy/44772"})
+	case "execd/ping":
+		w.WriteHeader(200)
 	case "execd/files/upload":
 		f.upload(w, r)
 	case "execd/command":

@@ -274,21 +274,29 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if item.ID != created.ID || !owns(*item, p.ownerMetadata(r)) {
 		return got, sandbox.ErrOwnership
 	}
-	status, err := p.lifecycle.GetNetworkPolicy(ctx, item.ID)
-	if err != nil {
-		return unconfirmed, nativeErr(err)
-	}
-	if status.EnforcementMode != "dns+nft" {
-		return got, fmt.Errorf("%w: the OpenSandbox egress sidecar must run in dns+nft mode", sandbox.ErrInvalid)
-	}
-
 	data, err := connection.Marshal()
 	if err != nil {
 		return unconfirmed, sandbox.ErrInvalid
 	}
-	live, err := osdk.ConnectSandbox(ctx, p.connection, item.ID)
+	// The egress sidecar starts answering after the create returns, so its
+	// policy status is part of the SDK's readiness wait.
+	var mode string
+	live, err := osdk.ConnectSandbox(ctx, p.connection, item.ID, osdk.ReadyOptions{HealthCheck: func(ctx context.Context, s *osdk.Sandbox) (bool, error) {
+		if err := s.Ping(ctx); err != nil {
+			return false, err
+		}
+		status, err := p.lifecycle.GetNetworkPolicy(ctx, item.ID)
+		if err != nil {
+			return false, err
+		}
+		mode = status.EnforcementMode
+		return true, nil
+	}})
 	if err != nil {
 		return unconfirmed, nativeErr(err)
+	}
+	if mode != "dns+nft" {
+		return got, fmt.Errorf("%w: the OpenSandbox egress sidecar must run in dns+nft mode", sandbox.ErrInvalid)
 	}
 	if err := upload(ctx, live, bootstrapFile, data); err != nil {
 		return unconfirmed, nativeErr(err)
