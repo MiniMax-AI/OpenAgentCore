@@ -11,9 +11,10 @@ Core's OpenSandbox Sandbox Provider ([`sandbox/opensandbox`](../../internal/sand
 | `[egress] mode` | `dns+nft`. Core's network policy needs packet-level enforcement ([Egress](https://open-sandbox.ai/architecture/network/egress)), and Create fails on a server that reports another mode |
 | `server.max_sandbox_timeout_seconds` | Unset or at least 3600: Core creates each sandbox with a one-hour lease and renews it |
 | `[docker] publish_host` | `127.0.0.1` on the Docker runtime, with the server on the host network. execd answers on each sandbox's published port without authentication, and Core reaches it only through the server's proxy |
+| Kubernetes | Pod and service ranges outside the private ranges added to the egress `deny.always` list ([Network isolation](https://open-sandbox.ai/guides/network-isolation)); the adapter denies only private, shared and link-local ranges |
 | Network | Core reaches the server URL; sandboxes reach Core's [public address](../../../../docs/getting-started/public-address.md), which must resolve to global addresses ([network cap](../../../../contracts/agents-api/sandbox-deployment.md#network)) |
 
-The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. Restrict who can reach the server; on Kubernetes, [Secure Access](https://open-sandbox.ai/guides/secure-access) protects the sandbox endpoints.
+The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. The adapter does not request [Secure Access](https://open-sandbox.ai/guides/secure-access), so restrict who can reach the server and its ingress.
 
 ## Build the Runtime image
 
@@ -27,7 +28,7 @@ docker build --build-arg RUNTIME_IMAGE=oac-runtime:<version> \
 docker push registry.example.com/oac/runtime-opensandbox:<version>
 ```
 
-Rebuild it with every Core release and select the new image in the deployment. The image is deployment configuration, not a public Environment Template.
+Rebuild it with every Core release, pull it on every OpenSandbox host, then select it in the deployment: Core gives each Create 30 seconds, which a pull inside the create request can exceed. The image is deployment configuration, not a public Environment Template.
 
 ## Operations
 
@@ -40,7 +41,7 @@ Rebuild it with every Core release and select the new image in the deployment. T
 | `RunCommand` | execd `POST /command` as the Runtime user; confidential input goes through a private file that the command reads and removes |
 | `Observe` | execd `GET /metrics`; see [Runtime observability](../../../../contracts/agents-api/runtime-observability.md) |
 
-Every sandbox carries `io.oac.installation`, `io.oac.tenant`, `io.oac.environment` and `io.oac.allocation`, and the adapter acts only on a sandbox whose four values match. It keeps no local state. One create request yields at most one sandbox, every later step of the attempt runs inside it, and Kill removes it, so an owned sandbox observed in any state but `Pending` settles the creation; Core records that before cleanup. A create that OpenSandbox rejects with a 4xx status, or that never reaches the server because the dial, name lookup or certificate check fails, settles as absent. Any other unknown outcome stays unsettled until a sandbox appears, and the one-hour timeout ends a late one.
+Every sandbox carries `io.oac.installation`, `io.oac.tenant`, `io.oac.environment` and `io.oac.allocation`, and the adapter acts only on a sandbox whose four values match. It keeps no local state. One create request yields at most one sandbox, every later step of the attempt runs inside it, and Kill removes it, so an owned sandbox observed in any state settles the creation; Core records that before cleanup. A create that never reaches the server, because the dial, name lookup or certificate check fails, settles as absent. When the server answers with its own error, its rollback has finished, so the adapter lists the allocation: an empty listing settles it as absent, and a sandbox that outlived the rollback settles it for cleanup. Any other unknown outcome stays unsettled until a sandbox appears, and the one-hour timeout ends a late one.
 
 The checkpoint operations are not mapped. OpenSandbox's [pause](https://open-sandbox.ai/guides/pause-resume) differs by runtime: Docker freezes the container in place, Kubernetes keeps only the root filesystem, and only Fast Sandbox checkpoints memory. The preparation cache is not mapped either. [Network egress](../../../../docs/sandbox-provider.md#network-egress) describes how Core's egress maps to the network policy.
 

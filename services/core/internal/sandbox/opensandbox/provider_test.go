@@ -53,7 +53,9 @@ func TestProviderContract(t *testing.T) {
 					"pagination": map[string]any{"hasNextPage": false}})
 				return true
 			}
-			writeJSON(w, 500, map[string]string{"code": "INTERNAL", "message": "injected"})
+			// A transport failure drops the connection after the request arrives.
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
 			return true
 		}
 		return contracttest.Fixture{Provider: p, Bootstrap: bootstrap(r), Calls: f.Calls, WantCalls: want}
@@ -137,6 +139,37 @@ func TestOnlyAnUnsentCreateIsAbsent(t *testing.T) {
 	}
 	if got, err := p.Create(bounded(t), bootstrap(r)); !errors.Is(err, sandbox.ErrComputeUnconfirmed) || got.CreateSettled {
 		t.Fatalf("create = %+v, %v", got, err)
+	}
+}
+
+func TestNativeCreateErrorSettlesByListing(t *testing.T) {
+	for name, leftover := range map[string]bool{"rolled back": false, "left behind": true} {
+		f := newFake(t)
+		p, r := testProvider(t, f)
+		f.fault = func(call string, w http.ResponseWriter) bool {
+			if call != "create" {
+				return false
+			}
+			if leftover {
+				f.addLocked(p.ownerMetadata(r), nil)
+			}
+			writeJSON(w, 500, map[string]string{"code": "DOCKER::SANDBOX_IMAGE_PULL_FAILED", "message": "pull failed"})
+			return true
+		}
+		got, err := p.Create(bounded(t), bootstrap(r))
+		if want := map[bool]string{false: "absent", true: "running"}[leftover]; err == nil || !got.CreateSettled || got.State != want {
+			t.Fatalf("%s: create = %+v, %v", name, got, err)
+		}
+	}
+}
+
+func TestPendingSandboxIsSettled(t *testing.T) {
+	f := newFake(t)
+	f.state = "Pending"
+	p, r := testProvider(t, f)
+	f.add(r, p.installation, nil)
+	if got, err := p.GetInfo(bounded(t), r); err != nil || !got.CreateSettled || got.State != "pending" || got.BootstrapComplete {
+		t.Fatalf("info = %+v, %v", got, err)
 	}
 }
 

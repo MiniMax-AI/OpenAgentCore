@@ -148,13 +148,12 @@ func owns(item osdk.SandboxInfo, want map[string]string) bool {
 
 // info reports one owned sandbox. One create request yields at most one
 // sandbox, every later effect of the attempt is inside it, and Kill removes it,
-// so an observed non-Pending sandbox proves the attempt can no longer leave
+// so an observed sandbox in any state proves the attempt can no longer leave
 // resources behind; Core records it before Kill.
 func info(r sandbox.Reference, item osdk.SandboxInfo) sandbox.Info {
-	settled := item.Status.State != osdk.StatePending
 	return sandbox.Info{
 		Reference: r, ProviderID: item.ID, State: strings.ToLower(string(item.Status.State)),
-		BootstrapComplete: settled && item.Metadata[keyBootstrap] == "complete", CreateSettled: settled,
+		BootstrapComplete: item.Metadata[keyBootstrap] == "complete", CreateSettled: true,
 	}
 }
 
@@ -260,6 +259,10 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return sandbox.Info{Reference: r}, sandbox.ErrExists
 	}
 
+	data, err := connection.Marshal()
+	if err != nil {
+		return rejected(sandbox.ErrInvalid)
+	}
 	timeout := int(lease / time.Second)
 	created, err := p.lifecycle.CreateSandbox(ctx, osdk.CreateSandboxRequest{
 		Image: &osdk.ImageSpec{URI: p.image}, Entrypoint: []string{"sleep", "infinity"}, Timeout: &timeout,
@@ -267,28 +270,17 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		Metadata:       p.ownerMetadata(r), NetworkPolicy: policy,
 	})
 	if err != nil {
-		switch status := statusOf(err); {
-		case status == http.StatusUnauthorized || status == http.StatusForbidden:
-			return rejected(sandbox.ErrCredentialRejected)
-		case status >= 400 && status < 500:
-			return rejected(sandbox.ErrInvalid)
-		case notSent(err):
-			return rejected(sandbox.ErrComputeUnconfirmed)
-		}
-		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
+		return p.failedCreate(ctx, r, err, rejected)
 	}
-	unconfirmed := sandbox.Info{Reference: r}
+	// The create returned its one sandbox, so the attempt is settled from here on.
+	got := info(r, *created)
 	item, err := p.lifecycle.GetSandbox(ctx, created.ID)
 	if err != nil {
-		return unconfirmed, nativeErr(err)
+		return got, nativeErr(err)
 	}
-	got := info(r, *item)
+	got = info(r, *item)
 	if item.ID != created.ID || !owns(*item, p.ownerMetadata(r)) {
 		return got, sandbox.ErrOwnership
-	}
-	data, err := connection.Marshal()
-	if err != nil {
-		return unconfirmed, sandbox.ErrInvalid
 	}
 	// The egress sidecar starts answering after the create returns, so its
 	// policy status is part of the SDK's readiness wait.
@@ -305,32 +297,58 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return true, nil
 	}})
 	if err != nil {
-		return unconfirmed, nativeErr(err)
+		return got, nativeErr(err)
 	}
 	if mode != "dns+nft" {
 		return got, fmt.Errorf("%w: the OpenSandbox egress sidecar must run in dns+nft mode", sandbox.ErrInvalid)
 	}
 	if err := upload(ctx, live, bootstrapFile, data); err != nil {
-		return unconfirmed, nativeErr(err)
+		return got, nativeErr(err)
 	}
-	initialization, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	result, err := run(initialization, live, []string{"/usr/local/bin/oac-daemon", "connect", "--profile", "default", "--bootstrap-file", bootstrapFile, "-b"}, "/environment/workspace")
+	result, err := run(ctx, live, []string{"/usr/local/bin/oac-daemon", "connect", "--profile", "default", "--bootstrap-file", bootstrapFile, "-b"}, "/environment/workspace")
 	if err != nil {
-		return unconfirmed, err
+		return got, err
 	}
 	if result.ExitCode != 0 {
 		return got, sandbox.ErrCommandUnconfirmed
 	}
 	marker := "complete"
 	if _, err := p.lifecycle.PatchSandboxMetadata(ctx, item.ID, osdk.MetadataPatch{keyBootstrap: &marker}); err != nil {
-		return unconfirmed, nativeErr(err)
+		return got, nativeErr(err)
 	}
 	got, _, err = p.lookup(ctx, r)
 	if err == nil && !got.BootstrapComplete {
 		err = sandbox.ErrCommandUnconfirmed
 	}
 	return got, err
+}
+
+// failedCreate classifies a create request that returned no sandbox. A request
+// that never reached the server created nothing. When the server answered with
+// its own error, its rollback has finished, so a listing shows whether anything
+// outlived it. Any other failure may hide a sandbox that appears later.
+func (p *Provider) failedCreate(ctx context.Context, r sandbox.Reference, err error, rejected func(error) (sandbox.Info, error)) (sandbox.Info, error) {
+	if notSent(err) {
+		return rejected(sandbox.ErrComputeUnconfirmed)
+	}
+	var native *osdk.APIError
+	if !errors.As(err, &native) || native.Response.Code == "" {
+		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
+	}
+	if native.StatusCode == http.StatusUnauthorized || native.StatusCode == http.StatusForbidden {
+		return rejected(sandbox.ErrCredentialRejected)
+	}
+	outcome := sandbox.ErrComputeUnconfirmed
+	if native.StatusCode >= 400 && native.StatusCode < 500 {
+		outcome = sandbox.ErrInvalid
+	}
+	switch items, err := p.owned(ctx, r); {
+	case err != nil:
+		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
+	case len(items) > 0:
+		return info(r, items[0]), outcome
+	}
+	return rejected(outcome)
 }
 
 // upload writes a private file through execd.
