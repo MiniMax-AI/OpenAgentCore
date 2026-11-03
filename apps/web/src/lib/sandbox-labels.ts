@@ -40,7 +40,7 @@ export function sandboxWriteUncertain(error: unknown): boolean {
 
 /**
  * The reason for a refused deployment configuration whose code the console
- * explains, such as a Provider that needs a public HTTPS address behind a loopback public_url; null for any other failure.
+ * explains, such as a Provider that needs a public address behind a loopback public_url; null for any other failure.
  * Nothing was saved, so the administrator corrects the cause and saves again.
  */
 export function sandboxConfigurationRejection(error: unknown, locale: SupportedLanguage = "en"): string | null {

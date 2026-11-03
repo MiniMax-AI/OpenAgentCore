@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: d58c78e62c5d4ac3a3bf6d231de8fc1e26ce33d95ff276df0cc2bc428824355b
+source_hash: 9ae9f467b9e62291dcb31e3b5a8c1c64c21ef3f790ad804c85a2939119c0a218
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -132,7 +132,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 ### OpenSandbox 密钥替换 {#opensandbox-key-replacement}
 
-请求规则与 E2B 密钥替换相同。候选密钥必须能通过每个保留代次的服务器的身份验证，并列出每个未释放分配的 sandbox，因此列不出任何 sandbox 的密钥（例如另一个 OpenSandbox 租户的密钥）会被拒绝。401 或 403 返回 400 `sandbox_credential_invalid`，属于其他安装的 sandbox 返回 409 `sandbox_credential_ownership`，其他任何失败（包括某个分配的 sandbox 已不存在）返回 503 `sandbox_verification_unconfirmed`。服务地址和镜像的更改不会排空生命周期。
+请求规则与 E2B 密钥替换相同。候选密钥必须能通过每个保留代次的服务器的身份验证，并列出每个未释放分配的 sandbox；空列表不能证明任何事。401 或 403 返回 400 `sandbox_credential_invalid`，其他任何失败（包括某个分配的 sandbox 已不存在）返回 503 `sandbox_verification_unconfirmed`。服务地址和镜像的更改不会排空生命周期。
 
 ## 挂起策略 {#suspension-policy}
 

@@ -129,7 +129,7 @@ No provider text or credential is returned. The write and its `change` or `repla
 
 ### OpenSandbox key replacement
 
-The request rules are those of E2B key replacement. The candidate key must authenticate with the server of every retained generation and list the sandboxes of each unreleased allocation, so a key that lists none, such as one of another OpenSandbox tenant, is refused. A 401 or 403 returns 400 `sandbox_credential_invalid`, sandboxes of another installation 409 `sandbox_credential_ownership`, and any other failure 503 `sandbox_verification_unconfirmed`, including an allocation whose sandboxes are gone. Server URL and image changes do not drain lifecycles.
+The request rules are those of E2B key replacement. The candidate key must authenticate with the server of every retained generation and list the sandboxes of each unreleased allocation; an empty listing proves nothing. A 401 or 403 returns 400 `sandbox_credential_invalid`, and any other failure 503 `sandbox_verification_unconfirmed`, including an allocation whose sandboxes are gone. Server URL and image changes do not drain lifecycles.
 
 ## Suspension policy
 

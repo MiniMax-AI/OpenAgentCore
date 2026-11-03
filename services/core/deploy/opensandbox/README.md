@@ -9,12 +9,13 @@ Core's OpenSandbox Sandbox Provider ([`sandbox/opensandbox`](../../internal/sand
 | Version | OpenSandbox release 1.2.0 or newer |
 | `server.api_key` | Set; Core sends it as `OPEN-SANDBOX-API-KEY` ([Configuration](https://open-sandbox.ai/getting-started/configuration)) |
 | `[egress] mode` | `dns+nft`. Core's network policy needs packet-level enforcement ([Egress](https://open-sandbox.ai/architecture/network/egress)), and Create fails on a server that reports another mode |
+| `[egress] disable_ipv6` | `true`, the default: the adapter's deny list covers IPv4 and IPv6 private ranges, not translated IPv6 prefixes |
 | `server.max_sandbox_timeout_seconds` | Unset or at least 3600: Core creates each sandbox with a one-hour lease and renews it |
 | `[docker] publish_host` | `127.0.0.1` on the Docker runtime, with the server on the host network. execd answers on each sandbox's published port without authentication, and Core reaches it only through the server's proxy |
 | Kubernetes | Pod and service ranges outside the private ranges added to the egress `deny.always` list ([Network isolation](https://open-sandbox.ai/guides/network-isolation)); the adapter denies only private, shared and link-local ranges |
 | Network | Core reaches the server URL; sandboxes reach Core's [public address](../../../../docs/getting-started/public-address.md), which must resolve to global addresses ([network cap](../../../../contracts/agents-api/sandbox-deployment.md#network)) |
 
-The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. The adapter does not request [Secure Access](https://open-sandbox.ai/guides/secure-access), so restrict who can reach the server and its ingress.
+The isolation is OpenSandbox's: its Docker runtime runs plain containers, and a [secure container runtime](https://open-sandbox.ai/guides/secure-container) gives each sandbox its own kernel. The adapter does not request [Secure Access](https://open-sandbox.ai/guides/secure-access), and the server's sandbox proxy route accepts requests without the API key, so only Core may reach the server and its ingress; on Kubernetes, a NetworkPolicy also keeps other workloads off the sandbox pods. Use an HTTPS `api_url` unless Core and the server share a trusted network: the key and the Runtime credential travel over it.
 
 ## Build the Runtime image
 

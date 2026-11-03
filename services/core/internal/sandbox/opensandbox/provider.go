@@ -324,19 +324,23 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 }
 
 // failedCreate classifies a create request that returned no sandbox. A request
-// that never reached the server created nothing. When the server answered with
-// its own error, its rollback has finished, so a listing shows whether anything
-// outlived it. Any other failure may hide a sandbox that appears later.
+// that never reached the server created nothing, and the server checks the key
+// before it handles a request. Only the server's handlers answer with a
+// namespaced code such as DOCKER::SANDBOX_IMAGE_PULL_FAILED, after their
+// rollback, so a listing then shows whether anything outlived it. Any other
+// failure, a gateway's answer included, may hide a sandbox that appears later.
 func (p *Provider) failedCreate(ctx context.Context, r sandbox.Reference, err error, rejected func(error) (sandbox.Info, error)) (sandbox.Info, error) {
 	if notSent(err) {
 		return rejected(sandbox.ErrComputeUnconfirmed)
 	}
 	var native *osdk.APIError
-	if !errors.As(err, &native) || native.Response.Code == "" {
+	switch {
+	case !errors.As(err, &native):
 		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
-	}
-	if native.StatusCode == http.StatusUnauthorized || native.StatusCode == http.StatusForbidden {
+	case native.StatusCode == http.StatusUnauthorized:
 		return rejected(sandbox.ErrCredentialRejected)
+	case !strings.Contains(native.Response.Code, "::"):
+		return sandbox.Info{Reference: r}, sandbox.ErrComputeUnconfirmed
 	}
 	outcome := sandbox.ErrComputeUnconfirmed
 	if native.StatusCode >= 400 && native.StatusCode < 500 {

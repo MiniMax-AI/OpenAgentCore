@@ -143,21 +143,34 @@ func TestOnlyAnUnsentCreateIsAbsent(t *testing.T) {
 }
 
 func TestNativeCreateErrorSettlesByListing(t *testing.T) {
-	for name, leftover := range map[string]bool{"rolled back": false, "left behind": true} {
+	for name, tc := range map[string]struct {
+		status   int
+		code     string
+		leftover bool
+		state    string // "" means unsettled
+	}{
+		"rolled back":   {500, "DOCKER::SANDBOX_IMAGE_PULL_FAILED", false, "absent"},
+		"left behind":   {403, "KUBERNETES::QUOTA_EXCEEDED", true, "running"},
+		"gateway reply": {504, "", false, ""},
+	} {
 		f := newFake(t)
 		p, r := testProvider(t, f)
 		f.fault = func(call string, w http.ResponseWriter) bool {
 			if call != "create" {
 				return false
 			}
-			if leftover {
+			if tc.leftover {
 				f.addLocked(p.ownerMetadata(r), nil)
 			}
-			writeJSON(w, 500, map[string]string{"code": "DOCKER::SANDBOX_IMAGE_PULL_FAILED", "message": "pull failed"})
+			if tc.code == "" {
+				w.WriteHeader(tc.status)
+				return true
+			}
+			writeJSON(w, tc.status, map[string]string{"code": tc.code, "message": "injected"})
 			return true
 		}
 		got, err := p.Create(bounded(t), bootstrap(r))
-		if want := map[bool]string{false: "absent", true: "running"}[leftover]; err == nil || !got.CreateSettled || got.State != want {
+		if err == nil || got.CreateSettled != (tc.state != "") || got.State != tc.state {
 			t.Fatalf("%s: create = %+v, %v", name, got, err)
 		}
 	}

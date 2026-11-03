@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 4574b75eba13665db11b98498c90a9329dabdd4714dcf6383f777c54143f2772
+source_hash: 8d1fe4e681774523fb1544201f2ef950ac29ed2a8d055c5bf0b63855e30a24c7
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
@@ -208,7 +208,7 @@ Provider 在始终允许到 Core 的连接之上严格执行这些内容，并�
 
 microsandbox 按首条匹配的顺序和默认拒绝来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。沙箱只能访问主机的 DNS 服务器：发往其他服务器的 DNS 和主机的其他端口都被拒绝，因此只有主机的应答能把名称绑定到地址。该服务器不论策略都会应答任何名称，因此被拒绝的名称仍能解析，只是连接会失败。名称成为不带端口的域名放行规则，放行这些应答解析出的地址（包括私有地址）；`*.example.com` 条目成为子域名放行规则，永远不匹配 `example.com`。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
 
-OpenSandbox 同样只声明 `Restrict`，并要求其出口 sidecar 以 `dns+nft` 模式运行（[OpenSandbox egress](https://open-sandbox.ai/architecture/network/egress)），其拒绝规则优先于所有放行规则，而域名规则会放行其应答解析出的地址的所有端口。因此每个沙箱都拒绝私有、共享和链路本地网段，adapter 无法遵守 `PrivateDomains`。当 Core 主机由其主机解析出的地址不全在全局网段时，Create 在派发前返回 `ErrInvalid`，因为放行该地址会放行它的所有端口。`Public` 时其余流量默认放行。非 `Public` 时默认拒绝，并放行 Core 主机、`Endpoints` 和 `Domains`：名称作为域名规则，全局 IP 字面量在其端口上放行。回环保持开放，因为在沙箱内部它就是沙箱自己的网络命名空间。
+OpenSandbox 同样只声明 `Restrict`，并要求其出口 sidecar 以 `dns+nft` 模式运行（[OpenSandbox egress](https://open-sandbox.ai/architecture/network/egress)），其拒绝规则优先于所有放行规则，而域名规则会放行其应答解析出的地址的所有端口。因此每个沙箱都拒绝私有、共享和链路本地网段，adapter 无法遵守 `PrivateDomains`。当 Core 主机由其主机解析出的地址不全在全局网段时，Create 在派发前返回 `ErrInvalid`：私有网段的拒绝规则优先于对它的任何放行。`Public` 时其余流量默认放行。非 `Public` 时默认拒绝，并放行 Core 主机、`Endpoints` 和 `Domains`：名称作为域名规则，全局 IP 字面量在其端口上放行。回环保持开放，因为在沙箱内部它就是沙箱自己的网络命名空间。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 

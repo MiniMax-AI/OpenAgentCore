@@ -44,8 +44,7 @@ func (ConfigurationAdapter) VerifyCredential(ctx context.Context, c sandbox.Dire
 		return sandbox.ErrConfigurationUnconfirmed
 	}
 	for _, r := range refs {
-		// An empty listing never proves the key sees the reference's sandboxes:
-		// a key of another OpenSandbox tenant lists nothing too.
+		// An empty listing never proves the key sees the reference's sandboxes.
 		switch items, err := p.owned(ctx, r); {
 		case errors.Is(err, sandbox.ErrOwnership):
 			return sandbox.ErrCredentialOwnership
