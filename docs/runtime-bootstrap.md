@@ -74,6 +74,7 @@ When `suspend_control` is true, the daemon publishes its suspend control at `run
 | Provider | Delivery |
 | --- | --- |
 | microsandbox, E2B | Deliver the file before launching the same command. |
+| OpenSandbox | Uploads the file through execd, then launches the same command. |
 
 ## Verification
 

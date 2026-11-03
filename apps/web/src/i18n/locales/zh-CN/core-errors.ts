@@ -36,7 +36,7 @@ export const coreErrors = {
   "sandbox_credential_invalid": "沙箱提供商凭据被拒绝。已保存的配置未改变。",
   "sandbox_configuration_invalid": "请选择已就绪且资源匹配的不可变提供商配置。",
   "sandbox_verification_unconfirmed": "无法确认沙箱提供商的验证结果。请刷新后再提交。",
-  "sandbox_configuration_error": "此沙箱提供商需要可从互联网访问的 HTTPS 地址，请把 OAC_PUBLIC_URL 设为一个 HTTPS 源地址。",
+  "sandbox_configuration_error": "此沙箱提供商需要公开地址，请把 OAC_PUBLIC_URL 设为其沙箱可访问的非回环源地址。",
   "sandbox_deployment_conflict": "沙箱部署在当前状态下无法更改。请刷新并检查重置和资源状态。",
   "sandbox_specification_mismatch": "已保存的沙箱规格与部署不一致。请刷新检查配置。",
   "sandbox_operation_unsupported": "所选沙箱提供商不支持此操作。",

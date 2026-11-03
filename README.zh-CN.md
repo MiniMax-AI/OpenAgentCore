@@ -33,7 +33,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash
 irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
 
-在 Web 中，用安装程序输出的 Core 密钥登录，配置公共地址，设置默认模型，签发项目 API 密钥，并添加沙箱容量（节点或 E2B）。每一步见[安装 Core 和 Web](https://openagentcore.dev/zh/docs/getting-started/install)。
+在 Web 中，用安装程序输出的 Core 密钥登录，配置公共地址，设置默认模型，签发项目 API 密钥，并添加沙箱容量（节点、E2B 或 OpenSandbox）。每一步见[安装 Core 和 Web](https://openagentcore.dev/zh/docs/getting-started/install)。
 
 然后用 OpenAI SDK 调用，将 `OPENAI_BASE_URL` 设为你的 API 基础地址（`https://core.example/v1`），`OPENAI_API_KEY` 设为项目 API 密钥：
 

@@ -33,7 +33,7 @@ On Windows, in PowerShell:
 irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
 
-In Web, sign in with the Core key the installer prints, configure the public address, set a default model, issue a Project API key and add sandbox capacity (a node or E2B). [Install Core and Web](https://openagentcore.dev/docs/getting-started/install) covers each step.
+In Web, sign in with the Core key the installer prints, configure the public address, set a default model, issue a Project API key and add sandbox capacity (a node, E2B or OpenSandbox). [Install Core and Web](https://openagentcore.dev/docs/getting-started/install) covers each step.
 
 Then call it with the OpenAI SDK, with `OPENAI_BASE_URL` set to your API base URL (`https://core.example/v1`) and `OPENAI_API_KEY` to the Project API key:
 

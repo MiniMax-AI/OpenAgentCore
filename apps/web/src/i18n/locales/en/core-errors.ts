@@ -37,7 +37,7 @@ export const coreErrors = {
   "sandbox_credential_invalid": "The sandbox provider credential was rejected. The saved configuration is unchanged.",
   "sandbox_configuration_invalid": "Select a ready immutable provider configuration with matching resources.",
   "sandbox_verification_unconfirmed": "Sandbox provider verification could not be confirmed. Refresh before submitting again.",
-  "sandbox_configuration_error": "This sandbox provider needs a public HTTPS address. Set OAC_PUBLIC_URL to an HTTPS origin.",
+  "sandbox_configuration_error": "This sandbox provider needs a public address. Set OAC_PUBLIC_URL to an origin its sandboxes reach, not loopback.",
   "sandbox_deployment_conflict": "The sandbox deployment cannot change in its current state. Refresh and check its reset and resource state.",
   "sandbox_specification_mismatch": "The saved sandbox specification does not match the deployment. Refresh to check the configuration.",
   "sandbox_operation_unsupported": "The selected sandbox provider does not support this operation.",

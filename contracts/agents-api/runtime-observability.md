@@ -18,7 +18,7 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 The resolver (`services/core/internal/deployment/observation.go`) reads the Session, its Environment, the current allocation and the Session's measured usage from the database. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
 
-Managed microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
+Managed microsandbox, E2B and OpenSandbox allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 
 Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, and `cleanup_pending` or `released` gives `runtime_not_running`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
 
@@ -32,7 +32,7 @@ A sample carries:
 
 - `observed_at`, the provider's observation time, and `started_at`, the start of the current compute incarnation;
 - cumulative CPU seconds and the configured CPU capacity in cores;
-- a provider-reported CPU utilization ratio, only from providers without cumulative CPU time (E2B);
+- a provider-reported CPU utilization ratio, only from providers without cumulative CPU time (E2B, OpenSandbox);
 - current memory usage and the memory limit in bytes;
 - current disk usage and capacity in bytes, only where the provider reports them (E2B).
 
@@ -58,6 +58,19 @@ Core reads each allocation with one helper `observe` request: E2B's metrics for 
 | `diskUsed`, `diskTotal` | Disk usage and capacity, kept only when both are present and the total is nonzero |
 
 E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`.
+
+### OpenSandbox
+
+Core lists the allocation's sandbox by its ownership metadata and reads execd's `GET /metrics` through the OpenSandbox server's proxy. It never renews or changes a sandbox. The [OpenSandbox adapter guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md) describes the adapter.
+
+| execd value | Sample field |
+| --- | --- |
+| `cpu_used_pct / 100` | CPU utilization ratio |
+| `cpu_count` | CPU capacity |
+| `mem_used_mib`, `mem_total_mib` | Memory usage and limit, in bytes |
+| Sandbox `createdAt` | `started_at` |
+
+execd reports no cumulative CPU time or disk, so CPU seconds and disk stay null. `observed_at` is execd's `timestamp`, with the same 30-second lead rule as E2B. A sandbox that is missing or not running is `runtime_not_running`. A failed or malformed read is `sample_unavailable`.
 
 ## Read budgets
 
@@ -109,7 +122,7 @@ With an OTLP endpoint configured, Core exports every record, both `on_read` and 
 | --- | --- | --- |
 | `agents.runtime.cpu.usage` | Monotonic cumulative sum, seconds | Cumulative CPU counter |
 | `agents.runtime.cpu.capacity` | Gauge, cores | Configured CPU capacity |
-| `agents.runtime.cpu.utilization` | Gauge, ratio | Provider-reported CPU share (E2B) |
+| `agents.runtime.cpu.utilization` | Gauge, ratio | Provider-reported CPU share (E2B, OpenSandbox) |
 | `agents.runtime.memory.usage` | Gauge, bytes | Memory usage |
 | `agents.runtime.memory.limit` | Gauge, bytes | Memory limit |
 | `agents.session.tokens.input` | Gauge, tokens | Measured Session input tokens |

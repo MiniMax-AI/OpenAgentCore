@@ -347,7 +347,7 @@ export const sandbox = {
   "Change the sandbox configuration": "修改沙箱配置",
   "The address nodes and sandboxes use to reach Core.": "节点和沙箱访问 Core 使用的地址。",
   "Managed in Settings": "在设置中管理",
-  "Set a public address before connecting; {{provider}} sandboxes need an HTTPS one.": "连接前请先设置公开地址；{{provider}} 沙箱需要 HTTPS 地址。",
+  "Set a public address before connecting; {{provider}} sandboxes reach Core through it.": "连接前请先设置公开地址；{{provider}} 沙箱通过它连接 Core。",
   "Enter the key again to save.": "请重新输入密钥后再保存。",
   "Set a public address before connecting remote nodes.": "连接远程节点前，请先设置公开地址。",
   "Select {{field}}": "选择{{field}}",

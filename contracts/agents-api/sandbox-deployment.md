@@ -34,13 +34,13 @@ POST and PUT take the same complete selection and require `expected_generation` 
 | Field | Meaning |
 | --- | --- |
 | `expected_generation` | Required nonnegative integer from GET; never refresh and replay it automatically |
-| `provider` | Exactly one of `microsandbox`, `e2b` |
-| `resources` | Per-sandbox limits, below; required for microsandbox, optional for E2B |
+| `provider` | Exactly one of `microsandbox`, `e2b`, `opensandbox` |
+| `resources` | Per-sandbox limits, below; required for microsandbox and OpenSandbox, optional for E2B |
 | `network` | The egress cap, [below](#network). Omitted on POST means the default; omitted on PUT keeps the current cap |
-| `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. microsandbox accepts only `{}` or omission |
-| `credential` | The provider's write-only credential. E2B: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. microsandbox rejects it |
+| `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. OpenSandbox: `api_url` and `image`. microsandbox accepts only `{}` or omission |
+| `credential` | The provider's write-only credential. E2B and OpenSandbox: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. microsandbox rejects it |
 
-The request has no Core address. Core derives the deployment's `core_url` from the installation public URL, [`OAC_PUBLIC_URL`](../../docs/configuration.md#settings): the origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. E2B guests reach Core from E2B's cloud, so an E2B selection is rejected with 409 `sandbox_configuration_error` while the public URL is loopback. A microsandbox selection accepts a loopback public URL, which serves only local development because a guest's loopback address does not reach its host. Changing the public URL is an installation change; see [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
+The request has no Core address. Core derives the deployment's `core_url` from the installation public URL, [`OAC_PUBLIC_URL`](../../docs/configuration.md#settings): the origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. E2B guests reach Core from E2B's cloud and OpenSandbox guests from the OpenSandbox server's hosts, so an E2B or OpenSandbox selection is rejected with 409 `sandbox_configuration_error` while the public URL is loopback. A microsandbox selection accepts a loopback public URL, which serves only local development because a guest's loopback address does not reach its host. Changing the public URL is an installation change; see [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
 
 ### Resources
 
@@ -48,16 +48,18 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | --- | --- |
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
-| `root_disk_mib` | microsandbox: at least 1024 MiB; E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox: each new workspace's admitted capacity on workspace storage, where zero (the default) requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; E2B: omitted or zero |
+| `root_disk_mib` | microsandbox: at least 1024 MiB; E2B and OpenSandbox: omitted or zero |
+| `environment_disk_mib` | microsandbox: each new workspace's admitted capacity on workspace storage, where zero (the default) requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; E2B and OpenSandbox: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, set as [Node capacity](#nodes-and-allocations) describes; no host measurement permits exceeding either once set. Native providers may reject values that pass these bounds.
 
 E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. E2B accepts no disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
+OpenSandbox applies `cpus` and `memory_mib` as the sandbox's `cpu` and `memory` resource limits; its runtime sets the disk.
+
 microsandbox configures the CPUs, memory and a managed root disk. It runs every Environment on [workspace storage](../../docs/workspace-provider.md) mounted at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
 
-The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. E2B has no receipt and keeps its own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
+The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. E2B and OpenSandbox have no receipt and keep their own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
 
 Select the filesystem configuration before the microsandbox deployment. Selecting the filesystem does not alter existing generations or allocations; the next sandbox update derives the receipt. A filesystem selection must support the provider's declared requirements. An existing deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
 
@@ -72,15 +74,19 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 
 The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. A sandbox keeps the cap of the generation that created it.
 
-Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
+Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks, and OpenSandbox supports `public: false` but not `domains` because its deny rules for private ranges win over a domain's private answers. Those deny rules also win over the connection to Core, so OpenSandbox needs the installation public URL at global addresses. When it resolves to a private one, every OpenSandbox sandbox fails to start. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 
 ### E2B configuration
 
 E2B uses `configuration.template` in `template-id:build-uuid` form; the build UUID must be canonical and nonzero, and a mutable template alias alone is refused. The API key is encrypted in PostgreSQL and never appears in a response, bootstrap configuration, command argument or log. By default Core uses `https://api.e2b.app` and `e2b.app`. For a compatible service, set both `configuration.api_url` (an HTTPS origin without path, port, query, fragment or credentials) and `configuration.domain` (the sandbox data-plane DNS suffix); the API host must equal the domain or be a subdomain of it. Core rejects a sandbox whose data-plane domain lies outside the selected suffix before sending daemon credentials or using envd.
 
+### OpenSandbox configuration
+
+OpenSandbox uses `configuration.api_url`, the HTTP or HTTPS origin of the OpenSandbox server without path, query, fragment or credentials, and `configuration.image`, the Runtime image built for OpenSandbox as its [adapter guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md#build-the-runtime-image) describes. The API key is encrypted in PostgreSQL and never appears in a response, bootstrap configuration, command argument or log. Core does not check the image. The initial selection does not contact the server, and a later change verifies the saved or new key as [key replacement](#opensandbox-key-replacement) describes. Each Create fails when the image cannot start, the server's egress sidecar does not run in `dns+nft` mode or the installation public URL resolves to a non-global address.
+
 ### Configuration discovery
 
-`POST /core/v1/sandbox/providers/{provider}/discovery` takes exactly `configuration`, `credential` and `query` objects, at most 64 KiB, and runs for at most 30 seconds. Unknown members and null objects are rejected. The credential is used only for that request and is never stored or returned; discovery saves nothing, changes no deployment, allocates nothing and never proves that a selection will be admitted. microsandbox rejects it with 400 `sandbox_operation_unsupported`.
+`POST /core/v1/sandbox/providers/{provider}/discovery` takes exactly `configuration`, `credential` and `query` objects, at most 64 KiB, and runs for at most 30 seconds. Unknown members and null objects are rejected. The credential is used only for that request and is never stored or returned; discovery saves nothing, changes no deployment, allocates nothing and never proves that a selection will be admitted. microsandbox and OpenSandbox reject it with 400 `sandbox_operation_unsupported`.
 
 Post `{"configuration": {…}, "credential": {…}, "query": {"field": "…", "path": […]}}`, where `field` is a field the provider declares as discovered and `path` holds the values selected at the earlier levels. The result is `{"options": [{"value": "…", "label": "…", "resources": {"cpus": 2, "memory_mib": 2048}, "complete": true}]}`, possibly empty. An option with `complete: true` can be saved as the field's value; the others open the next level. Any other field returns 400 `invalid_request_error`.
 
@@ -88,12 +94,12 @@ E2B declares `template` as discovered. An empty `path` lists the key's templates
 
 ## Safe response
 
-GET and successful writes return `installation_id`, `provider`, `core_url` (read-only: the installation public URL, present even before configuration), `mode`, `generation`, `owner_epoch`, `reset`, `rollout`, `suspension`, `resources` and `credential_configured`. A configured deployment also returns `specification`, `specification_digest`, `configuration` and `metadata`: the adapter's public projection of its selectors and of the observations it recorded, never raw stored values or secrets. E2B returns `configuration.template`, `configuration.api_url`, `configuration.domain` and, once recorded, `metadata.template_build`. microsandbox returns empty `configuration` and `metadata` objects and `credential_configured: false`; an unconfigured deployment has neither object.
+GET and successful writes return `installation_id`, `provider`, `core_url` (read-only: the installation public URL, present even before configuration), `mode`, `generation`, `owner_epoch`, `reset`, `rollout`, `suspension`, `resources` and `credential_configured`. A configured deployment also returns `specification`, `specification_digest`, `configuration` and `metadata`: the adapter's public projection of its selectors and of the observations it recorded, never raw stored values or secrets. E2B returns `configuration.template`, `configuration.api_url`, `configuration.domain` and, once recorded, `metadata.template_build`. OpenSandbox returns `configuration.api_url`, `configuration.image` and an empty `metadata` object. microsandbox returns empty `configuration` and `metadata` objects and `credential_configured: false`; an unconfigured deployment has neither object.
 
 - `metadata.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`: the build as Core read it through the pinned SDK when the selection was saved. GET never calls E2B, so it stays cheap during an E2B outage. Validation admits only a `ready` build whose CPU count and memory equal the selected values; `root_disk_mib` is the build's native disk size, which Core does not enforce. Unknown values are null, `metadata: {}` means no observation was recorded, and an identical PUT without a credential does not refresh it.
 - `suspension` is `{idle_seconds, retention_seconds}`, Core's [suspension policy](../../docs/sandbox-provider.md#suspension), when the selected Provider declares checkpoint support; any other deployment, including an unconfigured one, returns null.
 - Request `resources` and response `specification.resources` are per-sandbox limits. Response `resources.allocations` and `resources.pending` count unreleased allocations and pending hosted Environments without an allocation; `resources.running` counts the unreleased allocations whose compute is running, so it excludes suspended ones.
-- An unconfigured deployment has an empty provider and no specification. microsandbox uses `mode: nodes`; E2B uses `mode: direct`, without a synthetic node.
+- An unconfigured deployment has an empty provider and no specification. microsandbox uses `mode: nodes`; E2B and OpenSandbox use `mode: direct`, without a synthetic node.
 - `generation` identifies the saved selection. `owner_epoch` fences the execution owner and node connections; it does not replace `expected_generation`.
 - `specification_digest` is the server's identity of the provider, limits and derived workspace capability receipt; enrollment echoes it unchanged.
 
@@ -103,7 +109,7 @@ The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment
 
 POST validates a candidate before persisting it and creates no compute, Session or model request. At the current generation an identical selection is a no-op; an old generation returns 409 `sandbox_generation_stale`, even for the same body. Missing prerequisites or a failed preparation leave the committed provider in place. A different backend requires a reset first. POST also initializes after a completed reset, using the reset's new generation.
 
-PUT accepts the same provider while no reset is active. Send the observed generation once and never replay an uncertain write automatically. New allocations use the newly committed specification, and existing allocations keep their immutable deployment generation. A same-provider change retires no node, token or owner epoch and drains no execution: microsandbox nodes prepare the new target independently while serving their old pin, and E2B changes apply at once.
+PUT accepts the same provider while no reset is active. Send the observed generation once and never replay an uncertain write automatically. New allocations use the newly committed specification, and existing allocations keep their immutable deployment generation. A same-provider change retires no node, token or owner epoch and drains no execution: microsandbox nodes prepare the new target independently while serving their old pin, and E2B and OpenSandbox changes apply at once.
 
 ### E2B key replacement
 
@@ -121,6 +127,10 @@ Initial setup requires the selected template to appear in the key's team-owned t
 
 No provider text or credential is returned. The write and its `change` or `replace_credential` audit entry share one transaction. A replacement briefly fences provider calls, waits for helper processes to actually exit even after the caller cancelled, and verifies again before committing; a helper's exit does not prove that a remote Create settled. The fence and reads are bounded, and a failure keeps the old key and lifecycles. After the successful response, all retained-generation management uses the committed key; only then revoke the old key in E2B, never before cleanup. Template and resource changes do not drain lifecycles.
 
+### OpenSandbox key replacement
+
+The request rules are those of E2B key replacement. The candidate key must authenticate with the server of every retained generation and list the sandboxes of each unreleased allocation; an empty listing proves nothing. A 401 or 403 returns 400 `sandbox_credential_invalid`, and any other failure 503 `sandbox_verification_unconfirmed`, including an allocation whose sandboxes are gone. Server URL and image changes do not drain lifecycles.
+
 ## Suspension policy
 
 `PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
@@ -129,7 +139,7 @@ Changes apply to existing and new running allocations on the next lifecycle pass
 
 ## Generation ownership and rollout
 
-`runtime_deployment` holds the current specification. Superseded rows keep only immutable specification, build and endpoint metadata, never another E2B key. An E2B allocation binds its generation at reservation; a node placement binds when the scheduler reserves compatible capacity, and its allocation copies that generation, even across later updates. Inspection, renewal, commands and cleanup use the allocation's original specification and endpoint with the current key; a missing generation never falls back to the current specification. Released generation identifiers stay reserved.
+`runtime_deployment` holds the current specification. Superseded rows keep only immutable specification, build and endpoint metadata, never another provider key. A direct allocation (E2B, OpenSandbox) binds its generation at reservation; a node placement binds when the scheduler reserves compatible capacity, and its allocation copies that generation, even across later updates. Inspection, renewal, commands and cleanup use the allocation's original specification and endpoint with the current key; a missing generation never falls back to the current specification. Released generation identifiers stay reserved.
 
 A generation is retained while it is current, referenced by an unreleased allocation or placement, or pinned by a node that is not removed. A node's durable serving pin survives offline periods and zero resources and is separate from its current readiness. Collection shares the deployment lock with updates and admission and deletes at most 32 eligible generation rows per pass. Reset retires pins and clears superseded rows only after confirmed release.
 
@@ -139,7 +149,7 @@ Every deployment response includes `rollout`:
 "rollout": {"state": "settled", "previous_generation_sandboxes": 3, "nodes": null}
 ```
 
-`previous_generation_sandboxes` counts, from the same snapshot as the resource totals, unreleased allocations and allocation-less pending placements of older generations, never one resource twice. E2B and unconfigured deployments return null `nodes`. A node deployment returns `nodes` as counts `{ready, preparing, failed, unknown}`, and every node that is not removed falls in exactly one bucket:
+`previous_generation_sandboxes` counts, from the same snapshot as the resource totals, unreleased allocations and allocation-less pending placements of older generations, never one resource twice. Direct (E2B, OpenSandbox) and unconfigured deployments return null `nodes`. A node deployment returns `nodes` as counts `{ready, preparing, failed, unknown}`, and every node that is not removed falls in exactly one bucket:
 
 - a node that is offline on its current connection is `unknown`;
 - otherwise the exact target observation on the current connection and owner epoch gives `ready`, `preparing` or `failed`, and a missing observation gives `unknown`.
@@ -194,7 +204,7 @@ Starting again at the same generation and mode keeps the original deadline. `aut
                "offline_nodes": [{"node_id": "node-uuid", "name": "worker", "resources": 2}]}}
 ```
 
-One database snapshot partitions every unreleased allocation and every pending hosted Environment without an allocation into `cleanup` first, then `busy` or `idle`, so `busy + idle + cleanup == resources.allocations + resources.pending`. Deleted or expired Sessions with unreleased receipts count as cleanup. `offline_nodes` is the complete, ID-sorted list of offline nodes that hold resources by allocation or active placement, and its sum equals `on_offline_nodes`; presence is the [online](./node-generation-protocol.md#connection) test, not provider readiness. Direct E2B resources have no node. Offline resources stay blockers until cleanup confirms their release.
+One database snapshot partitions every unreleased allocation and every pending hosted Environment without an allocation into `cleanup` first, then `busy` or `idle`, so `busy + idle + cleanup == resources.allocations + resources.pending`. Deleted or expired Sessions with unreleased receipts count as cleanup. `offline_nodes` is the complete, ID-sorted list of offline nodes that hold resources by allocation or active placement, and its sum equals `on_offline_nodes`; presence is the [online](./node-generation-protocol.md#connection) test, not provider readiness. Direct E2B and OpenSandbox resources have no node. Offline resources stay blockers until cleanup confirms their release.
 
 When both held counts reach zero, the owner drains and atomically clears the provider, mode, specification, provider configuration, credential and metadata and provider policy, retires nodes and unused enrollment tokens, increments the generation and owner epoch, and records `reset_complete`. The installation identity and history remain. Core immediately publishes the unconfigured state and keeps the new generation even with no provider, so a delayed load cannot revive the old one. Configure again with POST and the returned generation; no restart is needed.
 
@@ -206,7 +216,7 @@ One mutation gate serializes setup, PUT, reset, cancellation and finalization. A
 
 ## Nodes and allocations
 
-Node capacity is set separately from the deployment specification. `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and `max_retained` and returns `{token, expires_at, enrollment_id}`; `enrollment_id` is a public handle of that command, never a credential. Core stores the token with the limits as sent, and an omitted limit stays unset. When the node enrolls, Core copies each explicit limit to it unchanged and sets each unset limit to the [recommended capacity](#recommended-capacity) of the host measurements in the enrollment request and the current specification; an unset limit with no host measurements fails with 409 `sandbox_node_host_unmeasured` and leaves the token unused. When only `max_retained` is set, the derived `max_active` never exceeds it; when only `max_active` is set, the derived `max_retained` is raised to at least `max_active`. microsandbox uses both limits. E2B has no nodes and answers 409 `sandbox_deployment_conflict`. A node cannot submit limits, but an unset limit follows the host measurements the node reports at enrollment, bounded by 1 and 1000000. Its local checks may refuse a deployment it cannot run but never raise the limits. Explicit values and later PATCH edits bind: once a node is enrolled, Core derives nothing again. [Node capacity](../../docs/configuration.md#node-capacity) explains the limits for operators.
+Node capacity is set separately from the deployment specification. `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and `max_retained` and returns `{token, expires_at, enrollment_id}`; `enrollment_id` is a public handle of that command, never a credential. Core stores the token with the limits as sent, and an omitted limit stays unset. When the node enrolls, Core copies each explicit limit to it unchanged and sets each unset limit to the [recommended capacity](#recommended-capacity) of the host measurements in the enrollment request and the current specification; an unset limit with no host measurements fails with 409 `sandbox_node_host_unmeasured` and leaves the token unused. When only `max_retained` is set, the derived `max_active` never exceeds it; when only `max_active` is set, the derived `max_retained` is raised to at least `max_active`. microsandbox uses both limits. E2B and OpenSandbox have no nodes and answer 409 `sandbox_deployment_conflict`. A node cannot submit limits, but an unset limit follows the host measurements the node reports at enrollment, bounded by 1 and 1000000. Its local checks may refuse a deployment it cannot run but never raise the limits. Explicit values and later PATCH edits bind: once a node is enrolled, Core derives nothing again. [Node capacity](../../docs/configuration.md#node-capacity) explains the limits for operators.
 
 `GET /core/v1/sandbox/nodes` returns `{data: [...]}` with, for each node: `id`, `name`, `provider`, `online`, `last_seen_at`, `created_at`, `max_active`, `max_retained`, the counts `active`, `reserved`, `running`, `retained`, `snapshots` and `cleanup_pending`, `provider_ready`, the host measurements `cpu_count`, `available_memory_bytes` and `available_disk_bytes`, `rollout`, `recommended_capacity`, `enrollment_id` and `core_url`. `recommended_capacity` is `{max_active, max_retained}`, the [recommended capacity](#recommended-capacity) of the node's latest health and the current specification, or null until the node has reported a CPU count or effective cores and its total memory, and while the current specification does not validate. `enrollment_id` is the handle of the command that registered the node, or null when Core has none. `core_url` is the installation public URL at enrollment; a node whose `core_url` differs from the current public URL receives no new placements. Work already placed on it finishes there, including a placed Environment that has no allocation yet, and its retained sandboxes can still resume while the old address reaches Core. See [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
 
@@ -229,23 +239,23 @@ The recommendation is absent unless the host reports a CPU count or effective co
 
 Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](./runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](./runtime-observability-api.md#session-runtime-history).
 
-| Field | microsandbox | E2B |
-| --- | --- | --- |
-| Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported |
-| Deployment `specification.network` | `public` and `domains` | `public` only; `domains` must be empty and private networks are unreachable |
-| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields |
-| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved |
-| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause |
-| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one |
-| Enrollment-token `max_active`, `max_retained` | Both limits apply; an omitted limit is derived at enrollment | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes |
-| Node list and detail | Enrolled nodes | Empty list; detail returns 404 |
-| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable |
-| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable |
-| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations |
-| Runtime observation `memory` | From the VM: memory limit and usage | From E2B metrics: memory usage and limit |
-| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them |
-| Runtime observation `lifecycle_state: sleeping` | While suspended | Never |
-| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket |
+| Field | microsandbox | E2B | OpenSandbox |
+| --- | --- | --- | --- |
+| Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported | Unsupported |
+| Deployment `specification.network` | `public` and `domains` | `public` only; `domains` must be empty and private networks are unreachable | `public` only; `domains` must be empty |
+| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`, applied as resource limits; no disk fields |
+| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause | `null`: no checkpoint support, so an idle sandbox keeps running |
+| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Core's unreleased OpenSandbox sandboxes, and hosted Environments waiting for one |
+| Enrollment-token `max_active`, `max_retained` | Both limits apply; an omitted limit is derived at enrollment | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; OpenSandbox has no nodes |
+| Node list and detail | Enrolled nodes | Empty list; detail returns 404 | Empty list; detail returns 404 |
+| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable | Not applicable |
+| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable | Not applicable |
+| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations | Not applicable: no node allocations |
+| Runtime observation `memory` | From the VM: memory limit and usage | From E2B metrics: memory usage and limit | From execd metrics: memory usage and limit |
+| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null` |
+| Runtime observation `lifecycle_state: sleeping` | While suspended | Never | Never |
+| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket | Mean of the utilization ratios execd reported in each bucket |
 
 ## Errors
 

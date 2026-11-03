@@ -117,7 +117,7 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 
 ### `disk`
 
-Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rules of `memory`. E2B fills it when the sandbox reports both its disk usage and a nonzero capacity. microsandbox returns null. A non-null `disk` appears only on an `observed` row.
+Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rules of `memory`. E2B fills it when the sandbox reports both its disk usage and a nonzero capacity. microsandbox and OpenSandbox return null. A non-null `disk` appears only on an `observed` row.
 
 ### Status and reason
 
@@ -190,7 +190,7 @@ There is one series per managed allocation, keyed by `allocation_id`, so a provi
 
 Each point has the bucket bounds, the coverage counts of the allocation's samples, and nullable `cpu` and `memory` objects with a `contributor_count` of at least 1:
 
-- `cpu.utilization_ratio` comes from consecutive cumulative CPU counters of one compute incarnation: the CPU seconds consumed divided by the elapsed time multiplied by the capacity, over the intervals that end in the bucket. The baseline resets when the incarnation changes or a counter decreases. E2B reports no cumulative CPU time; its bucket value is the mean of the ratios sampled in it. `cpu.capacity_cores` is the last capacity in the bucket.
+- `cpu.utilization_ratio` comes from consecutive cumulative CPU counters of one compute incarnation: the CPU seconds consumed divided by the elapsed time multiplied by the capacity, over the intervals that end in the bucket. The baseline resets when the incarnation changes or a counter decreases. E2B and OpenSandbox report no cumulative CPU time; their bucket value is the mean of the ratios sampled in it. `cpu.capacity_cores` is the last capacity in the bucket.
 - `memory.usage_bytes` and `memory.limit_bytes` are the last values observed in the bucket.
 
 Disk is not kept in history.

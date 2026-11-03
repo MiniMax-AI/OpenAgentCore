@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: b0587966b17ac30e6626b3ba094005de114fc04c0190a7adc96830f92acb11c3
+source_hash: 86e73d81ff9ccf658d542d3424ddee590b5914e868cd756e4f1cf85ba1b7996c
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -10,7 +10,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 - [Environment files](environment-files.md)：实时工作区上的 Files API。
 - [执行器凭据](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
-- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B 或 microsandbox）。
+- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（microsandbox、E2B 或 OpenSandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
 - [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
 
@@ -73,7 +73,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的沙箱提供商（E2B 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的沙箱提供商（microsandbox、E2B 或 OpenSandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行提供商的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
@@ -315,6 +315,7 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 
 - 上限按名称或 `*.` 条目列出的模型提供商主机与所列域名一样可达，不限于其端口。
 - 在 E2B 上，受限域名只能通过 80 和 443 端口访问；模型提供商使用其他端口时，其公网地址的所有端口均可达。
+- 在 OpenSandbox 上，Core 主机、允许的域名和模型提供商主机在其公网地址的每个端口上都可达。
 
 部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。
 

@@ -60,7 +60,7 @@ oac-daemon connect --profile default
 - A new node sends its enrollment token without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and issued by this installation. An active reset refuses this read.
 - A registered node sends its node credential and its UUID in `X-OAC-Node-ID`. Without a query it reads the current target. `?generation=N` reads only a generation this node may still need: the current target, its serving pin, or one held by an unreleased allocation or placement on it; any other generation is refused. This read stays available during a reset, for owned recovery.
 
-The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification` and `specification_digest`. It never contains an administrator, Project or E2B credential, and exists only for node-backed providers. The [sandbox deployment contract](./sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
+The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification` and `specification_digest`. It never contains an administrator, Project or Sandbox Provider credential, and exists only for node-backed providers. The [sandbox deployment contract](./sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
 
 ### Enroll a node
 

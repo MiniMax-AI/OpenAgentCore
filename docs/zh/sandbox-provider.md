@@ -1,15 +1,15 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 6e00a807390c887b3458acf9be3349402c8d34e08c3e7426af2e52510b6eadd0
+source_hash: 8d1fe4e681774523fb1544201f2ef950ac29ed2a8d055c5bf0b63855e30a24c7
 ---
 
-沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
+沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
 
 | | |
 | --- | --- |
 | 调用方 | Core 的 runtime manager 与 execution Worker |
-| 实现 | microsandbox（node adapter）和 E2B（direct adapter）；见[参考 adapter](#reference-adapters) |
+| 实现 | microsandbox（node adapter）、E2B 和 OpenSandbox（direct adapter）；见[参考 adapter](#reference-adapters) |
 | 代码 | `sandbox_provider.go` 中的 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)，以及 setup 阶段的 `ConfigurationAdapter` |
 | 传输 | direct adapter 在进程内被调用。node adapter 运行在沙箱节点上，通过[沙箱节点协议](../../contracts/agents-api/zh/node-generation-protocol.md#provider-requests)接收同样的调用 |
 | 版本规则 | 进程内接口没有 wire 版本。沙箱节点协议和各 helper 协议要求精确版本匹配 |
@@ -156,7 +156,7 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
 
-厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商名称。
+厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。microsandbox 在 node 上运行，E2B 和 OpenSandbox 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商名称。
 
 backend fingerprint 标识原生资源命名空间，不表示容量。Core 保留部署 generation，使所属 allocation 继续解析到原 backend；不要将保留 allocation 重新指向替代 backend。
 
@@ -171,7 +171,7 @@ launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`�
 adapter 不实现这些行为，但依赖它们。代码层面的机制见 [Core implementation constraints](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/IMPLEMENTATION.md#hosted-sandboxes)。
 
 - Core 在调用 `Create` 之前提交 allocation、其 daemon 凭据摘要和 Session 绑定。只有新的 allocation receipt 才允许 `Create`；重试和 Core 重启只观察同一个 `Reference`，不重放 `Create`，也不轮换凭据。
-- 每个 node 有一个串行 lifecycle worker，同一 node 的调用从不并发；E2B allocation 共用一个 worker。某个 node 上卡住的提供商不会阻塞其他 node。
+- 每个 node 有一个串行 lifecycle worker，同一 node 的调用从不并发；direct 提供商的 allocation 共用一个 worker。某个 node 上卡住的提供商不会阻塞其他 node。
 - Core 从不根据引擎或提供商名称推断引导完成；由 adapter 通过 `Info.BootstrapComplete` 声明。
 - Core 只在撤销 device 权限、结清待处理 input 并请求取消之后才调用 `Kill`。临时提供商故障、未知的 `Create` 结果和已停止的计算资源都不证明永久失败。
 - Core 只有在确认清理 allocation 的计算资源与 volume，并证明原始 `Create` 已结算后才释放 allocation。在此之前它保留清理归属，包括观察到资源不存在之后，有界扫描继续捕获迟到的资源，不再次 `Create`。公开删除 Session 之后同样适用。
@@ -207,6 +207,8 @@ Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它
 Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析 Core 主机。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
 
 microsandbox 按首条匹配的顺序和默认拒绝来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。沙箱只能访问主机的 DNS 服务器：发往其他服务器的 DNS 和主机的其他端口都被拒绝，因此只有主机的应答能把名称绑定到地址。该服务器不论策略都会应答任何名称，因此被拒绝的名称仍能解析，只是连接会失败。名称成为不带端口的域名放行规则，放行这些应答解析出的地址（包括私有地址）；`*.example.com` 条目成为子域名放行规则，永远不匹配 `example.com`。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
+
+OpenSandbox 同样只声明 `Restrict`，并要求其出口 sidecar 以 `dns+nft` 模式运行（[OpenSandbox egress](https://open-sandbox.ai/architecture/network/egress)），其拒绝规则优先于所有放行规则，而域名规则会放行其应答解析出的地址的所有端口。因此每个沙箱都拒绝私有、共享和链路本地网段，adapter 无法遵守 `PrivateDomains`。当 Core 主机由其主机解析出的地址不全在全局网段时，Create 在派发前返回 `ErrInvalid`：私有网段的拒绝规则优先于对它的任何放行。`Public` 时其余流量默认放行。非 `Public` 时默认拒绝，并放行 Core 主机、`Endpoints` 和 `Domains`：名称作为域名规则，全局 IP 字面量在其端口上放行。回环保持开放，因为在沙箱内部它就是沙箱自己的网络命名空间。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 
@@ -327,3 +329,4 @@ node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 
 | --- | --- | --- | --- |
 | microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) | [Node](getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md#e2b-configuration)；应用管理的模板见 [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
+| OpenSandbox (direct) | [`sandbox/opensandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/opensandbox) | [`deploy/opensandbox`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md) | [选择沙箱提供商](getting-started/sandbox-backends.md#use-opensandbox) |

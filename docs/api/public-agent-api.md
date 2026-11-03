@@ -257,7 +257,7 @@ Returns 201 with the Session:
 
 | `environment.type` | Runs on | Notes |
 | --- | --- | --- |
-| `openai_hosted` | A sandbox Core creates on a node or E2B; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `env`, `capability_directories`, `setup_commands`, or a template |
+| `openai_hosted` | A sandbox Core creates on a node, E2B or OpenSandbox; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `env`, `capability_directories`, `setup_commands`, or a template |
 | `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [Run self-hosted Sessions](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
 | `none` | A device connection an operator registered, with no workspace | `input` required. The model comes from the installation default, or from the device when no default is configured |
 

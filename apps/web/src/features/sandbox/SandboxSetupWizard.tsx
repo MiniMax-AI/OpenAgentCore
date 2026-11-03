@@ -309,7 +309,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <dd>
               {address ? <code>{address}</code> : "—"}
               <span className="wizard-review-sub">{t("Managed in Settings")}</span>
-              {installation.data?.local_only ? <span className="wizard-review-caution">{setup?.public_origin === "required" ? t("Set a public address before connecting; {{provider}} sandboxes need an HTTPS one.", { provider: setup.label }) : t("Set a public address before connecting remote nodes.")}</span> : null}
+              {installation.data?.local_only ? <span className="wizard-review-caution">{setup?.public_origin === "required" ? t("Set a public address before connecting; {{provider}} sandboxes reach Core through it.", { provider: setup.label }) : t("Set a public address before connecting remote nodes.")}</span> : null}
             </dd>
           </div>
         </dl>

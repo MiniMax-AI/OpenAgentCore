@@ -1,12 +1,12 @@
 ---
 title: "设置工作区存储"
 source: docs/getting-started/workspace-storage.md
-source_hash: 4a9e08947b7e359b1bb725217ee097c3df3283054be986219be421911ee930a5
+source_hash: 158aa4bffbb61f61f607976f25f568c80e4fc0d0ab916840ee81f79799b1b410
 ---
 
 将 Session 工作区保存在沙箱节点之外的 NFS 文件系统上，可选择是否设置每个工作区的配额。microsandbox 的每个 Environment 都运行在此存储上，因此请在配置 microsandbox 后端之前先选择它。
 
-支持的组合是 microsandbox 与[内核 NFS 适配器](../workspace-provider.md#kernel-nfs-adapter)。E2B 使用自有磁盘，不支持独立工作区存储；参阅[选择沙箱提供商](./sandbox-backends.md)。
+支持的组合是 microsandbox 与[内核 NFS 适配器](../workspace-provider.md#kernel-nfs-adapter)。E2B 和 OpenSandbox 使用自有磁盘，不支持独立工作区存储；参阅[选择沙箱提供商](./sandbox-backends.md)。
 
 ```mermaid
 flowchart LR

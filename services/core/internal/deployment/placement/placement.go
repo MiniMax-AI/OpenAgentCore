@@ -24,7 +24,7 @@ var (
 	ErrAdmissionClosed = errors.New("environment is no longer available")
 	// ErrPublicURLUnreachable rejects selection and admission when the provider
 	// requires a reachable public origin and the installation is loopback.
-	ErrPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
+	ErrPublicURLUnreachable = errors.New("This sandbox provider needs a public URL that is not loopback before its sandboxes can connect to Core.")
 	// ErrNodesPreparing rejects placement while no node serves the target
 	// generation and at least one is preparing it.
 	ErrNodesPreparing = errors.New("sandbox nodes are preparing the target generation")
