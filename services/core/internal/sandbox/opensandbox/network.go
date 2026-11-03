@@ -25,9 +25,9 @@ var privatePrefixes = []netip.Prefix{
 type resolver func(ctx context.Context, host string) ([]netip.Addr, error)
 
 // networkPolicy maps Egress to the OpenSandbox egress policy. The sidecar lets a
-// deny rule win over any allow, so a public sandbox denies the private ranges
-// minus Core's own addresses, and any other sandbox denies by default and
-// allows Core, the model provider endpoints and the named domains.
+// deny rule win over any allow, so a public sandbox, which denies the private
+// ranges, needs Core at global addresses; any other sandbox denies by default
+// and allows Core, the model provider endpoints and the named domains.
 func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (*osdk.NetworkPolicy, error) {
 	core, err := url.Parse(b.CoreURL)
 	if err != nil || core.Hostname() == "" {
@@ -48,18 +48,12 @@ func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (
 		if err != nil {
 			return nil, err
 		}
+		// Opening a private Core address would open all of its ports.
+		if slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !isGlobal(a) }) {
+			return nil, fmt.Errorf("%w: a public OpenSandbox sandbox reaches Core only at global addresses", sandbox.ErrInvalid)
+		}
 		for _, prefix := range privatePrefixes {
-			remaining := []netip.Prefix{prefix}
-			for _, addr := range addrs {
-				var next []netip.Prefix
-				for _, p := range remaining {
-					next = append(next, without(p, addr)...)
-				}
-				remaining = next
-			}
-			for _, p := range remaining {
-				rules = append(rules, osdk.NetworkRule{Action: "deny", Target: p.String()})
-			}
+			rules = append(rules, osdk.NetworkRule{Action: "deny", Target: prefix.String()})
 		}
 		return &osdk.NetworkPolicy{DefaultAction: "allow", Egress: rules}, nil
 	}
@@ -107,19 +101,4 @@ func hostAddrs(ctx context.Context, host string, resolve resolver) ([]netip.Addr
 
 func isGlobal(addr netip.Addr) bool {
 	return addr.IsGlobalUnicast() && !slices.ContainsFunc(privatePrefixes, func(p netip.Prefix) bool { return p.Contains(addr) })
-}
-
-// without returns the minimal prefixes that cover p except addr.
-func without(p netip.Prefix, addr netip.Addr) []netip.Prefix {
-	if !p.Contains(addr) {
-		return []netip.Prefix{p}
-	}
-	var out []netip.Prefix
-	for bits := p.Bits() + 1; bits <= addr.BitLen(); bits++ {
-		raw := netip.PrefixFrom(addr, bits).Masked().Addr().AsSlice()
-		raw[(bits-1)/8] ^= 0x80 >> ((bits - 1) % 8)
-		sibling, _ := netip.AddrFromSlice(raw)
-		out = append(out, netip.PrefixFrom(sibling, bits))
-	}
-	return out
 }

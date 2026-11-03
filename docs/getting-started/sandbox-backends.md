@@ -44,7 +44,7 @@ The key and template rules, including key replacement, are in [Initial setup and
 
 ## Use OpenSandbox
 
-OpenSandbox needs no nodes. Its sandboxes call Core's public address, which must not be loopback; see [Configure the public address](./public-address.md).
+OpenSandbox needs no nodes. Its sandboxes call Core's public address, which must not be loopback; see [Configure the public address](./public-address.md). Sandboxes with public internet access need it at a global address ([network cap](../../contracts/agents-api/sandbox-deployment.md#network)).
 
 1. Prepare the server and build the Runtime image as the [OpenSandbox adapter guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md) describes.
 2. In the setup wizard, choose **OpenSandbox**. Under **Connect OpenSandbox**, enter the **Server URL**, the **Runtime image** and the **API key**.

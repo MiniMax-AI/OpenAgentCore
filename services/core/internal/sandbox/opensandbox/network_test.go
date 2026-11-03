@@ -41,42 +41,29 @@ func targets(policy *osdk.NetworkPolicy) []string {
 	return out
 }
 
-func TestPublicNetworkDeniesPrivateRangesExceptCore(t *testing.T) {
-	for name, tc := range map[string]struct {
-		url      string
-		resolved []string
-	}{"literal": {"https://10.1.2.3:8443/api/v1", nil}, "resolved name": {"https://core.example/api/v1", []string{"10.1.2.3"}}} {
-		t.Run(name, func(t *testing.T) {
-			policy := policyFor(t, tc.url, sandbox.Egress{Public: true}, tc.resolved...)
-			if policy.DefaultAction != "allow" {
-				t.Fatal(policy.DefaultAction)
-			}
-			core := netip.MustParseAddr("10.1.2.3")
-			var covered []string
-			for _, r := range policy.Egress {
-				if r.Action != "deny" || len(r.Ports) != 0 {
-					t.Fatalf("rule %+v", r)
-				}
-				if netip.MustParsePrefix(r.Target).Contains(core) {
-					t.Fatalf("deny %s covers Core", r.Target)
-				}
-				covered = append(covered, r.Target)
-			}
-			// The other private ranges stay denied whole, and the carve-out leaves a sibling of Core's /32.
-			joined := " " + strings.Join(covered, " ") + " "
-			for _, want := range []string{" 172.16.0.0/12 ", " 192.168.0.0/16 ", " 100.64.0.0/10 ", " 169.254.0.0/16 ", " fc00::/7 ", " fe80::/10 ", " 10.1.2.2/32 ", " 10.128.0.0/9 "} {
-				if !strings.Contains(joined, want) {
-					t.Fatalf("missing %q in %s", want, joined)
-				}
-			}
-		})
+func TestPublicNetworkDeniesPrivateRanges(t *testing.T) {
+	policy := policyFor(t, "https://core.example/api/v1", sandbox.Egress{Public: true}, "203.0.113.5")
+	want := "deny 10.0.0.0/8,deny 172.16.0.0/12,deny 192.168.0.0/16,deny 100.64.0.0/10,deny 169.254.0.0/16,deny fc00::/7,deny fe80::/10"
+	if policy.DefaultAction != "allow" || strings.Join(targets(policy), ",") != want {
+		t.Fatalf("%s rules = %v", policy.DefaultAction, targets(policy))
 	}
 }
 
-func TestPublicNetworkLeavesPublicCoreUntouched(t *testing.T) {
-	policy := policyFor(t, "https://core.example/api/v1", sandbox.Egress{Public: true}, "203.0.113.5")
-	if len(policy.Egress) != len(privatePrefixes) || policy.Egress[0].Target != "10.0.0.0/8" {
-		t.Fatalf("rules = %v", targets(policy))
+func TestPublicNetworkRejectsPrivateCore(t *testing.T) {
+	for name, tc := range map[string]struct {
+		url      string
+		resolved []string
+	}{"literal": {"https://10.1.2.3:8443/api/v1", nil}, "resolved name": {"https://core.example/api/v1", []string{"203.0.113.5", "10.1.2.3"}}} {
+		resolve := func(context.Context, string) ([]netip.Addr, error) {
+			var out []netip.Addr
+			for _, a := range tc.resolved {
+				out = append(out, netip.MustParseAddr(a))
+			}
+			return out, nil
+		}
+		if _, err := networkPolicy(t.Context(), sandbox.Bootstrap{CoreURL: tc.url, Egress: sandbox.Egress{Public: true}}, resolve); !errors.Is(err, sandbox.ErrInvalid) {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 }
 
