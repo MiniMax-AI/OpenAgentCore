@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: 6ea51f7e9634ae3f7433aad452b2a81302d13df0b533743d77feaafd4a53edb6
+source_hash: 88fc11ad05bafbb2f094e3eb4e4b227f6c6bacef686b88055d7265fcada6b16f
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。
@@ -37,7 +37,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 
 | 任务 | 位置 |
 | --- | --- |
-| 选择沙箱提供商（microsandbox 或 E2B）、规格和 Runtime，或重置沙箱提供商 | **设置 → 沙箱与调度**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| 选择沙箱提供商（microsandbox、E2B 或 OpenSandbox）、规格和 Runtime，或重置沙箱提供商 | **设置 → 沙箱与调度**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | 添加、调整或移除执行节点 | **节点**：**添加节点**、**编辑节点** 和移除；参阅[添加和管理节点](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **设置 → 模型与凭据**；参阅[默认模型](../configuration.md#default-models) |
 | 创建项目并签发 API 密钥 | **项目与密钥**；参阅 [项目和 API 密钥](../getting-started/operations.md#projects-and-api-keys) |

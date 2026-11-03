@@ -1,7 +1,7 @@
 ---
 title: "Runtime 可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: b77c76a6b8ed496dab56f3d62deb7f7f61066e0751bc4bd3b5373535b3cc7c05
+source_hash: 5a79ce08bd5c611abae2a3a488e80b1efeb8316bd2939f1a311c0579cc22792b
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`services/core/internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `services/core/internal/runtimeobs/otlpexporter`。
@@ -20,7 +20,7 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 解析器（`services/core/internal/deployment/observation.go`）从数据库中读取 Session、其 Environment、当前分配以及 Session 的实测使用量。Session、守护进程连接、进程、容器和原生 Harness Session 是不同身份，彼此绝不能替代。
 
-托管 microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
+托管 microsandbox、E2B 和 OpenSandbox 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 
 每个托管分配都通过部署所选的沙箱提供商读取；该提供商在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何提供商之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。提供商读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
 
@@ -34,7 +34,7 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 - `observed_at`，即提供商的观测时间；以及 `started_at`，即当前计算实例启动周期的开始时间；
 - 累计 CPU 秒数，以及以核心数计的已配置 CPU 容量；
-- 提供商报告的 CPU 利用率比率，仅适用于不提供累计 CPU 时间的提供商（E2B）；
+- 提供商报告的 CPU 利用率比率，仅适用于不提供累计 CPU 时间的提供商（E2B、OpenSandbox）；
 - 当前内存使用量，以及以字节计的内存限制；
 - 当前磁盘使用量和容量，以字节计，且仅在提供商报告这些值时提供（E2B）。
 
@@ -60,6 +60,19 @@ Core 用一次 helper `observe` 请求读取一个分配：读取私有回执中
 | `diskUsed`、`diskTotal` | 磁盘使用量和容量；仅当两者都存在且总量非零时保留 |
 
 E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at` 为 E2B 的时间点；比 Core 时钟最多领先 30 秒的时间点按 Core 时间记录，领先幅度更大时则为 `sample_unavailable`。未出现在运行列表中的 sandbox 为 `runtime_not_running`。时间点缺失或格式错误、列表存在歧义以及 E2B API 失败（包括 key 被拒绝）均为 `sample_unavailable`。
+
+### OpenSandbox {#opensandbox}
+
+Core 按所有权元数据列出该分配的 sandbox，并通过 OpenSandbox 服务器的代理读取 execd 的 `GET /metrics`。它绝不会续期或更改 sandbox。[OpenSandbox adapter 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/opensandbox/README.md)说明了该 adapter。
+
+| execd 值 | 采样字段 |
+| --- | --- |
+| `cpu_used_pct / 100` | CPU 利用率比率 |
+| `cpu_count` | CPU 容量 |
+| `mem_used_mib`、`mem_total_mib` | 内存使用量和限制，以字节计 |
+| Sandbox `createdAt` | `started_at` |
+
+execd 不报告累计 CPU 时间和磁盘，因此 CPU 秒数和磁盘保持为 null。`observed_at` 为 execd 的 `timestamp`，领先 Core 时钟的 30 秒规则与 E2B 相同。缺失或未运行的 sandbox 为 `runtime_not_running`。读取失败或格式错误为 `sample_unavailable`。
 
 ## 读取预算 {#read-budgets}
 
@@ -111,7 +124,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 | --- | --- | --- |
 | `agents.runtime.cpu.usage` | 单调累积和，秒 | 累计 CPU 计数器 |
 | `agents.runtime.cpu.capacity` | Gauge，核心数 | 已配置的 CPU 容量 |
-| `agents.runtime.cpu.utilization` | Gauge，比率 | 提供商报告的 CPU 占比（E2B） |
+| `agents.runtime.cpu.utilization` | Gauge，比率 | 提供商报告的 CPU 占比（E2B、OpenSandbox） |
 | `agents.runtime.memory.usage` | Gauge，字节 | 内存使用量 |
 | `agents.runtime.memory.limit` | Gauge，字节 | 内存限制 |
 | `agents.session.tokens.input` | Gauge，token | 实测 Session 输入 token |

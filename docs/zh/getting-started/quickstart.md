@@ -1,7 +1,7 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 8795e92d7eb61f7f946e96bcd3966b16e2eb800a8f36ee1b1de524df106c868f
+source_hash: 784dd62e274e49975af1bc1b136cec5d6028ed0896cbe6e9345d4c686d7423df
 ---
 
 使用官方 OpenAI Python SDK 通过 Core 运行 Agent：用项目 API 密钥连接，启动一个会写入文件的 Session，并读取结果。你需要管理员提供的密钥和 API 基础 URL。
@@ -9,7 +9,7 @@ source_hash: 8795e92d7eb61f7f946e96bcd3966b16e2eb800a8f36ee1b1de524df106c868f
 开始之前，请准备：
 
 - 项目 API 密钥和 API 基础 URL（[签发项目 API 密钥](install.md#issue-a-project-api-key)）；
-- 已就绪的节点或 E2B 沙箱提供商，让 Core 能运行 Agent（[添加和管理节点](nodes.md)）；
+- 已就绪的节点，或 E2B、OpenSandbox 沙箱提供商，让 Core 能运行 Agent（[添加和管理节点](nodes.md)）；
 - Python 3.9 或更高版本；
 - 一个模型：安装的默认模型，或你自己的提供商的模型 ID、基础 URL 和 API 密钥。[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明 Session 使用哪个模型，以及每个 Harness 支持哪些协议。
 
@@ -54,7 +54,7 @@ curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
 
 ## 2. 启动 Session {#_2-start-a-session}
 
-Session 是拥有独立工作区的一次 Agent 对话。使用 `openai_hosted` 时，Core 在节点或 E2B 上创建沙箱，并在其中启动 Harness。
+Session 是拥有独立工作区的一次 Agent 对话。使用 `openai_hosted` 时，Core 在节点、E2B 或 OpenSandbox 上创建沙箱，并在其中启动 Harness。
 
 要使用自己的提供商而不是安装的默认模型，请先导出其设置，然后运行第二个标签页的代码：
 

@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 7ccb5fea5da457afd341300bcd026dc20683625d73b57a494ab50b56c67b33e5
+source_hash: 680e43de496964a8a9331bd712347686ed07cafcd23db0d1e38bcbb897e53f99
 ---
 
 Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
@@ -209,7 +209,7 @@ Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Comp
 
 全部数据随之删除：项目和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
-卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成。
+卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费，OpenSandbox 沙箱继续运行到一小时租约结束。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成。
 
 如果 Core 已不存在，按那里的说明在各节点主机上带 `--force` 运行节点卸载命令，使用 `oac uninstall` 打印的安装 ID，或节点单元名 `oac-node-<installation-id>.service` 中的安装 ID。
 

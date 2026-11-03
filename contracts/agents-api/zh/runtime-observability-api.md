@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: fa3b6fa85dfed2399c687a3124b8ab6407dc8dfb3e0a3b32f86333dad0750c3c
+source_hash: f869b74af3774e167e0566d42ea56c92f8c9f388c189a04d2ca6aa991106dc5c
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -119,7 +119,7 @@ Authorization: Bearer <Core key>
 
 ### `disk` {#disk}
 
-只有列表行包含 `disk`：其值为 null，或为遵循 `memory` 规则的 `{usage_bytes, limit_bytes}`。当沙箱同时报告磁盘使用量和非零容量时，E2B 会填充此对象。microsandbox 返回 null。非 null 的 `disk` 只出现在状态为 `observed` 的行中。
+只有列表行包含 `disk`：其值为 null，或为遵循 `memory` 规则的 `{usage_bytes, limit_bytes}`。当沙箱同时报告磁盘使用量和非零容量时，E2B 会填充此对象。microsandbox 和 OpenSandbox 返回 null。非 null 的 `disk` 只出现在状态为 `observed` 的行中。
 
 ### 状态和原因 {#status-and-reason}
 
@@ -192,7 +192,7 @@ Core 先解析项目，然后解析 Session 及其 Environment，之后才读取
 
 每个点都包含该桶的边界、该分配样本的覆盖范围计数，以及可空的 `cpu` 和 `memory` 对象；其 `contributor_count` 至少为 1：
 
-- 对于结束于该桶的所有区间，`cpu.utilization_ratio` 根据同一计算实例代次的连续累计 CPU 计数器得出：消耗的 CPU 秒数除以（经过时间乘以容量）。计算实例代次发生变化或计数器数值减小时，基线会重置。E2B 不报告累计 CPU 时间；其桶值是桶内采样比率的平均值。`cpu.capacity_cores` 是桶内最后一次容量值。
+- 对于结束于该桶的所有区间，`cpu.utilization_ratio` 根据同一计算实例代次的连续累计 CPU 计数器得出：消耗的 CPU 秒数除以（经过时间乘以容量）。计算实例代次发生变化或计数器数值减小时，基线会重置。E2B 和 OpenSandbox 不报告累计 CPU 时间；它们的桶值是桶内采样比率的平均值。`cpu.capacity_cores` 是桶内最后一次容量值。
 - `memory.usage_bytes` 和 `memory.limit_bytes` 是桶内最后观测到的值。
 
 历史记录中不保存磁盘数据。

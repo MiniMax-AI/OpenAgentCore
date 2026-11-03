@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: 3f8264d8bd0232f31cb6c91c2f482ece6f713292dc4c53044a0742aeccaa8baa
+source_hash: da8e7fe6896f79a32df6fbefeb3d181a9597d9c39cc3c080897f38d49581437d
 ---
 
 工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
@@ -19,6 +19,7 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 | --- | --- |
 | microsandbox | 必需（`host_directory`、`user_xattr`） |
 | E2B | 不支持；使用提供商自有的 Environment 磁盘 |
+| OpenSandbox | 不支持；使用提供商自有的 Environment 磁盘 |
 
 ## 实现适配器 {#implement-an-adapter}
 

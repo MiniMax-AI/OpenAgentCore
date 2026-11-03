@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 0160c835973e50788d704cf432fabb64c5650e2cef0c81b173ca81d3e2a611bc
+source_hash: 97ca1b4a9d8e7785afe6b3a84c9a56ff7bc08d24e2dfc31ed4e9a827eced9f6d
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -62,7 +62,7 @@ oac-daemon connect --profile default
 - 新节点发送登记 token，不带 `X-OAC-Node-ID`。token 必须有效、未过期、未消费且由此安装签发。活动重置拒绝该读取。
 - 已注册节点发送节点凭据，并在 `X-OAC-Node-ID` 放其 UUID。无查询时读取当前目标。`?generation=N` 仅读取此节点仍可能需要的代际：当前目标、服务 pin，或其上未释放分配或 placement 持有的代际；其他代际被拒绝。重置期间仍可读取，以恢复已有归属资源。
 
-响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`。不包含管理员、项目或 E2B 凭据，仅适用于节点型提供商。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
+响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`。不包含管理员、项目或沙箱提供商凭据，仅适用于节点型提供商。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
 
 ### 登记节点 {#enroll-a-node}
 
