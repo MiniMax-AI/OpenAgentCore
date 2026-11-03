@@ -28,7 +28,7 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
   await selectFixtureE2BBuild(page);
   await page.getByRole("button", { name: "Next" }).click();
   const address = page.getByRole("definition").filter({ hasText: "http://127.0.0.1:8091" });
-  await expect(address).toContainText("Set a public address before connecting; E2B sandboxes need an HTTPS one.");
+  await expect(address).toContainText("Set a public address before connecting; E2B sandboxes reach Core through it.");
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
   await expect(rejection).toContainText("This sandbox provider needs a public HTTPS address.");

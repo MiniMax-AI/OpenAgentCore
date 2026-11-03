@@ -207,7 +207,7 @@ On Windows, run `& "$HOME/.oac/core/oac.exe" uninstall`. The command shows the C
 
 All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. To keep the data, stop the installation with `docker compose stop` instead, or [back it up](#back-up) first.
 
-Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
+Uninstall stops no sandbox: node sandboxes keep running on their nodes, E2B sandboxes keep running, and billing, at E2B, and OpenSandbox sandboxes keep running until their one-hour lease ends. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
 
 If Core is already gone, run the node uninstall command with `--force` on each node host, as described there, using the installation ID that `oac uninstall` printed or the one in the node's unit name `oac-node-<installation-id>.service`.
 

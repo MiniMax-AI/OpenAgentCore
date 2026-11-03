@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/opensandbox"
 )
 
 // Adapter describes configuration and transport independently of compute operations.
@@ -43,6 +44,10 @@ func Builtin() *Registry {
 		"e2b": {
 			Policy: e2b.Policy(), Setup: e2b.Setup(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,
 			Configuration: e2b.ConfigurationAdapter{},
+		},
+		"opensandbox": {
+			Policy: opensandbox.Policy(), Setup: opensandbox.Setup(), Operations: opensandbox.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: opensandbox.BuildDirect,
+			Configuration: opensandbox.ConfigurationAdapter{},
 		},
 	}}
 }

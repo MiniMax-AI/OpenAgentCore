@@ -17,6 +17,7 @@ Every subject has one owner. Most owners are the page whose title names the subj
 | Codex, Claude and MiniMax Runtime adapters and images | [Codex](services/core/deploy/codex/README.md), [Claude](services/core/deploy/claude/README.md), [MiniMax](services/core/deploy/mcode/README.md) |
 | Claude private SDK bridge | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
 | E2B template construction | [E2B template builder](services/core/deploy/e2b/README.md) |
+| OpenSandbox Runtime image and adapter | [OpenSandbox adapter guide](services/core/deploy/opensandbox/README.md) |
 | E2B and microsandbox Provider helper implementation | [E2B helper](services/core/tools/e2b-provider/README.md), [microsandbox helper](services/core/tools/microsandbox-provider/README.md) |
 | Distribution builds, Runtime image builds, CI and publication | [Build and release OpenAgentCore](docs/maintainers.md) |
 | Website: landing page, bilingual documentation maintenance, documentation site build and GitHub Pages publication | [Website guide](website/README.md) |
