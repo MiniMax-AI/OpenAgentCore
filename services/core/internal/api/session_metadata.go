@@ -20,11 +20,24 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request struct {
+		Agent    json.RawMessage `json:"agent"`
+		Review   *string         `json:"review"`
 		Metadata json.RawMessage `json:"metadata"`
 	}
 	_ = json.Unmarshal(raw, &request)
+	if !isNull(request.Agent) {
+		writeFieldError(w, &fieldError{param: "agent", message: "Updating the Session agent is not supported."})
+		return
+	}
+	if err := rejectAutoReview(request.Review); writeFieldError(w, err) {
+		return
+	}
 	if len(request.Metadata) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
+		if request.Review == nil {
+			writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
+			return
+		}
+		h.getSession(w, r)
 		return
 	}
 	var values map[string]string
@@ -105,4 +118,12 @@ func metadataFieldError(err error) error {
 		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string contains U+0000, which this service cannot store.", key)}
 	}
 	return err
+}
+
+// rejectAutoReview accepts review none; automatic review has no Harness-native equivalent.
+func rejectAutoReview(review *string) error {
+	if review != nil && *review == "auto_review" {
+		return &fieldError{param: "review", message: "Automatic action review is not supported. Use review none."}
+	}
+	return nil
 }

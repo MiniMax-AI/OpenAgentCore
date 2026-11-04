@@ -529,13 +529,11 @@ type RequiredAction struct {
 // SavedAgent projects AgentResource.
 type SavedAgent struct {
 	SavedAgentConfiguration
-	ID           string            `json:"id" binding:"required"`
-	Object       string            `json:"object" binding:"required" enums:"agent"`
-	Metadata     map[string]string `json:"metadata" binding:"required"`
-	CreatedAt    int64             `json:"created_at" binding:"required"`
-	UpdatedAt    int64             `json:"updated_at" binding:"required"`
-	Compaction   json.RawMessage   `json:"compaction,omitempty" swaggertype:"object"`
-	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
+	ID        string            `json:"id" binding:"required"`
+	Object    string            `json:"object" binding:"required" enums:"agent"`
+	Metadata  map[string]string `json:"metadata" binding:"required"`
+	CreatedAt int64             `json:"created_at" binding:"required"`
+	UpdatedAt int64             `json:"updated_at" binding:"required"`
 }
 
 // SavedAgentConfiguration projects AgentResource.
@@ -638,7 +636,7 @@ type SessionEnvironment struct {
 	Files                 *[]json.RawMessage           `json:"files,omitempty" swaggertype:"array,object"`
 	Plugins               *[]json.RawMessage           `json:"plugins,omitempty" swaggertype:"array,object"`
 	Skills                *[]json.RawMessage           `json:"skills,omitempty" swaggertype:"array,object"`
-	ContainerSize         *string                      `json:"container_size,omitempty" extensions:"x-nullable" enums:"small,medium,large"`
+	ContainerSize         json.RawMessage              `json:"container_size,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Desktop               json.RawMessage              `json:"desktop,omitempty" swaggertype:"object"`
 }
 

@@ -874,7 +874,7 @@ func (f *fakeSessions) AuditSessionOperation(a0 context.Context, a1 sessions.Aud
 type fakeSessionsReader struct {
 	t            testing.TB
 	getSession   func(context.Context, string, string) (sessions.Session, error)
-	listSessions func(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	listSessions func(context.Context, string, string, int, bool, *string, map[string]string) (sessions.Page, error)
 }
 
 func (f *fakeSessionsReader) GetSession(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
@@ -884,11 +884,11 @@ func (f *fakeSessionsReader) GetSession(a0 context.Context, a1 string, a2 string
 	return f.getSession(a0, a1, a2)
 }
 
-func (f *fakeSessionsReader) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (sessions.Page, error) {
+func (f *fakeSessionsReader) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string, a6 map[string]string) (sessions.Page, error) {
 	if f.listSessions == nil {
 		unexpectedCall(f.t, "ListSessions")
 	}
-	return f.listSessions(a0, a1, a2, a3, a4, a5)
+	return f.listSessions(a0, a1, a2, a3, a4, a5, a6)
 }
 
 type fakeSkills struct {

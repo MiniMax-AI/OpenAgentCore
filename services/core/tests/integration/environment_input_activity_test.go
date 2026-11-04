@@ -26,7 +26,7 @@ func requireEnvironmentInputActivity(t *testing.T, s *Store, tenant, session, st
 	} else if activity == nil || activity.Status != status || activity.EnvironmentID != environment || activity.LastActiveAt.IsZero() {
 		t.Fatal("input activity", activity, status, environment)
 	}
-	page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 100, false, nil)
+	page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 100, false, nil, nil)
 	if err != nil || len(page.Sessions) != 1 || !reflect.DeepEqual(page.Sessions[0].EnvironmentInputActivity, activity) {
 		t.Fatal("list and retrieve activity differ", err)
 	}

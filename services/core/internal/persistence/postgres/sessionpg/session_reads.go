@@ -23,7 +23,7 @@ func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (ses
 	return session, err
 }
 
-func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit int, ascending bool, agentID *string) (sessions.Page, error) {
+func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit int, ascending bool, agentID *string, metadata map[string]string) (sessions.Page, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return sessions.Page{}, err
@@ -34,6 +34,11 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 	params := sqlc.ListSessionsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	if agentID != nil {
 		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
+	}
+	if len(metadata) > 0 {
+		if params.Metadata, err = json.Marshal(metadata); err != nil {
+			return sessions.Page{}, err
+		}
 	}
 	var page sessions.Page
 	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {

@@ -61,12 +61,44 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 	if err != nil {
 		return agents.CreateCommand{}, err
 	}
+	cfg.Compaction, cfg.Experimental, err = resolveAgentOptions(input.Compaction, input.Experimental)
+	if err != nil {
+		return agents.CreateCommand{}, err
+	}
 	configuration, err := json.Marshal(cfg)
 	result := agents.CreateCommand{Metadata: values, Configuration: configuration}
 	if input.XAgentsCore != nil {
 		result.ModelProvider = input.XAgentsCore.ModelProvider
 	}
 	return result, err
+}
+
+// resolveAgentOptions stores compaction and experimental settings only when supplied.
+// An object without a value takes the official default: background compaction on
+// and time awareness off. Whether a Harness runs them is decided at Session admission.
+func resolveAgentOptions(compaction, experimental json.RawMessage) (resolvedCompaction, resolvedExperimental json.RawMessage, err error) {
+	if !isNull(compaction) {
+		input := struct {
+			Async *bool `json:"async"`
+		}{}
+		if err = json.Unmarshal(compaction, &input); err != nil {
+			return nil, nil, &storedDataError{err}
+		}
+		async := input.Async == nil || *input.Async
+		resolvedCompaction, _ = json.Marshal(struct {
+			Async bool `json:"async"`
+		}{async})
+	}
+	if !isNull(experimental) {
+		input := struct {
+			TimeAwareness bool `json:"time_awareness"`
+		}{}
+		if err = json.Unmarshal(experimental, &input); err != nil {
+			return nil, nil, &storedDataError{err}
+		}
+		resolvedExperimental, _ = json.Marshal(input)
+	}
+	return resolvedCompaction, resolvedExperimental, nil
 }
 
 // resolveSavedMultiAgent and resolveText read values whose pinned shape was

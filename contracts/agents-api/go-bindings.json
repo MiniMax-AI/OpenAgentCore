@@ -298,7 +298,7 @@
   },
   "SavedAgent": {
     "sources": ["#/components/schemas/AgentResource"],
-    "embed": {"SavedAgentConfiguration": ["x_agents_core", "model", "name", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"]},
+    "embed": {"SavedAgentConfiguration": ["x_agents_core", "model", "name", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "compaction", "experimental"]},
     "order": ["id", "object", "metadata", "created_at", "updated_at"]
   },
   "SavedAgentConfiguration": {
@@ -353,7 +353,8 @@
       "workspace_directory": {"type": "string"},
       "files": {"type": "*[]json.RawMessage"},
       "plugins": {"type": "*[]json.RawMessage"},
-      "skills": {"type": "*[]json.RawMessage"}
+      "skills": {"type": "*[]json.RawMessage"},
+      "container_size": {"type": "json.RawMessage"}
     },
     "order": ["type", "id", "capability_directories", "remote_url", "workspace_directory", "network", "packages", "files", "plugins", "skills"]
   },

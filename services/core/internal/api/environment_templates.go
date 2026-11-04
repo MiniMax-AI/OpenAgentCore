@@ -31,7 +31,7 @@ type EnvironmentTemplatesReader interface {
 
 func decodeTemplateInput(raw []byte) (environmenttemplates.Input, error) {
 	var fields map[string]json.RawMessage
-	if decodeInputObject(raw, &fields, "name", "network", "capability_directories", "env", "files", "packages", "plugins", "skills", "setup_commands") != nil {
+	if decodeInputObject(raw, &fields, "name", "network", "capability_directories", "env", "files", "packages", "plugins", "skills", "setup_commands", "desktop") != nil {
 		return environmenttemplates.Input{}, environmenttemplates.ErrInvalidInput
 	}
 	in := environmenttemplates.Input{}
@@ -97,7 +97,7 @@ func templateEnvError(raw json.RawMessage) error {
 }
 
 func templateResponse(t environmenttemplates.Template) v1.EnvironmentTemplate {
-	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills)}
+	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills), Desktop: json.RawMessage(`{"enabled":false}`)}
 }
 
 func readTemplateInput(w http.ResponseWriter, r *http.Request, pinned shape) (environmenttemplates.Input, bool) {

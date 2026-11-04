@@ -158,3 +158,31 @@ func TestSelfHostedAdmissionRejectsNetworkPolicy(t *testing.T) {
 		}
 	}
 }
+
+// Saved settings that need a native home are rejected unless the Harness declares them.
+func TestAgentOptionsRequireDeclaredSupport(t *testing.T) {
+	declaration := harnesstest.Declaration("fixture", nil)
+	agent := func(mutate func(*v1.Agent)) Snapshot {
+		a := v1.Agent{Model: "fixture", ServiceTier: "auto", Tools: []json.RawMessage{}}
+		mutate(&a)
+		return Snapshot{Agent: a, Environment: v1.Environment{Type: "none"}}
+	}
+	for name, mutate := range map[string]func(*v1.Agent){
+		"compaction":   func(a *v1.Agent) { a.Compaction = json.RawMessage(`{"async":true}`) },
+		"time":         func(a *v1.Agent) { a.Experimental = json.RawMessage(`{"time_awareness":true}`) },
+		"automations":  func(a *v1.Agent) { a.Tools = []json.RawMessage{json.RawMessage(`{"type":"automations"}`)} },
+		"computer_use": func(a *v1.Agent) { a.Tools = []json.RawMessage{json.RawMessage(`{"type":"computer_use"}`)} },
+		"ultrafast":    func(a *v1.Agent) { a.ServiceTier = "ultrafast" },
+	} {
+		if err := validateDeclaredConfiguration(declaration, agent(mutate)); err == nil {
+			t.Errorf("%s admitted without declared support", name)
+		}
+	}
+	// Blocking compaction and disabled time awareness are the native defaults.
+	ok := agent(func(a *v1.Agent) {
+		a.Compaction, a.Experimental = json.RawMessage(`{"async":false}`), json.RawMessage(`{"time_awareness":false}`)
+	})
+	if err := validateDeclaredConfiguration(declaration, ok); err != nil {
+		t.Fatal(err)
+	}
+}

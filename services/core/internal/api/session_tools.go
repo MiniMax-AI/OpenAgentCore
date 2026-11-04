@@ -22,14 +22,19 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			return nil, &storedDataError{err}
 		}
 		switch kind.Type {
-		case "programmatic_tool_calling", "web_search":
+		case "programmatic_tool_calling", "web_search", "computer_use", "automations":
 			if controls[kind.Type] {
 				return nil, errors.New("Execution requires distinct tool controls.")
 			}
 			controls[kind.Type] = true
 			resolve := resolveProgrammaticTool
-			if kind.Type == "web_search" {
+			switch kind.Type {
+			case "web_search":
 				resolve = resolveWebSearch
+			case "computer_use":
+				resolve = resolveComputerUseTool
+			case "automations":
+				resolve = resolveAutomationsTool
 			}
 			resolved, err := resolve(raw)
 			if err != nil {

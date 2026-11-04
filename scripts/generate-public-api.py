@@ -179,7 +179,7 @@ def go_types(document, bindings):
             if nullable(document, schema):
                 tags.append('extensions:"x-nullable"')
             enums = enum_values(document, schema)
-            if enums:
+            if enums and 'json.RawMessage' not in typ:
                 tags.append('enums:"' + ','.join(str(v).lower() if isinstance(v, bool) else str(v) for v in enums) + '"')
             # Swag still projects the internal APIs that reference these types.
             if 'json.RawMessage' in typ:

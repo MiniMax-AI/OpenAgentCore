@@ -47,6 +47,9 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		_ = json.Unmarshal(request.Execution, &fields)
 		input.modelProviderNull = bytes.Equal(bytes.TrimSpace(fields["model_provider"]), []byte("null"))
 	}
+	if err := rejectAutoReview(request.Review); err != nil {
+		return input, err
+	}
 	input.VaultIDs = append([]string{}, request.VaultIDs...)
 	canonicalEnvironment, err := preparationEnvironmentInput(request.Environment, input.XAgentsCore)
 	if err != nil {
@@ -74,7 +77,7 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		if err := validateSessionAgent(request.Agent); err != nil {
 			return input, err
 		}
-		if decodeInputObject(request.Agent, &input.Agent, "model", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
+		if decodeInputObject(request.Agent, &input.Agent, "model", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "compaction", "experimental", "x_agents_core") != nil {
 			return input, sessions.ErrInvalidInput
 		}
 		if err := json.Unmarshal(request.Agent, &input.agentFields); err != nil {

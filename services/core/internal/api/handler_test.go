@@ -31,7 +31,7 @@ type recordingStore struct {
 	listAscending     bool
 }
 
-func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (sessions.Page, error) {
+func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string, _ map[string]string) (sessions.Page, error) {
 	s.listTenant, s.listAfter, s.listLimit, s.listAscending = tenant, after, limit, ascending
 	return sessions.Page{Sessions: append([]sessions.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
 }

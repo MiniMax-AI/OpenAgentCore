@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -59,6 +60,9 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 	if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
 		return err
 	}
+	if err := declaration.ValidateAgentOptions(agentOptions(snapshot.Agent, tools)); err != nil {
+		return err
+	}
 	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
 	if err := request.ValidateToolSearch(declaration.Capabilities.ToolSearch.IsSupported()); err != nil {
 		return err
@@ -107,4 +111,17 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 		}
 	}
 	return nil
+}
+
+// agentOptions reads the saved settings that need a declared native home.
+func agentOptions(agent v1.Agent, tools executionToolSet) harnessconfig.AgentOptions {
+	var compaction struct {
+		Async bool `json:"async"`
+	}
+	var experimental struct {
+		TimeAwareness bool `json:"time_awareness"`
+	}
+	_ = json.Unmarshal(agent.Compaction, &compaction)
+	_ = json.Unmarshal(agent.Experimental, &experimental)
+	return harnessconfig.AgentOptions{AsyncCompaction: compaction.Async, TimeAwareness: experimental.TimeAwareness, OptionalTools: tools.OptionalTools}
 }

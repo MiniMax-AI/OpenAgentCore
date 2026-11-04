@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -50,6 +51,9 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inputs, err := executionInputs(request.Events)
+	if writeFieldError(w, err) {
+		return
+	}
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return
@@ -72,7 +76,13 @@ func executionInputs(events []json.RawMessage) ([]sessions.Input, error) {
 		return nil, sessions.ErrInvalidInput
 	}
 	inputs := make([]sessions.Input, 0, len(events))
-	for _, raw := range events {
+	for index, raw := range events {
+		var kind struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &kind) == nil && kind.Type == "agent.session.input.computer_use_approval_request_result" {
+			return nil, &fieldError{param: fmt.Sprintf("events[%d].type", index), message: "Computer use approvals are not supported."}
+		}
 		event, err := decodeInputEvent(raw)
 		if err != nil {
 			return nil, err

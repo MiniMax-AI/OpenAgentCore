@@ -23,6 +23,7 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 		request.Model, request.Instructions = agent.Model, agent.Instructions
 		request.MultiAgent, request.Reasoning, request.ServiceTier = agent.MultiAgent, agent.Reasoning, agent.ServiceTier
 		request.Text, request.Tools = agent.Text, agent.Tools
+		request.Compaction, request.Experimental = agent.Compaction, agent.Experimental
 	}
 	if saved != nil && request.Model == nil {
 		request.Model = &saved.Model
@@ -70,6 +71,10 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 				cfg.Text = override.Text
 			case "tools":
 				cfg.Tools = override.Tools
+			case "compaction":
+				cfg.Compaction = override.Compaction
+			case "experimental":
+				cfg.Experimental = override.Experimental
 			}
 		}
 	}
@@ -90,5 +95,5 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	}
 	return v1.Agent{XAgentsCore: extension, Model: cfg.Model, Name: cfg.Name, Instructions: cfg.Instructions,
 		MultiAgent: cfg.MultiAgent, Reasoning: cfg.Reasoning, ServiceTier: cfg.ServiceTier,
-		Text: cfg.Text, Tools: tools}, nil
+		Text: cfg.Text, Tools: tools, Compaction: cfg.Compaction, Experimental: cfg.Experimental}, nil
 }

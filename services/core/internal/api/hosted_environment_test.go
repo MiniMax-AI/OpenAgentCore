@@ -43,12 +43,11 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 	}
 }
 
-// The pinned openai_hosted input has no environment_id, so a request naming an
-// existing Environment gets the route's existing error instead of a new
-// Environment, with or without a Template.
+// A request naming an existing Environment is rejected by param instead of
+// creating a new Environment, with or without a Template.
 func TestSessionCreationRejectsExistingEnvironmentReference(t *testing.T) {
 	h, s := validationHandler(t)
-	rejected := `{"error":{"message":"Request fields have invalid types or null values.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
+	rejected := `{"error":{"message":"Environment environment_id is not supported.","type":"invalid_request_error","code":"invalid_request_error","param":"environment_id"}}` + "\n"
 	for _, environment := range []string{
 		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}`,
 		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `","environment_template_id":"` + uuid.NewString() + `"}`,
@@ -83,7 +82,7 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 	if json.Unmarshal(raw, &got) != nil {
 		t.Fatal("invalid environment JSON")
 	}
-	expected := map[string]any{"id": "environment", "type": "openai_hosted", "capability_directories": []any{}, "files": []any{}, "plugins": []any{}, "skills": []any{}, "packages": map[string]any{"npm": []any{}, "python": []any{}, "system": []any{}}, "network": map[string]any{"access": "enabled", "allowed_domains": []any{}}}
+	expected := map[string]any{"id": "environment", "type": "openai_hosted", "capability_directories": []any{}, "files": []any{}, "plugins": []any{}, "skills": []any{}, "packages": map[string]any{"npm": []any{}, "python": []any{}, "system": []any{}}, "network": map[string]any{"access": "enabled", "allowed_domains": []any{}}, "container_size": nil, "desktop": map[string]any{"enabled": false}}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatal("hosted response shape changed", string(raw))
 	}

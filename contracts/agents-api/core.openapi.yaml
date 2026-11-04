@@ -3465,11 +3465,7 @@ definitions:
           type: string
         type: array
       container_size:
-        enum:
-          - small
-          - medium
-          - large
-        type: string
+        type: object
         x-nullable: true
       desktop:
         type: object

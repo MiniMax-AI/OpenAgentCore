@@ -61,6 +61,14 @@ func resolveAgentUpdate(raw []byte) (agents.UpdateCommand, error) {
 			delete(patch, field)
 		}
 	}
+	// Null compaction restores the default; an experimental object without members keeps the current settings.
+	if _, supplied := fields["compaction"]; supplied && isNull(request.Compaction) {
+		patch["compaction"] = json.RawMessage(`null`)
+	}
+	var experimental map[string]json.RawMessage
+	if json.Unmarshal(request.Experimental, &experimental) == nil && len(experimental) == 0 {
+		delete(patch, "experimental")
+	}
 	var result agents.UpdateCommand
 	if extension, supplied := fields["x_agents_core"]; supplied {
 		_, coreFields := orderedMembers(extension)

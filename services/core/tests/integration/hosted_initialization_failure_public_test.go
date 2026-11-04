@@ -182,7 +182,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			if err != nil || read.Environment.Status != "failed" || read.EnvironmentFailure == nil || read.EnvironmentFailure.Reason != test.reason || read.EnvironmentInputActivity != nil || read.LastTurn != nil {
 				t.Fatal("Session read", read.EnvironmentFailure, err)
 			}
-			page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 10, false, nil)
+			page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 10, false, nil, nil)
 			if err != nil || len(page.Sessions) != 1 || !reflect.DeepEqual(page.Sessions[0].EnvironmentFailure, read.EnvironmentFailure) {
 				t.Fatal("Session list", page, err)
 			}
@@ -223,7 +223,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			if _, err := sessionAdapter(s).ListSessionEvents(t.Context(), other, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("foreign Session events", err)
 			}
-			if page, err := sessionAdapter(s).ListSessions(t.Context(), other, "", 10, false, nil); err != nil || len(page.Sessions) != 0 {
+			if page, err := sessionAdapter(s).ListSessions(t.Context(), other, "", 10, false, nil, nil); err != nil || len(page.Sessions) != 0 {
 				t.Fatal("foreign Session list", page, err)
 			}
 		})

@@ -16,6 +16,22 @@ func resolveProgrammaticTool(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(input)
 }
 
+// resolveComputerUseTool and resolveAutomationsTool keep the official tools a Harness may declare support for.
+func resolveComputerUseTool(raw json.RawMessage) (json.RawMessage, error) {
+	input := struct {
+		Type               string `json:"type"`
+		IncludeScreenshots bool   `json:"include_screenshots"`
+	}{}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return nil, &storedDataError{err}
+	}
+	return json.Marshal(input)
+}
+
+func resolveAutomationsTool(json.RawMessage) (json.RawMessage, error) {
+	return json.RawMessage(`{"type":"automations"}`), nil
+}
+
 // webSearchTool is the resolved web_search projection. A present location
 // projects all four keys; null and empty allowed_domains stay distinct.
 type webSearchTool struct {

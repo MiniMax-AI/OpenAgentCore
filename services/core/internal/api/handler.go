@@ -42,7 +42,7 @@ type Sessions interface {
 // SessionsReader reads Sessions.
 type SessionsReader interface {
 	GetSession(context.Context, string, string) (sessions.Session, error)
-	ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	ListSessions(context.Context, string, string, int, bool, *string, map[string]string) (sessions.Page, error)
 }
 
 // routes builds the router. HEAD runs the GET route without a body after the
@@ -315,11 +315,15 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	filter, ok := readMetadataFilter(w, r)
+	if !ok {
+		return
+	}
 	var agentID *string
 	if values, present := r.URL.Query()["agent_id"]; present {
 		agentID = &values[0]
 	}
-	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
+	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID, filter)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return
