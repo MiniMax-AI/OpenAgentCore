@@ -23,7 +23,7 @@ The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/Open
 
 ### Unsupported operations
 
-The Automations routes (all 10), `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API method is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no Automations or trace store.
+The Automations routes (all 10), `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no Automations or trace store.
 
 Creating an Agent, Vault, Credential, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
 
@@ -113,6 +113,8 @@ Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an 
 | Repeated supported key, including a scalar `status` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: duplicate field `<key>`" | 400 `unsupported_parameter` | 400 `duplicate_parameter`, param `<key>`, the official message |
 | `order` other than `asc` or `desc`, including an explicit empty `order=` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: order: unknown variant `<value>`, expected `asc` or `desc`" | 400, null code, "order must be asc or desc." | 400 `invalid_value`, param `order`, `"Invalid value: '<value>'. Supported values are: 'asc' and 'desc'."` |
 
+The Sessions, Vaults and Credentials lists accept `metadata[key]=value` pairs and keep the resources whose metadata holds every pair. A key is nonempty, and at most 16 pairs, 64-character keys and 512-character values apply.
+
 The pinned Python SDK drops empty query values, so `list(order="")` sends no `order` and uses the default. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
 
 Vault and Credential lists accept `status` as a scalar, as `status[]` entries, or both, and filter by their union. Both statuses are listed by default. Another value returns 400 `invalid_request_error` with a null param and "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam".
@@ -121,8 +123,7 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 
 | Lists | Default | Accepted | Other values |
 | --- | --- | --- | --- |
-| Agents, Sessions, Items, Turn Items, Environment Templates, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
-| Vaults, Credentials | 20 | 1–100 | 0, negative and larger integers, including overflowing ones, are clamped into 1–100 |
+| Agents, Sessions, Items, Turn Items, Environment Templates, Vaults, Credentials, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
 | Turns, Subagents, Subagent Turns, Artifacts | 20 | 1–100 | 400 `invalid_request_error`, "limit must be between 1 and 100" |
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |
@@ -160,7 +161,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | `multi_agent` | Disabled. When enabled without `max_concurrent_subagents`, 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `compaction`, `experimental` | Omitted unless sent. Core saves `compaction.async` (true when `compaction` is an object without it) and `experimental.time_awareness` as sent; null `compaction` clears it. Omitted or null `compaction` keeps the Harness's native blocking compaction, while the official default is background compaction |
+| `compaction`, `experimental` | `compaction` is omitted unless sent. Core saves `compaction.async` (true when `compaction` is an object without it) and `experimental.time_awareness` as sent; null `compaction` clears it and the resource omits it. Omitted or null `compaction` keeps the Harness's native blocking compaction, while the official default is background compaction. `experimental` always reads `{"time_awareness": false}` unless set, an `experimental` object without members keeps the saved value, and an update or Session override changes only the members it sends |
 | `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP transport | Saved with `headers: {}`; nonempty headers are stored as given and an `Authorization` header is rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
@@ -251,7 +252,7 @@ Keys are scoped to the Project; any key of the Project, including one issued aft
 
 `POST /agents/sessions/{session_id}` changes only `metadata`: null or `{}` clears it and an object replaces all pairs. A body with `review` alone changes nothing and returns the Session; a body with none of `metadata`, `agent` or `review` returns 400. A non-null `agent` is rejected ([unsupported fields](#unsupported-fields)). Execution state and the creation retry identity are unchanged.
 
-`GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission. `metadata[key]=value` keeps Sessions whose metadata holds that pair; repeated pairs must all match, a key is nonempty, and keys and values follow the metadata limits above.
+`GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission. The [`metadata` filter](#query-parameters) applies too.
 
 ### Delete
 

@@ -65,8 +65,7 @@ func resolveAgentUpdate(raw []byte) (agents.UpdateCommand, error) {
 	if _, supplied := fields["compaction"]; supplied && isNull(request.Compaction) {
 		patch["compaction"] = json.RawMessage(`null`)
 	}
-	var experimental map[string]json.RawMessage
-	if json.Unmarshal(request.Experimental, &experimental) == nil && len(experimental) == 0 {
+	if emptyObject(request.Experimental) {
 		delete(patch, "experimental")
 	}
 	var result agents.UpdateCommand

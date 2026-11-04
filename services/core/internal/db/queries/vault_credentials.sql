@@ -26,6 +26,7 @@ FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id)
   AND c.status = ANY(sqlc.arg(statuses)::text[])
+  AND (sqlc.narg(metadata)::jsonb IS NULL OR c.metadata @> sqlc.narg(metadata)::jsonb)
   AND (sqlc.narg(after_created)::timestamptz IS NULL
     OR (NOT sqlc.arg(ascending)::boolean AND (c.created_at, c.id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid))
     OR (sqlc.arg(ascending)::boolean AND (c.created_at, c.id) > (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid)))

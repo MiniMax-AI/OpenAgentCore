@@ -23,8 +23,6 @@ Paths follow the SDK resource methods, before the service's `/v1` prefix. The li
 | [Template](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`, `GET /agents/environments/templates`; `GET`, `POST`, `DELETE /agents/environments/templates/{id}` | See [Templates](#templates). |
 | [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](./environment-files.md). |
 
-Session and Template responses carry `container_size: null` and `desktop: {"enabled": false}`. Core rejects `environment_id`, a non-null `container_size`, `desktop.enabled: true` and a nonempty `network.blocked_domains` with 400 and the field as param ([unsupported fields](./wire-semantics.md#unsupported-fields)). The Environment status `suspended` is never emitted.
-
 An Environment read joins its live owning Session within the caller's Project and returns the durable connection status. It needs no live Runtime, starts no native work and changes no connection state. The installation arrays list API-managed files, Plugins and Skills for both placements: files as `{id, type, path, file_id, size_bytes}` without content, Skills as `{type, name, description, skill_id, version}` and Plugins as `{type, name, description}`. Capabilities discovered in local capability directories are not listed.
 
 [Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) and [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) have different shapes:
@@ -35,10 +33,10 @@ An Environment read joins its live owning Session within the caller's Project an
 
 | Projection | States |
 | --- | --- |
-| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `connected`, `disconnected`, `expired`, `failed` |
-| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | `pending`, `ready`, `connected`, `disconnected`, `failed`, with a nullable error |
+| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `ready`, `connected`, `disconnected`, `suspended`, `expired`, `failed` |
+| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | The same seven states, with a nullable error |
 
-The two vocabularies are separate; never cast one to the other. The resource moves as follows, and a failed or expired Environment is final:
+Core emits `ready` only in events and never emits `suspended`. The resource moves as follows, and a failed or expired Environment is final:
 
 ```mermaid
 stateDiagram-v2

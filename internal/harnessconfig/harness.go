@@ -377,35 +377,6 @@ type ExecutionOptions struct {
 	ProgrammaticToolCalling []bool
 	// TextVerbosities are the supported text verbosity levels.
 	TextVerbosities []string
-	// AsyncCompaction and TimeAwareness report native homes for
-	// compaction.async=true and experimental.time_awareness=true.
-	AsyncCompaction, TimeAwareness bool
-	// OptionalTools are the supported official tool types beyond function, mcp,
-	// tool_search, web_search and programmatic_tool_calling: automations and computer_use.
-	OptionalTools []string
-}
-
-// AgentOptions are the official Agent settings that need a native home.
-type AgentOptions struct {
-	AsyncCompaction, TimeAwareness bool
-	OptionalTools                  []string
-}
-
-// ValidateAgentOptions rejects a saved setting the Harness does not declare.
-func (d Declaration) ValidateAgentOptions(options AgentOptions) error {
-	o := d.Execution
-	if options.AsyncCompaction && !o.AsyncCompaction {
-		return errors.New("compaction.async=true is not supported by this Harness.")
-	}
-	if options.TimeAwareness && !o.TimeAwareness {
-		return errors.New("experimental.time_awareness=true is not supported by this Harness.")
-	}
-	for _, tool := range options.OptionalTools {
-		if !slices.Contains(o.OptionalTools, tool) {
-			return fmt.Errorf("The %s tool is not supported by this Harness.", tool)
-		}
-	}
-	return nil
 }
 
 func (o ExecutionOptions) Clone() ExecutionOptions {
@@ -415,7 +386,6 @@ func (o ExecutionOptions) Clone() ExecutionOptions {
 	o.ServiceTiers = slices.Clone(o.ServiceTiers)
 	o.ProgrammaticToolCalling = slices.Clone(o.ProgrammaticToolCalling)
 	o.TextVerbosities = slices.Clone(o.TextVerbosities)
-	o.OptionalTools = slices.Clone(o.OptionalTools)
 	return o
 }
 

@@ -26,7 +26,6 @@ LIMITS = {
     "clamp": {"0": 1, "101": None, "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
     "strict": {"0": ("invalid_request_error", None, "limit must be between 1 and 100"), "101": ("invalid_request_error", None, "limit must be between 1 and 100"),
                "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
-    "vault": {"0": 1, "-1": 1, "101": None, "abc": ("invalid_request_error", None, BETA_DIGIT)},
     "skills": {"0": 0, "101": ("integer_above_max_value", "limit", "Invalid 'limit': integer above maximum value. Expected a value <= 100, but got 101 instead."),
                "-1": ("integer_below_min_value", "limit", "Invalid 'limit': integer below minimum value. Expected a value >= 0, but got -1 instead.")},
     "files": {"0": (None, None, "limit must be between 1 and 10000."), "10001": (None, None, "limit must be between 1 and 10000.")},
@@ -375,7 +374,7 @@ def main():
             ("skills", "/skills", client.skills.list, False, False),
         ]
         policies = {"agents": "clamp", "templates": "clamp", "sessions": "clamp", "items": "clamp", "turns": "strict",
-                    "vaults": "vault", "credentials": "vault", "files": "files", "skills": "skills"}
+                    "vaults": "clamp", "credentials": "clamp", "files": "files", "skills": "skills"}
         tolerated = 0
         state_before = {name: [value.to_dict() for value in listing(order="asc", limit=1)] for name, _, listing, _, _ in families}
         rejected = 0

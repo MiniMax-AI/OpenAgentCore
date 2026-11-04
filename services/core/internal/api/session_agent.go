@@ -74,11 +74,20 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 			case "compaction":
 				cfg.Compaction = override.Compaction
 			case "experimental":
-				cfg.Experimental = override.Experimental
+				// Experimental overrides per member, so an object without members keeps the saved settings.
+				if !emptyObject(input.Agent.Experimental) {
+					cfg.Experimental = override.Experimental
+				}
 			}
 		}
 	}
 	return admitSessionAgent(cfg)
+}
+
+// emptyObject reports a supplied JSON object without members.
+func emptyObject(raw json.RawMessage) bool {
+	var members map[string]json.RawMessage
+	return !isNull(raw) && json.Unmarshal(raw, &members) == nil && len(members) == 0
 }
 
 func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {

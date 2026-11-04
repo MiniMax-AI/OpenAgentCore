@@ -34,7 +34,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			case "computer_use":
 				resolve = resolveComputerUseTool
 			case "automations":
-				resolve = resolveAutomationsTool
+				resolve = func(json.RawMessage) (json.RawMessage, error) { return json.RawMessage(`{"type":"automations"}`), nil }
 			}
 			resolved, err := resolve(raw)
 			if err != nil {

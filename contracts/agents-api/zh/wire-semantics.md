@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 588ade70b1344cea32f404af7ee345e890a776b4ac27997c06101b95a4cf2aca
+source_hash: c594b287b943c2ea7e22a35d769a1ebb7a598990f85836632087743354f657c8
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -25,7 +25,7 @@ source_hash: 588ade70b1344cea32f404af7ee345e890a776b4ac27997c06101b95a4cf2aca
 
 ### 不支持的操作 {#unsupported-operations}
 
-Automations 路由（共 10 个）、`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API method is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 Automations 或 trace 存储。
+Automations 路由（共 10 个）、`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API operation is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 Automations 或 trace 存储。
 
 创建 Agent、Vault、Credential、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
 
@@ -115,6 +115,8 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 | 重复的支持键，包括标量 `status` | 400 `invalid_request_error`，param 为 null，"Failed to deserialize query string: duplicate field `<key>`" | 400 `unsupported_parameter` | 400 `duplicate_parameter`，param 为 `<key>`，使用官方消息 |
 | `order` 不是 `asc` 或 `desc`，包括显式空值 `order=` | 400 `invalid_request_error`，param 为 null，"Failed to deserialize query string: order: unknown variant `<value>`, expected `asc` or `desc`" | 400，code 为 null，"order must be asc or desc." | 400 `invalid_value`，param 为 `order`，`"Invalid value: '<value>'. Supported values are: 'asc' and 'desc'."` |
 
+Sessions、Vaults 和 Credentials 列表接受 `metadata[key]=value` 键值对，并保留元数据中含全部键值对的资源。键不能为空，最多 16 个键值对，键最长 64 个字符，值最长 512 个字符。
+
 已锁定版本的 Python SDK 会丢弃空查询值，因此 `list(order="")` 不会发送 `order`，而是使用默认值。`after` 会去除首尾空白。检查按以下顺序执行：重复键、`limit`、`order`；Vault 和 Credential 的 `status` 最先检查。这些检查都在任何资源查找之前执行。
 
 Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，并按其并集进行筛选。默认会列出两个状态。其他值会返回 400 `invalid_request_error`，param 为 null，消息为 "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam"。
@@ -123,8 +125,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 默认值 | 接受范围 | 其他值 |
 | --- | --- | --- | --- |
-| Agents、Sessions、Items、Turn Items、Environment 模板、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
-| Vaults、Credentials | 20 | 1–100 | 0、负数和更大的整数，包括溢出值，都会限制在 1–100 范围内 |
+| Agents、Sessions、Items、Turn Items、Environment 模板、Vaults、Credentials、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
 | Turns、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
 | Files | 10000 | 1–10000 | 400，code 为 null，"limit must be between 1 and 10000." |
@@ -162,7 +163,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 | `multi_agent` | 禁用。启用但未提供 `max_concurrent_subagents` 时为 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `compaction`、`experimental` | 未发送则省略。Core 按所发送的值保存 `compaction.async`（`compaction` 为不含该字段的对象时为 true）和 `experimental.time_awareness`；null `compaction` 会清除它。未指定或为 null 的 `compaction` 保留 Harness 原生的阻塞式压缩，而官方默认值为后台压缩 |
+| `compaction`、`experimental` | `compaction` 未发送则省略。Core 按所发送的值保存 `compaction.async`（`compaction` 为不含该字段的对象时为 true）和 `experimental.time_awareness`；null `compaction` 会清除它，资源中也不再出现。未指定或为 null 的 `compaction` 保留 Harness 原生的阻塞式压缩，而官方默认值为后台压缩。除非设置，`experimental` 始终读作 `{"time_awareness": false}`；不含成员的 `experimental` 对象保留已保存的值，更新或 Session 覆盖只修改其所发送的成员 |
 | `web_search` | 保存每个已锁定模式；请参阅 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP 传输方式 | 以 `headers: {}` 保存；非空标头按给定值存储，`Authorization` 标头被拒绝。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
@@ -253,7 +254,7 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 `POST /agents/sessions/{session_id}` 只修改 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。仅含 `review` 的正文不改变任何内容并返回该 Session；`metadata`、`agent`、`review` 都不含的正文返回 400。非 null 的 `agent` 会被拒绝（[不支持的字段](#unsupported-fields)）。执行状态和创建重试标识保持不变。
 
-`GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。`metadata[key]=value` 保留元数据中含该键值对的 Session；重复的键值对必须全部匹配，键不能为空，键和值遵循上文的元数据限制。
+`GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。[`metadata` 筛选](#query-parameters)同样适用。
 
 ### 删除 {#delete}
 

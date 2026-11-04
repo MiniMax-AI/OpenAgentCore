@@ -135,21 +135,23 @@ FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = $1 AND v.id = $2
   AND c.status = ANY($3::text[])
-  AND ($4::timestamptz IS NULL
-    OR (NOT $5::boolean AND (c.created_at, c.id) < ($4::timestamptz, $6::uuid))
-    OR ($5::boolean AND (c.created_at, c.id) > ($4::timestamptz, $6::uuid)))
+  AND ($4::jsonb IS NULL OR c.metadata @> $4::jsonb)
+  AND ($5::timestamptz IS NULL
+    OR (NOT $6::boolean AND (c.created_at, c.id) < ($5::timestamptz, $7::uuid))
+    OR ($6::boolean AND (c.created_at, c.id) > ($5::timestamptz, $7::uuid)))
 ORDER BY
-  CASE WHEN $5::boolean THEN c.created_at END ASC,
-  CASE WHEN $5::boolean THEN c.id END ASC,
-  CASE WHEN NOT $5::boolean THEN c.created_at END DESC,
-  CASE WHEN NOT $5::boolean THEN c.id END DESC
-LIMIT $7
+  CASE WHEN $6::boolean THEN c.created_at END ASC,
+  CASE WHEN $6::boolean THEN c.id END ASC,
+  CASE WHEN NOT $6::boolean THEN c.created_at END DESC,
+  CASE WHEN NOT $6::boolean THEN c.id END DESC
+LIMIT $8
 `
 
 type ListCredentialsParams struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	VaultID      pgtype.UUID        `json:"vault_id"`
 	Statuses     []string           `json:"statuses"`
+	Metadata     []byte             `json:"metadata"`
 	AfterCreated pgtype.Timestamptz `json:"after_created"`
 	Ascending    bool               `json:"ascending"`
 	AfterID      pgtype.UUID        `json:"after_id"`
@@ -173,6 +175,7 @@ func (q *Queries) ListCredentials(ctx context.Context, arg ListCredentialsParams
 		arg.TenantID,
 		arg.VaultID,
 		arg.Statuses,
+		arg.Metadata,
 		arg.AfterCreated,
 		arg.Ascending,
 		arg.AfterID,

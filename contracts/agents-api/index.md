@@ -68,15 +68,13 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - A deleted Agent used as a cursor returns 404; the official service still pages from it.
 - A Turn cursor from another Session, a Credential cursor equal to its Vault ID, and a Skills cursor that is not a Skill ID return 404.
-- Vault and Credential lists clamp a negative `limit`, as the pinned SDK describes; the official service returns 400.
 
 **Agents and Sessions** ([Agents](./wire-semantics.md#agents), [Sessions](./wire-semantics.md#sessions))
 
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
 - Omitted or null `compaction` keeps the Harness's native blocking compaction; the official default is background compaction.
-- Core rejects, with 400 naming the param: Session update `agent`; `review: auto_review` on Session create and update (`none` is accepted and responses omit `review`); `environment.environment_id`; `environment.container_size` (responses carry `container_size: null`); `desktop.enabled: true` (responses carry `desktop: {"enabled": false}`); a nonempty `network.blocked_domains`; and the input `agent.session.input.computer_use_approval_request_result` ([unsupported fields](./wire-semantics.md#unsupported-fields)).
-- Core answers 404 `unsupported_operation` on the Automations routes, `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` ([unsupported operations](./wire-semantics.md#unsupported-operations)).
+- Core rejects official fields and inputs it has no native home for with 400 naming the param ([unsupported fields](./wire-semantics.md#unsupported-fields)), and answers 404 `unsupported_operation` on the routes it does not run ([unsupported operations](./wire-semantics.md#unsupported-operations)).
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
 - Claude Code drops whitespace-only text blocks natively and sends `(no content)` for an all-blank message; Codex delivers whitespace-only text unchanged.
@@ -133,7 +131,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
 - MiniMax Code serves public functions as a native MCP server whose client fails a call after 120 s with no way to change it. After 120 s native reports the failure to the model, the call is withdrawn and the Turn continues.
-- Core rejects a Credential `auth` of type `environment_variable` with 400; Core injects a Credential only through an MCP server `credential_id`, never into a process environment ([Credentials](./vaults.md#credentials)).
 - Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
 - An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
@@ -187,7 +184,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Sessions**
 
 - The pinned SDK sends `spend_control` on Session create and update, but the pinned OpenAPI schema does not define it; Core rejects it as an unknown parameter.
-- Environment status `suspended` is never emitted.
 - Session deletion does not purge the stored history physically.
 - Stream lifetimes for `self_hosted`, hosted and no-input creation, and the creation-stream retry, are Core's own choices.
 

@@ -58,8 +58,7 @@ func TestVaultStatusUnionAndDuplicates(t *testing.T) {
 func TestVaultLimitClamp(t *testing.T) {
 	for _, path := range []string{"/v1/vaults", "/v1/vaults/vault-example/credentials"} {
 		for query, limit := range map[string]int{
-			"": 20, "limit=0": 1, "limit=-1": 1, "limit=-8": 1, "limit=3": 3, "limit=100": 100, "limit=101": 100,
-			"limit=9999999999999999999999999": 100, "limit=-9999999999999999999999999": 1,
+			"": 20, "limit=0": 1, "limit=3": 3, "limit=100": 100, "limit=101": 100,
 		} {
 			t.Run(path+"?"+query, func(t *testing.T) {
 				w := httptest.NewRecorder()
@@ -69,7 +68,7 @@ func TestVaultLimitClamp(t *testing.T) {
 				}
 			})
 		}
-		for _, query := range []string{"limit=abc", "limit=1.5", "limit=", "limit=null"} {
+		for _, query := range []string{"limit=abc", "limit=1.5", "limit=", "limit=null", "limit=-1"} {
 			t.Run(path+"?"+query, func(t *testing.T) {
 				w := httptest.NewRecorder()
 				if _, ok := readVaultPage(w, httptest.NewRequest(http.MethodGet, path+"?"+query, nil)); ok {

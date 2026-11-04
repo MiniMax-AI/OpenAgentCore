@@ -24,7 +24,7 @@ def verify_agents(client, other, invalid, expect_error):
             assert response.status_code == 201
             body, agent = response.http_response.json(), response.parse()
             assert set(body) == {"id", "object", "created_at", "updated_at", "metadata", "model", "name",
-                                 "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"}
+                                 "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "experimental"}
             assert body["object"] == "agent" and body["model"] == " caller-model "
             assert body["name"] is None and body["instructions"] is None and body["metadata"] == {}
             assert body["multi_agent"] == {"enabled": False, "max_concurrent_subagents": None}

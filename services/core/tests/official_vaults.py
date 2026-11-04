@@ -163,7 +163,18 @@ def verify_vault_update(client, other, expect_error):
     assert updated.metadata == {"team": "ops", "empty": ""} and updated.auth == created.auth
     rotated = credentials.update(created.id, vault_id=vault.id, auth={"type": "static_bearer", "token": "rotated-token"})
     assert rotated.metadata == updated.metadata and credentials.retrieve(created.id, vault_id=vault.id) == rotated
-    environment = {"type": "environment_variable", "name": "X", "value": "v"}
-    expect_error(BadRequestError, lambda: credentials.create(vault.id, name="Environment", auth=environment))
+    other_credential = credentials.create(vault.id, name="Other", auth=auth, metadata={"team": "ops", "tier": "b"})
+    assert {item.id for item in credentials.list(vault.id, extra_query={"metadata[team]": "ops"})} == {other_credential.id, created.id}
+    both = credentials.list(vault.id, extra_query={"metadata[team]": "ops", "metadata[tier]": "b"})
+    assert [item.id for item in both] == [other_credential.id]
+    assert list(credentials.list(vault.id, extra_query={"metadata[team]": "none"})) == []
+    environment = {"type": "environment_variable", "secret_name": "X", "secret_value": "v", "networking": {"type": "unrestricted"}}
+    rejected = expect_error(BadRequestError, lambda: credentials.create(vault.id, name="Environment", auth=environment))
+    assert rejected.body["param"] == "auth.type", rejected.body
     credentials.delete(created.id, vault_id=vault.id)
+    tagged = vaults.create(name="Tagged", metadata={"team": "filter-a", "tier": "x"})
+    vaults.create(name="Untagged", metadata={"team": "filter-b"})
+    assert [item.id for item in vaults.list(extra_query={"metadata[team]": "filter-a"})] == [tagged.id]
+    assert [item.id for item in vaults.list(extra_query={"metadata[team]": "filter-a", "metadata[tier]": "x"})] == [tagged.id]
+    assert list(vaults.list(extra_query={"metadata[team]": "filter-a", "metadata[tier]": "y"})) == []
     vaults.delete(vault.id)

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: c39a0323efd819af19d96e197279f51d804b7bb083e55096c66d28c4ba6711f1
+source_hash: 51679090ebed13f911a16986c9677bad3395bd2d5f280def1a944b24614b42bc
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -71,15 +71,13 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 将已删除的 Agent 用作游标时会返回 404；官方服务仍可从该游标继续分页。
 - 使用来自其他 Session 的 Turn 游标、与 Vault ID 相等的 Credential 游标，或不是 Skill ID 的 Skills 游标时，都会返回 404。
-- Vault 和 Credential 列表会按照固定版本 SDK 的描述钳制负数 `limit`；官方服务返回 400。
 
 **Agents 和 Sessions**（[Agents](wire-semantics.md#agents)、[Sessions](wire-semantics.md#sessions)）
 
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
 - 未指定或为 null 的 `compaction` 会保留 Harness 原生的阻塞式压缩；官方默认值为后台压缩。
-- Core 会以 400 拒绝并指出参数：Session 更新中的 `agent`；Session 创建和更新中的 `review: auto_review`（接受 `none`，响应省略 `review`）；`environment.environment_id`；`environment.container_size`（响应携带 `container_size: null`）；`desktop.enabled: true`（响应携带 `desktop: {"enabled": false}`）；非空的 `network.blocked_domains`；以及输入 `agent.session.input.computer_use_approval_request_result`（[不支持的字段](wire-semantics.md#unsupported-fields)）。
-- Core 对 Automations 路由、`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 返回 404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。
+- Core 以 400 拒绝并指出参数的方式处理其没有原生对应的官方字段和输入（[不支持的字段](wire-semantics.md#unsupported-fields)），并对其不运行的路由返回 404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。
 - Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
 - 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
 - Claude Code 在原生层丢弃仅含空白的文本块，全空白消息会发送 `(no content)`；Codex 原样交付仅含空白的文本。
@@ -136,7 +134,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
 - MiniMax Code 通过原生 MCP 服务器提供公共函数，其客户端会在 120 秒后使调用失败且无法更改。120 秒后原生向模型报告失败，该调用被撤回，Turn 继续。
-- Core 以 400 拒绝类型为 `environment_variable` 的 Credential `auth`：Core 只通过 MCP 服务器的 `credential_id` 注入 Credential，从不注入进程环境（[Credentials](vaults.md#credentials)）。
 - Vault 和 Credential 的状态仅在内部保存，默认值为 `active`；由于没有归档操作，未带过滤器的列表会同时包含两种状态。
 - `vault_ids` 中包含未知或属于其他账户的 Vault 时会返回 404 "Resource not found."；官方消息会指出该 ID。
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。
@@ -190,7 +187,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **Sessions**
 
 - 固定版本 SDK 在 Session 创建和更新中发送 `spend_control`，但固定的 OpenAPI 模式没有定义它；Core 将其作为未知参数拒绝。
-- Environment 状态 `suspended` 从不发出。
 - 删除 Session 不会从物理存储中清除已保存的历史记录。
 - 对于 `self_hosted`、hosted 和无输入创建的流生命周期，以及创建流重试机制，均由 Core 自行决定。
 

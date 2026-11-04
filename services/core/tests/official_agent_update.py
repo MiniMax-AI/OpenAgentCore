@@ -48,6 +48,14 @@ def main():
             k: v for k, v in updated.to_dict().items() if k != "updated_at"}
         assert sessions.retrieve(old.id) == old
         updated = touched
+        # Compaction and experimental settings: saved, returned, merged per member and cleared by null.
+        assert updated.experimental.time_awareness is False and updated.compaction is None
+        tuned = agents.create(model="tuned", compaction={"async": False}, experimental={"time_awareness": True})
+        assert tuned.compaction.async_ is False and tuned.experimental.time_awareness is True
+        assert agents.update(tuned.id, experimental={}).experimental.time_awareness is True
+        assert agents.update(tuned.id, experimental={"time_awareness": False}).experimental.time_awareness is False
+        cleared = agents.update(tuned.id, compaction=None)
+        assert cleared.compaction is None and "compaction" not in http.get(base + "/v1/agents/" + tuned.id, headers=headers).json()
         for body in ([], {"model": None}, {"model": 3}, {"name": "x" * 129},
                      {"metadata": {"bad": None}}, {"text": {"unexpected": True}},
                      {"metadata": {"replace": "no"}, "instructions": False},

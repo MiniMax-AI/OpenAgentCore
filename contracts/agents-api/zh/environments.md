@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 8a0e90c9e46d0282da75d1c931d0f4ea2cb7dad93351426e507913485281b186
+source_hash: b24a90ebd1c4e8edaf878798fdd1017fcc90b9bafd648739e8780926ea0e4a53
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -25,8 +25,6 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [模板](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [模板](#templates)。 |
 | [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`、`GET /agents/environments/{id}/files` | 请参阅 [Environment files](environment-files.md)。 |
 
-Session 和模板响应携带 `container_size: null` 与 `desktop: {"enabled": false}`。Core 以 400 拒绝 `environment_id`、非 null 的 `container_size`、`desktop.enabled: true` 和非空的 `network.blocked_domains`，并以该字段作为 param（[不支持的字段](wire-semantics.md#unsupported-fields)）。Environment 状态 `suspended` 从不发出。
-
 读取 Environment 时，Core 会在调用方的项目范围内与其实时所属的 Session 联查，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
 
 [Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) 与 [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) 的结构不同：
@@ -37,10 +35,10 @@ Session 和模板响应携带 `container_size: null` 与 `desktop: {"enabled": f
 
 | 投影 | 状态 |
 | --- | --- |
-| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`connected`、`disconnected`、`expired`、`failed` |
-| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | `pending`、`ready`、`connected`、`disconnected`、`failed`，并带可为 null 的 error |
+| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`ready`、`connected`、`disconnected`、`suspended`、`expired`、`failed` |
+| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | 相同的七种状态，并带可为 null 的 error |
 
-这两套词汇彼此独立；绝不要将其中一套转换为另一套。资源状态按下图变化，失败或过期的 Environment 不再改变：
+Core 只在事件中发出 `ready`，从不发出 `suspended`。资源状态按下图变化，失败或过期的 Environment 不再改变：
 
 ```mermaid
 stateDiagram-v2

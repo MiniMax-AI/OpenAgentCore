@@ -73,9 +73,9 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 	return result, err
 }
 
-// resolveAgentOptions stores compaction and experimental settings only when supplied.
-// An object without a value takes the official default: background compaction on
-// and time awareness off. Whether a Harness runs them is decided at Session admission.
+// resolveAgentOptions stores compaction only when supplied; an object without a value
+// takes the official default of background compaction. Experimental always carries its
+// official default, time awareness off. Whether a Harness runs them is decided at Session admission.
 func resolveAgentOptions(compaction, experimental json.RawMessage) (resolvedCompaction, resolvedExperimental json.RawMessage, err error) {
 	if !isNull(compaction) {
 		input := struct {
@@ -89,15 +89,15 @@ func resolveAgentOptions(compaction, experimental json.RawMessage) (resolvedComp
 			Async bool `json:"async"`
 		}{async})
 	}
+	input := struct {
+		TimeAwareness bool `json:"time_awareness"`
+	}{}
 	if !isNull(experimental) {
-		input := struct {
-			TimeAwareness bool `json:"time_awareness"`
-		}{}
 		if err = json.Unmarshal(experimental, &input); err != nil {
 			return nil, nil, &storedDataError{err}
 		}
-		resolvedExperimental, _ = json.Marshal(input)
 	}
+	resolvedExperimental, _ = json.Marshal(input)
 	return resolvedCompaction, resolvedExperimental, nil
 }
 

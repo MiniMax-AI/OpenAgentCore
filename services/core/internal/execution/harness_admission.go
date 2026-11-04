@@ -50,6 +50,9 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 			return admissionError(err)
 		}
 	}
+	if err := rejectUnsupportedAgentOptions(snapshot.Agent); err != nil {
+		return err
+	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return err
@@ -58,9 +61,6 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 		return err
 	}
 	if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
-		return err
-	}
-	if err := declaration.ValidateAgentOptions(agentOptions(snapshot.Agent, tools)); err != nil {
 		return err
 	}
 	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
@@ -113,8 +113,9 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 	return nil
 }
 
-// agentOptions reads the saved settings that need a declared native home.
-func agentOptions(agent v1.Agent, tools executionToolSet) harnessconfig.AgentOptions {
+// rejectUnsupportedAgentOptions refuses the official settings no Harness has a native home for.
+// A Harness gains one by declaring it together with its pass-through to the native side.
+func rejectUnsupportedAgentOptions(agent v1.Agent) error {
 	var compaction struct {
 		Async bool `json:"async"`
 	}
@@ -123,5 +124,20 @@ func agentOptions(agent v1.Agent, tools executionToolSet) harnessconfig.AgentOpt
 	}
 	_ = json.Unmarshal(agent.Compaction, &compaction)
 	_ = json.Unmarshal(agent.Experimental, &experimental)
-	return harnessconfig.AgentOptions{AsyncCompaction: compaction.Async, TimeAwareness: experimental.TimeAwareness, OptionalTools: tools.OptionalTools}
+	if compaction.Async {
+		return errors.New("compaction.async=true is not supported by this Harness.")
+	}
+	if experimental.TimeAwareness {
+		return errors.New("experimental.time_awareness=true is not supported by this Harness.")
+	}
+	for _, raw := range agent.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(raw, &tool)
+		if tool.Type == "automations" || tool.Type == "computer_use" {
+			return fmt.Errorf("The %s tool is not supported by this Harness.", tool.Type)
+		}
+	}
+	return nil
 }

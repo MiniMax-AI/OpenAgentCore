@@ -20,6 +20,7 @@ DELETE FROM vaults WHERE tenant_id = $1 AND id = $2 RETURNING id;
 SELECT * FROM vaults
 WHERE tenant_id = sqlc.arg(tenant_id)
   AND status = ANY(sqlc.arg(statuses)::text[])
+  AND (sqlc.narg(metadata)::jsonb IS NULL OR metadata @> sqlc.narg(metadata)::jsonb)
   AND (sqlc.narg(after_created)::timestamptz IS NULL
     OR (NOT sqlc.arg(ascending)::boolean AND (created_at, id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid))
     OR (sqlc.arg(ascending)::boolean AND (created_at, id) > (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid)))

@@ -25,7 +25,7 @@ func TestCredentialListScopeProjectionAndParameters(t *testing.T) {
 		{"?status=archived", 20, []string{"archived"}},
 		{"?status[]=active&status[]=archived", 20, []string{"active", "archived"}},
 		{"?status=active&status[]=archived", 20, []string{"active", "archived"}},
-		{"?limit=-3&tenant_id=foreign&unknown=1", 1, nil},
+		{"?limit=3&tenant_id=foreign&unknown=1", 3, nil},
 	} {
 		h, f, tenant := credentialHandler(t)
 		f.page = vaults.CredentialPage{Credentials: []vaults.Credential{f.credential}, NextCursor: f.credential.ID}

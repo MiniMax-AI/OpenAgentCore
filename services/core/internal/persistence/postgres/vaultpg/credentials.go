@@ -125,6 +125,11 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 			return err
 		}
 		params := sqlc.ListCredentialsParams{TenantID: tenant, VaultID: vault, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending, Statuses: statuses}
+		if len(query.Metadata) > 0 {
+			if params.Metadata, err = json.Marshal(query.Metadata); err != nil {
+				return err
+			}
+		}
 		if query.After != "" {
 			// A cursor that cannot name a Credential of this Vault follows the
 			// missing-cursor path.

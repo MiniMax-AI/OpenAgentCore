@@ -18,6 +18,8 @@ type PageQuery struct {
 	Ascending bool
 	// Statuses filters by status; empty selects every status.
 	Statuses []string
+	// Metadata keeps resources whose metadata holds every pair; empty keeps all.
+	Metadata map[string]string
 }
 
 // Validate checks the page size and statuses and returns the statuses to

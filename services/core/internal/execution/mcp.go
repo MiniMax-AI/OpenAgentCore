@@ -18,8 +18,6 @@ type executionToolSet struct {
 	// WebSearch and ProgrammaticToolCalling are set only when the Session declares the tool.
 	WebSearch               *proto.WebSearchControl
 	ProgrammaticToolCalling *bool
-	// OptionalTools lists declared automations and computer_use tools.
-	OptionalTools []string
 }
 
 func executionTools(raw []json.RawMessage) (executionToolSet, error) {
@@ -28,7 +26,6 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 	search := false
 	var webSearch *proto.WebSearchControl
 	var programmatic *bool
-	var optional []string
 	names := map[string]bool{}
 	for _, value := range raw {
 		var kind struct {
@@ -45,10 +42,6 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 				return executionToolSet{}, errors.New("invalid programmatic_tool_calling control")
 			}
 			programmatic = control.Enabled
-			continue
-		}
-		if kind.Type == "automations" || kind.Type == "computer_use" {
-			optional = append(optional, kind.Type)
 			continue
 		}
 		if kind.Type == "web_search" {
@@ -119,5 +112,5 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 		servers = append(servers, server)
 	}
 	resolved, err := functionTools(functions)
-	return executionToolSet{Functions: resolved, MCP: servers, Search: search, WebSearch: webSearch, ProgrammaticToolCalling: programmatic, OptionalTools: optional}, err
+	return executionToolSet{Functions: resolved, MCP: servers, Search: search, WebSearch: webSearch, ProgrammaticToolCalling: programmatic}, err
 }

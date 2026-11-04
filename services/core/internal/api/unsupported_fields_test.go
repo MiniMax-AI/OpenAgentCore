@@ -16,6 +16,13 @@ func TestUnsupportedOfficialFieldsAreRejectedByParam(t *testing.T) {
 		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","desktop":{"enabled":true}},"input":"hi"}`, "desktop.enabled"},
 		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","network":{"access":"enabled","blocked_domains":["a.example"]}},"input":"hi"}`, "network.blocked_domains"},
 		{"/v1/agents/environments/templates", `{"desktop":{"enabled":true}}`, "desktop.enabled"},
+		{"/v1/agents/environments/templates", `{"desktop":7}`, "desktop"},
+		{"/v1/agents/environments/templates", `{"desktop":{"enabled":"yes"}}`, "desktop.enabled"},
+		{"/v1/agents/environments/templates", `{"desktop":{}}`, "desktop.enabled"},
+		{"/v1/agents/environments/templates", `{"desktop":{"enabled":false,"x":1}}`, "desktop.x"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","environment_id":null},"input":"hi"}`, "environment_id"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","container_size":null},"input":"hi"}`, "container_size"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","desktop":{"enabled":"yes"}},"input":"hi"}`, "desktop.enabled"},
 		{"/v1/agents/sessions/s/events", `{"events":[{"type":"agent.session.input.computer_use_approval_request_result","request_id":"r","response":{"type":"browser_origin_access","decision":"approve"}}]}`, "events[0].type"},
 	} {
 		w := bodyGateRequest(h, test.path, "application/json", []byte(test.body))

@@ -121,6 +121,11 @@ func (s *Store) ListVaults(ctx context.Context, tenantID string, query vaults.Pa
 	var page vaults.VaultPage
 	err = s.read(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		params := sqlc.ListVaultsParams{TenantID: tenant, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending, Statuses: statuses}
+		if len(query.Metadata) > 0 {
+			if params.Metadata, err = json.Marshal(query.Metadata); err != nil {
+				return err
+			}
+		}
 		if query.After != "" {
 			// A cursor that cannot name a Vault follows the missing-cursor path.
 			after, err := getVault(ctx, q, tenant, pgunit.PathID(query.After))
