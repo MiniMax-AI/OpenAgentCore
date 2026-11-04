@@ -4,6 +4,9 @@ package api
 // Pinned request shapes; x_agents_core is checked by its own parser.
 var (
 	createAgentParams = shape{kind: objectValue, members: []member{
+		{"experimental", shape{kind: objectValue, members: []member{
+			{"time_awareness", shape{kind: booleanValue}},
+		}}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"name", shape{kind: stringValue, nullable: true}},
 		{"model", shape{kind: stringValue, required: true}},
@@ -20,9 +23,9 @@ var (
 			}, nullable: true}},
 			{"verbosity", shape{kind: enumValue, values: []string{"low", "medium", "high"}, nullable: true}},
 		}, nullable: true}},
-		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast"}, nullable: true}},
+		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast", "ultrafast"}, nullable: true}},
 		{"instructions", shape{kind: stringValue, nullable: true}},
-		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search"}, variants: map[string][]member{
+		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search", "computer_use", "automations"}, variants: map[string][]member{
 			"function": {
 				{"name", shape{kind: stringValue, required: true}},
 				{"description", shape{kind: stringValue, required: true}},
@@ -64,14 +67,24 @@ var (
 					{"timezone", shape{kind: stringValue, nullable: true}},
 				}, nullable: true}},
 			},
+			"computer_use": {
+				{"include_screenshots", shape{kind: booleanValue}},
+			},
+			"automations": {},
 		}}, nullable: true}},
 		{"multi_agent", shape{kind: objectValue, members: []member{
 			{"enabled", shape{kind: booleanValue, required: true}},
 			{"max_concurrent_subagents", shape{kind: integerValue, minimum: 1}},
+		}, nullable: true}},
+		{"compaction", shape{kind: objectValue, members: []member{
+			{"async", shape{kind: booleanValue, nullable: true}},
 		}, nullable: true}},
 		{"x_agents_core", shape{}},
 	}}
 	updateAgentParams = shape{kind: objectValue, members: []member{
+		{"experimental", shape{kind: objectValue, members: []member{
+			{"time_awareness", shape{kind: booleanValue}},
+		}}},
 		{"model", shape{kind: stringValue}},
 		{"reasoning", shape{kind: objectValue, members: []member{
 			{"effort", shape{kind: enumValue, values: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, nullable: true}},
@@ -86,15 +99,18 @@ var (
 			}, nullable: true}},
 			{"verbosity", shape{kind: enumValue, values: []string{"low", "medium", "high"}, nullable: true}},
 		}, nullable: true}},
-		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast"}, nullable: true}},
+		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast", "ultrafast"}, nullable: true}},
 		{"instructions", shape{kind: stringValue, nullable: true}},
 		{"multi_agent", shape{kind: objectValue, members: []member{
 			{"enabled", shape{kind: booleanValue, required: true}},
 			{"max_concurrent_subagents", shape{kind: integerValue, minimum: 1}},
 		}, nullable: true}},
+		{"compaction", shape{kind: objectValue, members: []member{
+			{"async", shape{kind: booleanValue, nullable: true}},
+		}, nullable: true}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"name", shape{kind: stringValue, nullable: true}},
-		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search"}, variants: map[string][]member{
+		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search", "computer_use", "automations"}, variants: map[string][]member{
 			"function": {
 				{"name", shape{kind: stringValue, required: true}},
 				{"description", shape{kind: stringValue, required: true}},
@@ -136,10 +152,17 @@ var (
 					{"timezone", shape{kind: stringValue, nullable: true}},
 				}, nullable: true}},
 			},
+			"computer_use": {
+				{"include_screenshots", shape{kind: booleanValue}},
+			},
+			"automations": {},
 		}}, nullable: true}},
 		{"x_agents_core", shape{}},
 	}}
 	sessionAgentConfigParam = shape{kind: objectValue, members: []member{
+		{"experimental", shape{kind: objectValue, members: []member{
+			{"time_awareness", shape{kind: booleanValue}},
+		}}},
 		{"model", shape{kind: stringValue}},
 		{"reasoning", shape{kind: objectValue, members: []member{
 			{"effort", shape{kind: enumValue, values: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, nullable: true}},
@@ -154,13 +177,16 @@ var (
 			}, nullable: true}},
 			{"verbosity", shape{kind: enumValue, values: []string{"low", "medium", "high"}, nullable: true}},
 		}, nullable: true}},
-		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast"}, nullable: true}},
+		{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast", "ultrafast"}, nullable: true}},
 		{"instructions", shape{kind: stringValue, nullable: true}},
 		{"multi_agent", shape{kind: objectValue, members: []member{
 			{"enabled", shape{kind: booleanValue, required: true}},
 			{"max_concurrent_subagents", shape{kind: integerValue, minimum: 1}},
 		}, nullable: true}},
-		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search"}, variants: map[string][]member{
+		{"compaction", shape{kind: objectValue, members: []member{
+			{"async", shape{kind: booleanValue, nullable: true}},
+		}, nullable: true}},
+		{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search", "computer_use", "automations"}, variants: map[string][]member{
 			"function": {
 				{"name", shape{kind: stringValue, required: true}},
 				{"description", shape{kind: stringValue, required: true}},
@@ -204,10 +230,15 @@ var (
 					{"timezone", shape{kind: stringValue, nullable: true}},
 				}, nullable: true}},
 			},
+			"computer_use": {
+				{"include_screenshots", shape{kind: booleanValue}},
+			},
+			"automations": {},
 		}}, nullable: true}},
 		{"x_agents_core", shape{}},
 	}}
 	createAgentSessionParams = shape{kind: objectValue, members: []member{
+		{"review", shape{kind: enumValue, values: []string{"none", "auto_review"}}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"agent", shape{kind: openObject}},
 		{"agent_id", shape{kind: stringValue}},
@@ -229,6 +260,63 @@ var (
 		{"x_agents_core", shape{}},
 	}}
 	updateAgentSessionParams = shape{kind: objectValue, members: []member{
+		{"review", shape{kind: enumValue, values: []string{"none", "auto_review"}}},
+		{"agent", shape{kind: objectValue, members: []member{
+			{"tools", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search", "computer_use", "automations"}, variants: map[string][]member{
+				"function": {
+					{"name", shape{kind: stringValue, required: true}},
+					{"description", shape{kind: stringValue, required: true}},
+					{"parameters", shape{kind: mapValue, required: true}},
+					{"defer_loading", shape{kind: booleanValue}},
+				},
+				"tool_search": {},
+				"programmatic_tool_calling": {
+					{"enabled", shape{kind: booleanValue}},
+				},
+				"mcp": {
+					{"server_label", shape{kind: stringValue, required: true}},
+					{"credential_id", shape{kind: stringValue, nullable: true}},
+					{"transport", shape{kind: unionValue, values: []string{"http", "stdio"}, variants: map[string][]member{
+						"http": {
+							{"server_url", shape{kind: stringValue, required: true}},
+							{"authorization", shape{kind: stringValue, nullable: true}},
+							{"headers", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+						},
+						"stdio": {
+							{"command", shape{kind: stringValue, required: true}},
+							{"args", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+							{"cwd", shape{kind: stringValue, required: true}},
+							{"env", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+							{"env_vars", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+						},
+					}, required: true}},
+					{"request_metadata", shape{kind: mapValue, nullable: true}},
+					{"allowed_tools", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+					{"required", shape{kind: booleanValue}},
+					{"connection_origin", shape{kind: enumValue, values: []string{"service", "environment"}, nullable: true}},
+				},
+				"web_search": {
+					{"mode", shape{kind: enumValue, values: []string{"disabled", "cached", "live"}, nullable: true}},
+					{"context_size", shape{kind: enumValue, values: []string{"low", "medium", "high"}, nullable: true}},
+					{"allowed_domains", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+					{"location", shape{kind: objectValue, members: []member{
+						{"country", shape{kind: stringValue, nullable: true}},
+						{"region", shape{kind: stringValue, nullable: true}},
+						{"city", shape{kind: stringValue, nullable: true}},
+						{"timezone", shape{kind: stringValue, nullable: true}},
+					}, nullable: true}},
+				},
+				"computer_use": {
+					{"include_screenshots", shape{kind: booleanValue}},
+				},
+				"automations": {},
+			}}, nullable: true}},
+			{"model", shape{kind: stringValue}},
+			{"reasoning", shape{kind: objectValue, members: []member{
+				{"effort", shape{kind: enumValue, values: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, nullable: true}},
+			}}},
+			{"service_tier", shape{kind: enumValue, values: []string{"auto", "default", "flex", "priority", "fast", "ultrafast"}, nullable: true}},
+		}}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 	}}
 	createVaultParams = shape{kind: objectValue, members: []member{
@@ -237,7 +325,7 @@ var (
 	}}
 	createVaultCredentialParams = shape{kind: objectValue, members: []member{
 		{"name", shape{kind: stringValue, required: true}},
-		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer"}, variants: map[string][]member{
+		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer", "environment_variable"}, variants: map[string][]member{
 			"mcp_oauth": {
 				{"mcp_server_url", shape{kind: stringValue, required: true}},
 				{"access_token", shape{kind: stringValue, required: true}},
@@ -263,10 +351,21 @@ var (
 				{"mcp_server_url", shape{kind: stringValue, required: true}},
 				{"token", shape{kind: stringValue, required: true}},
 			},
+			"environment_variable": {
+				{"secret_name", shape{kind: stringValue, required: true}},
+				{"secret_value", shape{kind: stringValue, required: true}},
+				{"networking", shape{kind: unionValue, values: []string{"unrestricted", "limited"}, variants: map[string][]member{
+					"unrestricted": {},
+					"limited": {
+						{"allowed_hosts", shape{kind: arrayValue, items: &shape{kind: stringValue}, required: true}},
+					},
+				}, required: true}},
+			},
 		}, required: true}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
 	}}
 	rotateVaultCredentialParams = shape{kind: objectValue, members: []member{
-		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer"}, variants: map[string][]member{
+		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer", "environment_variable"}, variants: map[string][]member{
 			"mcp_oauth": {
 				{"access_token", shape{kind: stringValue, nullable: true}},
 				{"expires_at", shape{kind: stringValue, nullable: true}},
@@ -286,7 +385,11 @@ var (
 			"static_bearer": {
 				{"token", shape{kind: stringValue, required: true}},
 			},
-		}, required: true}},
+			"environment_variable": {
+				{"secret_value", shape{kind: stringValue, required: true}},
+			},
+		}}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
 	}}
 	createEnvironmentTemplateParams = shape{kind: objectValue, members: []member{
 		{"packages", shape{kind: objectValue, members: []member{
@@ -299,6 +402,9 @@ var (
 			{"cwd", shape{kind: stringValue, nullable: true}},
 		}}, nullable: true}},
 		{"network", shape{kind: openObject, nullable: true}},
+		{"desktop", shape{kind: objectValue, members: []member{
+			{"enabled", shape{kind: booleanValue, required: true}},
+		}, nullable: true}},
 		{"env", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"capability_directories", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"skills", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"skill_reference", "inline"}, variants: map[string][]member{
@@ -353,6 +459,9 @@ var (
 			{"cwd", shape{kind: stringValue, nullable: true}},
 		}}, nullable: true}},
 		{"network", shape{kind: openObject, nullable: true}},
+		{"desktop", shape{kind: objectValue, members: []member{
+			{"enabled", shape{kind: booleanValue, required: true}},
+		}, nullable: true}},
 		{"env", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"capability_directories", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
 		{"skills", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"skill_reference", "inline"}, variants: map[string][]member{
@@ -395,7 +504,23 @@ var (
 		}}, nullable: true}},
 	}}
 	createSessionEventsParams = shape{kind: objectValue, members: []member{
-		{"events", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"agent.session.input.message", "agent.session.input.cancel", "agent.session.input.tool_result"}, variants: map[string][]member{
+		{"events", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"agent.session.input.computer_use_approval_request_result", "agent.session.input.message", "agent.session.input.cancel", "agent.session.input.tool_result"}, variants: map[string][]member{
+			"agent.session.input.computer_use_approval_request_result": {
+				{"request_id", shape{kind: stringValue, required: true}},
+				{"response", shape{kind: unionValue, values: []string{"browser_authentication", "browser_origin_access"}, variants: map[string][]member{
+					"browser_authentication": {
+						{"action", shape{kind: enumValue, values: []string{"submit", "cancel"}, required: true}},
+						{"fields", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
+							{"field_id", shape{kind: stringValue, required: true}},
+							{"value", shape{kind: stringValue, required: true}},
+						}}}},
+						{"selected_option", shape{kind: stringValue, nullable: true}},
+					},
+					"browser_origin_access": {
+						{"decision", shape{kind: enumValue, values: []string{"approve", "deny", "cancel"}, required: true}},
+					},
+				}, required: true}},
+			},
 			"agent.session.input.message": {
 				{"input", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
 					{"type", shape{kind: enumValue, values: []string{"message"}}},

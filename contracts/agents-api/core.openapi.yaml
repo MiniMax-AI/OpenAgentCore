@@ -2086,6 +2086,10 @@ definitions:
       - ManagedArchiveReleased
   v1.Agent:
     properties:
+      compaction:
+        type: object
+      experimental:
+        type: object
       id:
         type: string
       instructions:
@@ -2107,6 +2111,7 @@ definitions:
           - flex
           - priority
           - fast
+          - ultrafast
         type: string
       text:
         $ref: '#/definitions/v1.TextConfig'
@@ -2161,6 +2166,10 @@ definitions:
         type: integer
       id:
         type: string
+      metadata:
+        additionalProperties:
+          type: string
+        type: object
       name:
         type: string
       object:
@@ -2175,6 +2184,7 @@ definitions:
       - auth
       - created_at
       - id
+      - metadata
       - name
       - object
       - updated_at
@@ -2187,17 +2197,21 @@ definitions:
         x-nullable: true
       mcp_server_url:
         type: string
+      networking:
+        type: object
       refresh:
         allOf:
           - $ref: '#/definitions/v1.OAuthCredentialRefresh'
         x-nullable: true
+      secret_name:
+        type: string
       type:
         enum:
           - mcp_oauth
           - static_bearer
+          - environment_variable
         type: string
     required:
-      - mcp_server_url
       - type
     type: object
   v1.CredentialDeleted:
@@ -2298,6 +2312,8 @@ definitions:
         type: array
       created_at:
         type: integer
+      desktop:
+        type: object
       files:
         items:
           type: object
@@ -2328,6 +2344,7 @@ definitions:
     required:
       - capability_directories
       - created_at
+      - desktop
       - files
       - id
       - name
@@ -2504,6 +2521,12 @@ definitions:
         items:
           type: string
         type: array
+      request:
+        type: object
+      request_id:
+        type: string
+      response:
+        type: object
       role:
         enum:
           - user
@@ -2525,6 +2548,9 @@ definitions:
         items:
           $ref: '#/definitions/v1.SummaryText'
         type: array
+      title:
+        type: string
+        x-nullable: true
       turn_id:
         type: string
       type:
@@ -2535,6 +2561,9 @@ definitions:
           - function_call_output
           - agent_message
           - mcp_call
+          - computer_use_call
+          - computer_use_approval_request
+          - computer_use_approval_request_result
           - web_search_call
           - command_execution
           - create_subagent_call
@@ -2735,10 +2764,15 @@ definitions:
         type: string
       name:
         type: string
+      request:
+        type: object
+      request_id:
+        type: string
       turn_id:
         type: string
       type:
         enum:
+          - computer_use_approval_request
           - function_call
           - environment_connection
         type: string
@@ -3171,8 +3205,12 @@ definitions:
     type: object
   v1.SavedAgent:
     properties:
+      compaction:
+        type: object
       created_at:
         type: integer
+      experimental:
+        type: object
       id:
         type: string
       instructions:
@@ -3202,6 +3240,7 @@ definitions:
           - flex
           - priority
           - fast
+          - ultrafast
         type: string
       text:
         $ref: '#/definitions/v1.TextConfig'
@@ -3293,6 +3332,11 @@ definitions:
         items:
           $ref: '#/definitions/v1.RequiredAction'
         type: array
+      review:
+        enum:
+          - none
+          - auto_review
+        type: string
       status:
         enum:
           - idle
@@ -3420,6 +3464,15 @@ definitions:
         items:
           type: string
         type: array
+      container_size:
+        enum:
+          - small
+          - medium
+          - large
+        type: string
+        x-nullable: true
+      desktop:
+        type: object
       files:
         items:
           type: object
@@ -3646,6 +3699,7 @@ definitions:
     properties:
       bytes:
         type: integer
+        x-nullable: true
       created_at:
         type: integer
       expires_at:
@@ -3839,9 +3893,16 @@ definitions:
           - context_length_exceeded
           - session_budget_exceeded
           - usage_limit_exceeded
+          - project_spend_limit_exceeded
+          - organization_spend_limit_exceeded
+          - organization_usage_limit_exceeded
+          - billing_not_active
+          - credit_balance_exhausted
           - rate_limit_exceeded
+          - flex_unavailable
           - server_overloaded
           - cyber_policy
+          - misalignment_policy_violation
           - connection_failed
           - server_error
           - authentication_error

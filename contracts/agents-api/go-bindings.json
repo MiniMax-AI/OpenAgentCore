@@ -52,6 +52,7 @@
   "CredentialAuth": {
     "sources": ["#/components/schemas/VaultCredentialAuthResource"],
     "fields": {
+      "mcp_server_url": {"type": "string", "omit": false},
       "expires_at": {"omit": false},
       "refresh": {"type": "*OAuthCredentialRefresh", "omit": false}
     }
@@ -181,7 +182,7 @@
     }
   },
   "InputTokenDetails": {
-    "sources": ["#/components/schemas/InputTokensDetailsResource"]
+    "sources": ["#/components/schemas/InputTokensDetailsResource-2"]
   },
   "Item": {
     "sources": ["#/components/schemas/SessionTurnItemResource"],
@@ -275,7 +276,7 @@
     "sources": ["#/components/schemas/RotateMcpOauthTokenEndpointAuthParam"]
   },
   "OutputTokenDetails": {
-    "sources": ["#/components/schemas/OutputTokensDetailsResource"]
+    "sources": ["#/components/schemas/OutputTokensDetailsResource-2"]
   },
   "Reasoning": {
     "sources": ["#/components/schemas/ReasoningParam"]

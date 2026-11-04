@@ -23,9 +23,11 @@ type Agent struct {
 	MultiAgent   MultiAgentConfig  `json:"multi_agent" binding:"required"`
 	Name         *string           `json:"name" binding:"required" extensions:"x-nullable"`
 	Reasoning    Reasoning         `json:"reasoning" binding:"required"`
-	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast"`
+	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Text         TextConfig        `json:"text" binding:"required"`
 	Tools        []json.RawMessage `json:"tools" binding:"required" swaggertype:"array,object"`
+	Compaction   json.RawMessage   `json:"compaction,omitempty" swaggertype:"object"`
+	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
 }
 
 // AgentContent projects AgentContentResource.
@@ -61,9 +63,11 @@ type CreateAgentRequest struct {
 	Metadata     map[string]*string   `json:"metadata,omitempty" extensions:"x-nullable"`
 	MultiAgent   json.RawMessage      `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Reasoning    *Reasoning           `json:"reasoning,omitempty" extensions:"x-nullable"`
-	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
+	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Text         *TextConfigInput     `json:"text,omitempty" extensions:"x-nullable"`
 	Tools        []json.RawMessage    `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	Experimental json.RawMessage      `json:"experimental,omitempty" swaggertype:"object"`
+	Compaction   json.RawMessage      `json:"compaction,omitempty" extensions:"x-nullable" swaggertype:"object"`
 }
 
 // CreateSessionRequest projects CreateAgentSessionParams.
@@ -76,6 +80,7 @@ type CreateSessionRequest struct {
 	Metadata    map[string]string      `json:"metadata,omitempty" extensions:"x-nullable"`
 	Stream      bool                   `json:"stream,omitempty"`
 	VaultIDs    []string               `json:"vault_ids,omitempty" extensions:"x-nullable"`
+	Review      *string                `json:"review,omitempty" enums:"none,auto_review"`
 }
 
 // CreateSubagentCallItem projects CreateSubagentCallItemResource.
@@ -92,40 +97,47 @@ type CreateSubagentCallItem struct {
 
 // Credential projects VaultCredentialResource.
 type Credential struct {
-	ID        string         `json:"id" binding:"required"`
-	VaultID   string         `json:"vault_id" binding:"required"`
-	Name      string         `json:"name" binding:"required"`
-	Object    string         `json:"object" binding:"required" enums:"vault.credential"`
-	Auth      CredentialAuth `json:"auth" binding:"required"`
-	CreatedAt int64          `json:"created_at" binding:"required"`
-	UpdatedAt int64          `json:"updated_at" binding:"required"`
+	ID        string            `json:"id" binding:"required"`
+	VaultID   string            `json:"vault_id" binding:"required"`
+	Name      string            `json:"name" binding:"required"`
+	Object    string            `json:"object" binding:"required" enums:"vault.credential"`
+	Auth      CredentialAuth    `json:"auth" binding:"required"`
+	CreatedAt int64             `json:"created_at" binding:"required"`
+	UpdatedAt int64             `json:"updated_at" binding:"required"`
+	Metadata  map[string]string `json:"metadata" binding:"required"`
 }
 
 // CredentialAuth projects VaultCredentialAuthResource.
 type CredentialAuth struct {
-	Type         string                  `json:"type" binding:"required" enums:"mcp_oauth,static_bearer"`
-	MCPServerURL string                  `json:"mcp_server_url" binding:"required"`
+	Type         string                  `json:"type" binding:"required" enums:"mcp_oauth,static_bearer,environment_variable"`
+	MCPServerURL string                  `json:"mcp_server_url"`
 	ExpiresAt    *string                 `json:"expires_at" extensions:"x-nullable"`
 	Refresh      *OAuthCredentialRefresh `json:"refresh" extensions:"x-nullable"`
+	SecretName   *string                 `json:"secret_name,omitempty"`
+	Networking   json.RawMessage         `json:"networking,omitempty" swaggertype:"object"`
 }
 
 // CredentialAuthInput projects CreateVaultCredentialAuthParam.
 type CredentialAuthInput struct {
-	Type         string                       `json:"type" binding:"required" enums:"mcp_oauth,static_bearer"`
-	MCPServerURL *string                      `json:"mcp_server_url" binding:"required"`
+	Type         string                       `json:"type" binding:"required" enums:"mcp_oauth,static_bearer,environment_variable"`
+	MCPServerURL *string                      `json:"mcp_server_url,omitempty"`
 	Token        *string                      `json:"token,omitempty"`
 	AccessToken  *string                      `json:"access_token,omitempty"`
 	ExpiresAt    *string                      `json:"expires_at,omitempty" extensions:"x-nullable"`
 	Refresh      *OAuthCredentialRefreshInput `json:"refresh,omitempty" extensions:"x-nullable"`
+	SecretName   *string                      `json:"secret_name,omitempty"`
+	SecretValue  *string                      `json:"secret_value,omitempty"`
+	Networking   json.RawMessage              `json:"networking,omitempty" swaggertype:"object"`
 }
 
 // CredentialAuthReplacement projects RotateVaultCredentialAuthParam.
 type CredentialAuthReplacement struct {
-	Type        string                             `json:"type" binding:"required" enums:"mcp_oauth,static_bearer"`
+	Type        string                             `json:"type" binding:"required" enums:"mcp_oauth,static_bearer,environment_variable"`
 	Token       *string                            `json:"token,omitempty"`
 	AccessToken *string                            `json:"access_token,omitempty" extensions:"x-nullable"`
 	ExpiresAt   json.RawMessage                    `json:"expires_at,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Refresh     *OAuthCredentialRefreshReplacement `json:"refresh,omitempty" extensions:"x-nullable"`
+	SecretValue *string                            `json:"secret_value,omitempty"`
 }
 
 // CredentialDeleted projects DeletedVaultCredentialResource.
@@ -157,6 +169,9 @@ type Environment struct {
 	WorkspaceDirectory    string                   `json:"workspace_directory,omitempty"`
 	CapabilityDirectories []string                 `json:"capability_directories,omitempty" extensions:"x-nullable"`
 	Network               *EnvironmentNetworkInput `json:"network,omitempty" extensions:"x-nullable"`
+	Desktop               json.RawMessage          `json:"desktop,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	EnvironmentID         *string                  `json:"environment_id,omitempty"`
+	ContainerSize         *string                  `json:"container_size,omitempty" enums:"small,medium,large"`
 }
 
 // EnvironmentConnectionAction projects SessionRequiredActionResourceEnvironmentConnection.
@@ -194,7 +209,7 @@ type EnvironmentInfo struct {
 	ID      string            `json:"id" binding:"required"`
 	Object  string            `json:"object" binding:"required" enums:"agent.environment"`
 	Type    string            `json:"type" binding:"required" enums:"openai_hosted,self_hosted"`
-	Status  string            `json:"status" binding:"required" enums:"pending,connected,disconnected,expired,failed"`
+	Status  string            `json:"status" binding:"required" enums:"pending,ready,connected,disconnected,suspended,expired,failed"`
 	Files   []json.RawMessage `json:"files" binding:"required" swaggertype:"array,object"`
 	Plugins []json.RawMessage `json:"plugins" binding:"required" swaggertype:"array,object"`
 	Skills  []json.RawMessage `json:"skills" binding:"required" swaggertype:"array,object"`
@@ -210,6 +225,7 @@ type EnvironmentNetwork struct {
 type EnvironmentNetworkInput struct {
 	Access         string   `json:"access" binding:"required" enums:"enabled,disabled,restricted"`
 	AllowedDomains []string `json:"allowed_domains,omitempty" extensions:"x-nullable"`
+	BlockedDomains []string `json:"blocked_domains,omitempty" extensions:"x-nullable"`
 }
 
 // EnvironmentPackages projects EnvironmentPackagesParam.
@@ -238,6 +254,7 @@ type EnvironmentTemplate struct {
 	Files                 []json.RawMessage           `json:"files" binding:"required" swaggertype:"array,object"`
 	Plugins               []json.RawMessage           `json:"plugins" binding:"required" swaggertype:"array,object"`
 	Skills                []json.RawMessage           `json:"skills" binding:"required" swaggertype:"array,object"`
+	Desktop               json.RawMessage             `json:"desktop" binding:"required" swaggertype:"object"`
 }
 
 // EnvironmentTemplateDeleted projects DeletedEnvironmentTemplateResource.
@@ -286,9 +303,11 @@ type InlineAgent struct {
 	Instructions *string           `json:"instructions,omitempty" extensions:"x-nullable"`
 	MultiAgent   json.RawMessage   `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Reasoning    *Reasoning        `json:"reasoning,omitempty" extensions:"x-nullable"`
-	ServiceTier  *string           `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
+	ServiceTier  *string           `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Text         *TextConfigInput  `json:"text,omitempty" extensions:"x-nullable"`
 	Tools        []json.RawMessage `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
+	Compaction   json.RawMessage   `json:"compaction,omitempty" extensions:"x-nullable" swaggertype:"object"`
 }
 
 // InputContent projects InputContentParam.
@@ -305,7 +324,7 @@ type InputMessage struct {
 	Content []InputContent `json:"content" binding:"required"`
 }
 
-// InputTokenDetails projects InputTokensDetailsResource.
+// InputTokenDetails projects InputTokensDetailsResource-2.
 type InputTokenDetails struct {
 	CachedTokens int64 `json:"cached_tokens" binding:"required"`
 }
@@ -314,7 +333,7 @@ type InputTokenDetails struct {
 type Item struct {
 	ID                string           `json:"id" binding:"required" extensions:"x-nullable"`
 	TurnID            string           `json:"turn_id" binding:"required"`
-	Type              string           `json:"type" binding:"required" enums:"message,reasoning,function_call,function_call_output,agent_message,mcp_call,web_search_call,command_execution,create_subagent_call,send_subagent_input_call,resume_subagent_call,wait_for_subagents_call,interrupt_subagent_call,close_subagent_call"`
+	Type              string           `json:"type" binding:"required" enums:"message,reasoning,function_call,function_call_output,agent_message,mcp_call,computer_use_call,computer_use_approval_request,computer_use_approval_request_result,web_search_call,command_execution,create_subagent_call,send_subagent_input_call,resume_subagent_call,wait_for_subagents_call,interrupt_subagent_call,close_subagent_call"`
 	Status            string           `json:"status" extensions:"x-nullable" enums:"in_progress,completed,incomplete,failed"`
 	Role              string           `json:"role,omitempty" enums:"user,assistant"`
 	Phase             string           `json:"phase,omitempty" extensions:"x-nullable" enums:"commentary,final_answer"`
@@ -337,6 +356,10 @@ type Item struct {
 	Model             *string          `json:"model,omitempty" extensions:"x-nullable"`
 	ReasoningEffort   *string          `json:"reasoning_effort,omitempty" extensions:"x-nullable"`
 	Summary           []SummaryText    `json:"summary,omitempty"`
+	Title             *string          `json:"title,omitempty" extensions:"x-nullable"`
+	RequestID         *string          `json:"request_id,omitempty"`
+	Request           json.RawMessage  `json:"request,omitempty" swaggertype:"object"`
+	Response          json.RawMessage  `json:"response,omitempty" swaggertype:"object"`
 }
 
 // ItemContent projects MessageContentResource, EncryptedContentResource, SummaryTextResource.
@@ -471,7 +494,7 @@ type OAuthEndpointAuthReplacement struct {
 	ClientSecret *string `json:"client_secret,omitempty" extensions:"x-nullable"`
 }
 
-// OutputTokenDetails projects OutputTokensDetailsResource.
+// OutputTokenDetails projects OutputTokensDetailsResource-2.
 type OutputTokenDetails struct {
 	ReasoningTokens int64 `json:"reasoning_tokens" binding:"required"`
 }
@@ -493,22 +516,26 @@ type ReasoningItem struct {
 
 // RequiredAction projects SessionRequiredActionResource.
 type RequiredAction struct {
-	Type          string `json:"type" binding:"required" enums:"function_call,environment_connection"`
-	Arguments     any    `json:"arguments,omitempty"`
-	CallID        string `json:"call_id,omitempty"`
-	Name          string `json:"name,omitempty"`
-	TurnID        string `json:"turn_id,omitempty"`
-	EnvironmentID string `json:"environment_id,omitempty"`
+	Type          string          `json:"type" binding:"required" enums:"computer_use_approval_request,function_call,environment_connection"`
+	Arguments     any             `json:"arguments,omitempty"`
+	CallID        string          `json:"call_id,omitempty"`
+	Name          string          `json:"name,omitempty"`
+	TurnID        string          `json:"turn_id,omitempty"`
+	EnvironmentID string          `json:"environment_id,omitempty"`
+	RequestID     *string         `json:"request_id,omitempty"`
+	Request       json.RawMessage `json:"request,omitempty" swaggertype:"object"`
 }
 
 // SavedAgent projects AgentResource.
 type SavedAgent struct {
 	SavedAgentConfiguration
-	ID        string            `json:"id" binding:"required"`
-	Object    string            `json:"object" binding:"required" enums:"agent"`
-	Metadata  map[string]string `json:"metadata" binding:"required"`
-	CreatedAt int64             `json:"created_at" binding:"required"`
-	UpdatedAt int64             `json:"updated_at" binding:"required"`
+	ID           string            `json:"id" binding:"required"`
+	Object       string            `json:"object" binding:"required" enums:"agent"`
+	Metadata     map[string]string `json:"metadata" binding:"required"`
+	CreatedAt    int64             `json:"created_at" binding:"required"`
+	UpdatedAt    int64             `json:"updated_at" binding:"required"`
+	Compaction   json.RawMessage   `json:"compaction,omitempty" swaggertype:"object"`
+	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
 }
 
 // SavedAgentConfiguration projects AgentResource.
@@ -519,9 +546,11 @@ type SavedAgentConfiguration struct {
 	Instructions *string           `json:"instructions" binding:"required" extensions:"x-nullable"`
 	MultiAgent   MultiAgentConfig  `json:"multi_agent" binding:"required"`
 	Reasoning    Reasoning         `json:"reasoning" binding:"required"`
-	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast"`
+	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Text         TextConfig        `json:"text" binding:"required"`
 	Tools        []json.RawMessage `json:"tools" binding:"required" swaggertype:"array,object"`
+	Compaction   json.RawMessage   `json:"compaction,omitempty" swaggertype:"object"`
+	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
 }
 
 // SavedAgentList projects AgentListResource.
@@ -559,6 +588,7 @@ type Session struct {
 	Status          string             `json:"status" binding:"required" enums:"idle,in_progress,requires_action,failed"`
 	Usage           *TokenUsage        `json:"usage" binding:"required" extensions:"x-nullable"`
 	VaultIDs        []string           `json:"vault_ids" binding:"required"`
+	Review          *string            `json:"review,omitempty" enums:"none,auto_review"`
 }
 
 // SessionArtifact projects SessionArtifactResource.
@@ -608,48 +638,54 @@ type SessionEnvironment struct {
 	Files                 *[]json.RawMessage           `json:"files,omitempty" swaggertype:"array,object"`
 	Plugins               *[]json.RawMessage           `json:"plugins,omitempty" swaggertype:"array,object"`
 	Skills                *[]json.RawMessage           `json:"skills,omitempty" swaggertype:"array,object"`
+	ContainerSize         *string                      `json:"container_size,omitempty" extensions:"x-nullable" enums:"small,medium,large"`
+	Desktop               json.RawMessage              `json:"desktop,omitempty" swaggertype:"object"`
 }
 
 // SessionEnvironmentState projects SessionEnvironmentStateResource.
 type SessionEnvironmentState struct {
 	ID     string       `json:"id" binding:"required"`
 	Type   string       `json:"type" binding:"required"`
-	Status string       `json:"status" binding:"required" enums:"pending,ready,connected,disconnected,failed"`
+	Status string       `json:"status" binding:"required" enums:"pending,ready,connected,disconnected,suspended,expired,failed"`
 	Error  *StreamError `json:"error" binding:"required" extensions:"x-nullable"`
 }
 
 // SessionEvent projects SessionEvent.
 type SessionEvent struct {
-	Subagent     *Subagent                `json:"subagent,omitempty"`
-	Type         string                   `json:"type" binding:"required" enums:"error,agent.session.environment.ready,agent.output.command_execution_output.delta,agent.session.created,agent.session.turn.created,agent.session.turn.in_progress,agent.session.turn.completed,agent.session.turn.failed,agent.session.turn.cancelled,agent.session.turn.item.added,agent.session.idle,agent.session.in_progress,agent.session.requires_action,agent.session.failed,agent.session.environment.pending,agent.session.environment.connected,agent.session.environment.disconnected,agent.session.environment.failed,agent.session.subagent.created,agent.session.subagent.active,agent.session.subagent.closed,agent.session.turn.item.done,agent.session.turn.content_part.added,agent.session.turn.content_part.done,agent.session.turn.output_text.delta,agent.session.turn.output_text.done,agent.session.turn.reasoning_summary_part.added,agent.session.turn.reasoning_summary_part.done,agent.session.turn.reasoning_summary_text.delta,agent.session.turn.reasoning_summary_text.done"`
-	EventID      string                   `json:"event_id" binding:"required"`
-	SessionID    string                   `json:"session_id,omitempty"`
-	TurnID       string                   `json:"turn_id,omitempty" extensions:"x-nullable"`
-	Session      *Session                 `json:"session,omitempty"`
-	Turn         *Turn                    `json:"turn,omitempty"`
-	Item         *Item                    `json:"item,omitempty"`
-	ItemID       string                   `json:"item_id,omitempty"`
-	OutputIndex  *int32                   `json:"output_index,omitempty" extensions:"x-nullable"`
-	ContentIndex *int                     `json:"content_index,omitempty"`
-	Part         *ItemContent             `json:"part,omitempty"`
-	Delta        *string                  `json:"delta,omitempty"`
-	Text         *string                  `json:"text,omitempty"`
-	Error        *StreamError             `json:"error,omitempty"`
-	Environment  *SessionEnvironmentState `json:"environment,omitempty"`
-	Usage        *TokenUsage              `json:"usage,omitempty" extensions:"x-nullable"`
-	SummaryIndex *int64                   `json:"summary_index,omitempty"`
-	Status       *string                  `json:"status,omitempty" extensions:"x-nullable" enums:"incomplete"`
+	Subagent      *Subagent                `json:"subagent,omitempty"`
+	Type          string                   `json:"type" binding:"required" enums:"error,agent.session.environment.ready,agent.session.environment.suspended,agent.session.environment.expired,agent.session.environment.reset,agent.output.command_execution_output.delta,agent.session.created,agent.session.turn.created,agent.session.turn.in_progress,agent.session.turn.completed,agent.session.turn.failed,agent.session.turn.cancelled,agent.session.turn.item.added,agent.session.idle,agent.session.in_progress,agent.session.requires_action,agent.session.failed,agent.session.environment.pending,agent.session.environment.connected,agent.session.environment.disconnected,agent.session.environment.failed,agent.session.subagent.created,agent.session.subagent.active,agent.session.subagent.closed,agent.session.turn.item.done,agent.session.turn.content_part.added,agent.session.turn.content_part.done,agent.session.turn.output_text.delta,agent.session.turn.output_text.done,agent.session.turn.reasoning_summary_part.added,agent.session.turn.reasoning_summary_part.done,agent.session.turn.reasoning_summary_text.delta,agent.session.turn.reasoning_summary_text.done"`
+	EventID       string                   `json:"event_id" binding:"required"`
+	SessionID     string                   `json:"session_id,omitempty"`
+	TurnID        string                   `json:"turn_id,omitempty" extensions:"x-nullable"`
+	Session       *Session                 `json:"session,omitempty"`
+	Turn          *Turn                    `json:"turn,omitempty"`
+	Item          *Item                    `json:"item,omitempty"`
+	ItemID        string                   `json:"item_id,omitempty"`
+	OutputIndex   *int32                   `json:"output_index,omitempty" extensions:"x-nullable"`
+	ContentIndex  *int                     `json:"content_index,omitempty"`
+	Part          *ItemContent             `json:"part,omitempty"`
+	Delta         *string                  `json:"delta,omitempty"`
+	Text          *string                  `json:"text,omitempty"`
+	Error         *StreamError             `json:"error,omitempty"`
+	Environment   *SessionEnvironmentState `json:"environment,omitempty"`
+	Usage         *TokenUsage              `json:"usage,omitempty" extensions:"x-nullable"`
+	EnvironmentID *string                  `json:"environment_id,omitempty"`
+	ResetCount    *int64                   `json:"reset_count,omitempty"`
+	SummaryIndex  *int64                   `json:"summary_index,omitempty"`
+	Status        *string                  `json:"status,omitempty" extensions:"x-nullable" enums:"incomplete"`
 }
 
 // SessionInput projects SessionInputParam.
 type SessionInput struct {
-	Type    string          `json:"type" binding:"required" enums:"agent.session.input.message,agent.session.input.cancel,agent.session.input.tool_result"`
-	Input   []InputMessage  `json:"input,omitempty"`
-	CallID  string          `json:"call_id,omitempty"`
-	TurnID  string          `json:"turn_id,omitempty"`
-	Success *bool           `json:"success,omitempty"`
-	Error   json.RawMessage `json:"error,omitempty" extensions:"x-nullable" swaggertype:"object"`
-	Output  any             `json:"output,omitempty" extensions:"x-nullable"`
+	Type      string          `json:"type" binding:"required" enums:"agent.session.input.computer_use_approval_request_result,agent.session.input.message,agent.session.input.cancel,agent.session.input.tool_result"`
+	Input     []InputMessage  `json:"input,omitempty"`
+	CallID    string          `json:"call_id,omitempty"`
+	TurnID    string          `json:"turn_id,omitempty"`
+	Success   *bool           `json:"success,omitempty"`
+	Error     json.RawMessage `json:"error,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	Output    any             `json:"output,omitempty" extensions:"x-nullable"`
+	RequestID *string         `json:"request_id,omitempty"`
+	Response  json.RawMessage `json:"response,omitempty" swaggertype:"object"`
 }
 
 // SessionList projects SessionListResource.
@@ -725,7 +761,7 @@ type SkillVersionList struct {
 type SourceFile struct {
 	ID            string  `json:"id" binding:"required"`
 	Object        string  `json:"object" binding:"required" enums:"file"`
-	Bytes         int64   `json:"bytes" binding:"required"`
+	Bytes         *int64  `json:"bytes" binding:"required" extensions:"x-nullable"`
 	CreatedAt     int64   `json:"created_at" binding:"required"`
 	Filename      string  `json:"filename" binding:"required"`
 	Purpose       string  `json:"purpose" binding:"required" enums:"assistants,assistants_output,batch,batch_output,fine-tune,fine-tune-results,vision,user_data"`
@@ -840,7 +876,7 @@ type Turn struct {
 
 // TurnError projects SessionTurnErrorResource.
 type TurnError struct {
-	Code    string `json:"code" binding:"required" enums:"context_length_exceeded,session_budget_exceeded,usage_limit_exceeded,rate_limit_exceeded,server_overloaded,cyber_policy,connection_failed,server_error,authentication_error,invalid_request,resource_not_found,sandbox_error,executor_version_incompatible,active_turn_not_steerable,request_timeout,internal_error"`
+	Code    string `json:"code" binding:"required" enums:"context_length_exceeded,session_budget_exceeded,usage_limit_exceeded,project_spend_limit_exceeded,organization_spend_limit_exceeded,organization_usage_limit_exceeded,billing_not_active,credit_balance_exhausted,rate_limit_exceeded,flex_unavailable,server_overloaded,cyber_policy,misalignment_policy_violation,connection_failed,server_error,authentication_error,invalid_request,resource_not_found,sandbox_error,executor_version_incompatible,active_turn_not_steerable,request_timeout,internal_error"`
 	Message string `json:"message" binding:"required"`
 }
 
@@ -862,9 +898,11 @@ type UpdateAgentRequest struct {
 	Metadata     map[string]*string   `json:"metadata,omitempty" extensions:"x-nullable"`
 	MultiAgent   json.RawMessage      `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Reasoning    *Reasoning           `json:"reasoning,omitempty" extensions:"x-nullable"`
-	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
+	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Text         *TextConfigInput     `json:"text,omitempty" extensions:"x-nullable"`
 	Tools        []json.RawMessage    `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	Experimental json.RawMessage      `json:"experimental,omitempty" swaggertype:"object"`
+	Compaction   json.RawMessage      `json:"compaction,omitempty" extensions:"x-nullable" swaggertype:"object"`
 }
 
 // Vault projects VaultResource.
