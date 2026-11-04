@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 0948d102d9cf7e89f74833e2320ad6f410df990b4f9397de986d8e16f9e13056
+source_hash: c39a0323efd819af19d96e197279f51d804b7bb083e55096c66d28c4ba6711f1
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -137,7 +137,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
 - MiniMax Code 通过原生 MCP 服务器提供公共函数，其客户端会在 120 秒后使调用失败且无法更改。120 秒后原生向模型报告失败，该调用被撤回，Turn 继续。
 - Core 以 400 拒绝类型为 `environment_variable` 的 Credential `auth`：Core 只通过 MCP 服务器的 `credential_id` 注入 Credential，从不注入进程环境（[Credentials](vaults.md#credentials)）。
-- 既不含 `auth` 也不含 `metadata` 的 Credential 更新返回 400。
 - Vault 和 Credential 的状态仅在内部保存，默认值为 `active`；由于没有归档操作，未带过滤器的列表会同时包含两种状态。
 - `vault_ids` 中包含未知或属于其他账户的 Vault 时会返回 404 "Resource not found."；官方消息会指出该 ID。
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。

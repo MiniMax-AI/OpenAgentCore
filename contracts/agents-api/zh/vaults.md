@@ -1,7 +1,7 @@
 ---
 title: "Vault 与 Credential"
 source: contracts/agents-api/vaults.md
-source_hash: c2ed5f692264d281c63e113e9c48ada721aca629f2671c256e1e91174c6ab54d
+source_hash: cda67f5867a832fa38b4a73aacbea2fbdb0d32dac0382aeb39d3c2d791aed72e
 ---
 
 Vault 是项目所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
@@ -64,7 +64,7 @@ MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core �
 | `name` | 可选；省略保持 `null`，显式 `null` 被拒绝。字符串去除首尾空白后必须为 1–256 UTF-8 字节（param 为 `name`） |
 | `metadata` | 省略或 `null` 转为 `{}`。值必须为字符串；其他类型返回 400 `invalid_request_error`，param 为 `metadata.<key>`。编码后对象上限 64 KiB，无键值对数量或长度限制 |
 
-Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadata`。更新接受可选的 `name` 和 `metadata`，校验与创建相同：显式 `null` 的 name 会将其清除，`metadata` 对象（包括 `{}`）会替换所有键值对，省略或为 null 的 `metadata` 保持不变。
+Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadata`。更新接受可选的 `name` 和 `metadata`。name 的校验与创建相同，显式 `null` 会将其清除。`metadata` 遵循官方更新限制：最多 16 个键值对，键最长 64 个字符，值最长 512 个字符；对象（包括 `{}`）会替换所有键值对，省略 `metadata` 则保持不变。
 
 删除 Vault 在一个事务内移除 Vault 及所有 Credential，无论它们的 status。无需 storage key，不向服务方发送请求。对 Session 的影响见[删除](#deletion)。
 
@@ -78,7 +78,7 @@ Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"
 
 `auth` 为 `{type: "static_bearer", mcp_server_url, token}`。`token` 必需且非空。Core 将它作为不透明字节保存，不去除空白。执行时 token 必须符合 RFC 6750 `b64token`；Session 选择了含空白等其他字符的存储 token 时，分派失败。
 
-通过 `POST /vaults/{vault_id}/credentials/{credential_id}` 替换 token，请求为 `{"auth": {"type": "static_bearer", "token": "…"}}`；同一请求可带 `metadata`，它会替换所有键值对（`{}` 对象会将其清除），只含 `metadata` 的请求只修改元数据。既不含 `auth` 也不含 `metadata` 的请求返回 400。token 缺失、null、空值或 `auth` 中的任何其他字段均被拒绝。仅 token、`metadata` 和 `updated_at` 改变；ID、Vault、name、type、`mcp_server_url`、`created_at` 和所有 Session 绑定保留。替换失败保留旧 token。
+通过 `POST /vaults/{vault_id}/credentials/{credential_id}` 替换 token，请求为 `{"auth": {"type": "static_bearer", "token": "…"}}`；同一请求可带 `metadata`，它会替换所有键值对（`{}` 对象会将其清除），只含 `metadata` 的请求只修改元数据。既不含 `auth` 也不含 `metadata` 的请求返回 400，这是官方 `minProperties` 的要求。token 缺失、null、空值或 `auth` 中的任何其他字段均被拒绝。仅 token、`metadata` 和 `updated_at` 改变；ID、Vault、name、type、`mcp_server_url`、`created_at` 和所有 Session 绑定保留。替换失败保留旧 token。
 
 ### OAuth {#oauth}
 

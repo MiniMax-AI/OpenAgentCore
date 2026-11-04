@@ -134,7 +134,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 - MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
 - MiniMax Code serves public functions as a native MCP server whose client fails a call after 120 s with no way to change it. After 120 s native reports the failure to the model, the call is withdrawn and the Turn continues.
 - Core rejects a Credential `auth` of type `environment_variable` with 400; Core injects a Credential only through an MCP server `credential_id`, never into a process environment ([Credentials](./vaults.md#credentials)).
-- A Credential update with neither `auth` nor `metadata` returns 400.
 - Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
 - An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
