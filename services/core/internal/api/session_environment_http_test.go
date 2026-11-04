@@ -18,7 +18,7 @@ import (
 
 type environmentHTTPFixture struct{ streamFixture }
 
-func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string) (sessions.Page, error) {
+func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string, _ map[string]string) (sessions.Page, error) {
 	if tenant != f.session.TenantID {
 		return sessions.Page{}, sessions.ErrNotFound
 	}

@@ -24,7 +24,7 @@ def verify_agents(client, other, invalid, expect_error):
             assert response.status_code == 201
             body, agent = response.http_response.json(), response.parse()
             assert set(body) == {"id", "object", "created_at", "updated_at", "metadata", "model", "name",
-                                 "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"}
+                                 "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "experimental"}
             assert body["object"] == "agent" and body["model"] == " caller-model "
             assert body["name"] is None and body["instructions"] is None and body["metadata"] == {}
             assert body["multi_agent"] == {"enabled": False, "max_concurrent_subagents": None}
@@ -121,7 +121,7 @@ def verify_agents(client, other, invalid, expect_error):
             ({"tools": [{**lookup, "parameters": []}]}, "tools[0].parameters", "Invalid type for 'tools[0].parameters': expected an object with string keys and unknown value values, but got an array instead."),
             ({"tools": [{k: v for k, v in lookup.items() if k != "parameters"}]}, "tools[0].parameters", "Missing required parameter: 'tools[0].parameters'."),
             ({"tools": [{"type": "tool_search", "max_results": 3}]}, "tools[0].max_results", "Unknown parameter: 'tools[0].max_results'."),
-            ({"tools": [{"type": "bogus_tool"}]}, "tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'."),
+            ({"tools": [{"type": "bogus_tool"}]}, "tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', 'web_search', 'computer_use', and 'automations'."),
             ({"tool_choice": "auto"}, "tool_choice", "Unknown parameter: 'tool_choice'."),
             ({"text": {"format": {"type": "json_object"}}}, "text.format.type", "Invalid value: 'json_object'. Supported values are: 'text' and 'json_schema'."),
             ({"multi_agent": {"enabled": True, "max_concurrent_subagents": 0}}, "multi_agent.max_concurrent_subagents", "Invalid 'multi_agent.max_concurrent_subagents': integer below minimum value. Expected a value >= 1, but got 0 instead."),

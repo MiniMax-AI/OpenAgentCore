@@ -16,7 +16,7 @@ read -rs OPENAI_API_KEY && export OPENAI_API_KEY
 **SDK.** Use the pinned version:
 
 ```sh
-pip install openai==3.13.0
+pip install openai==3.45.0
 ```
 
 ```python
@@ -532,7 +532,6 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 :::
 
 - No Beta header. Select up to 50 Skills per Environment; each archive is at most 5 MiB compressed and 20 MiB expanded.
-- SDK 3.13.0 drops a single ZIP file from the upload; use HTTP for a ZIP.
 - Attach Skills to a Session through its `environment.skills` or a [template](#environment-templates).
 
 Details: [Files and Skills](../../contracts/agents-api/source-files.md). A Session installs its Skills, Plugins and packages once, when it is prepared; editing the source later doesn't change a running Session. Preparation errors fail the Session before any work runs: fix the cause instead of retrying in a new Session.

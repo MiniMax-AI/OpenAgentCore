@@ -76,11 +76,11 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 	if err != nil || json.Unmarshal(raw, &proof) != nil || len(proof.Sessions) != 4 {
 		t.Fatal("invalid public evidence", err)
 	}
-	page, err := sessionAdapter(h.s).ListSessions(ctx, h.tenant, "", 100, true, nil)
+	page, err := sessionAdapter(h.s).ListSessions(ctx, h.tenant, "", 100, true, nil, nil)
 	if err != nil || len(page.Sessions) != 1+len(proof.Sessions) {
 		t.Fatal("rejected configuration persisted a Session", err)
 	}
-	foreignPage, err := sessionAdapter(h.s).ListSessions(ctx, foreignTenant, "", 100, true, nil)
+	foreignPage, err := sessionAdapter(h.s).ListSessions(ctx, foreignTenant, "", 100, true, nil, nil)
 	if err != nil || len(foreignPage.Sessions) != 0 {
 		t.Fatal("foreign Agent reference persisted a Session", err)
 	}

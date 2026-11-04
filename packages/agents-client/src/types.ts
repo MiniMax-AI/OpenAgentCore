@@ -93,7 +93,10 @@ export type VaultDeleted = DeletedVaultResource;
 
 export type McpOAuthRefreshMetadata = McpOauthRefreshResource;
 
-export type VaultCredential = VaultCredentialResource;
+// Core never returns the pinned `environment_variable` Credential type.
+export type VaultCredential = Omit<VaultCredentialResource, "auth"> & {
+  auth: Exclude<VaultCredentialResource["auth"], { type: "environment_variable" }>;
+};
 
 export type VaultCredentialList = ListPage<VaultCredential>;
 
@@ -203,6 +206,8 @@ export type EnvironmentNetworkPolicy = NetworkPolicyResource;
 export interface OpenAIHostedAgentEnvironment {
   type: "openai_hosted";
   id: string;
+  container_size: null;
+  desktop: { enabled: boolean };
   capability_directories: string[];
   network: EnvironmentNetworkPolicy;
   packages: AgentEnvironmentPackages;

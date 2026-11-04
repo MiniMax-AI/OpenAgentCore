@@ -73,7 +73,7 @@ func TestCredentialSafeProjectionAndOpaqueInput(t *testing.T) {
 	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
 		t.Fatal(w.Code, w.Body)
 	}
-	want := map[string]any{"id": f.credential.ID, "vault_id": f.credential.VaultID, "name": "Vault credential", "object": "vault.credential", "created_at": float64(1700000000), "updated_at": float64(1700000000), "auth": map[string]any{"type": "static_bearer", "mcp_server_url": "https://example.invalid/mcp?q=x"}}
+	want := map[string]any{"id": f.credential.ID, "vault_id": f.credential.VaultID, "name": "Vault credential", "object": "vault.credential", "created_at": float64(1700000000), "updated_at": float64(1700000000), "metadata": map[string]any{}, "auth": map[string]any{"type": "static_bearer", "mcp_server_url": "https://example.invalid/mcp?q=x"}}
 	if !reflect.DeepEqual(got, want) || f.tenant != tenant || f.vault != f.credential.VaultID || f.input.Token != " \tcredential-canary\n雪 " {
 		t.Fatal("resource projection or authenticated request changed")
 	}

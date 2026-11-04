@@ -58,7 +58,7 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 			env.Plugins = pluginResponse(setup.PluginMetadata())
 		case "capability_directories":
 			env.CapabilityDirectories = append([]string{}, setup.CapabilityDirectories...)
-		case "env", "setup_commands":
+		case "env", "setup_commands", "desktop", "container_size", "environment_id":
 			// Confidential values remain in the separate initialization snapshot.
 		case "packages":
 			packages := setup.PackageMetadata()
@@ -68,14 +68,17 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		}
 	}
 	if value, supplied := fields["network"]; supplied && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		var network v1.EnvironmentNetworkInput
-		if decodeInputObject(value, &network, "access", "allowed_domains") != nil {
+		var network struct {
+			v1.EnvironmentNetworkInput
+			BlockedDomains []string `json:"blocked_domains"` // empty only; see rejectUnsupportedEnvironmentFields
+		}
+		if decodeInputObject(value, &network, "access", "allowed_domains", "blocked_domains") != nil {
 			return nil, sessions.ErrInvalidInput
 		}
 		if (agentnetwork.Policy{Access: network.Access, AllowedDomains: network.AllowedDomains}).Validate() != nil {
 			return nil, errNetworkPolicy
 		}
-		env.Network = &network
+		env.Network = &network.EnvironmentNetworkInput
 	}
 	if kind == "openai_hosted" && agentcapabilities.ValidateDirectories(env.CapabilityDirectories) != nil {
 		return nil, sessions.ErrInvalidInput
@@ -99,7 +102,8 @@ func hostedSessionEnvironment(environment sessions.Environment) (v1.SessionEnvir
 	directories := append([]string{}, cfg.CapabilityDirectories...)
 	return v1.SessionEnvironment{ID: environment.ID, Type: cfg.Type, CapabilityDirectories: &directories,
 		Network:  &v1.EnvironmentNetwork{Access: cfg.Network.Access, AllowedDomains: append([]string{}, cfg.Network.AllowedDomains...)},
-		Packages: func() *v1.EnvironmentPackagesResponse { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &cfg.Plugins, Skills: &cfg.Skills}, nil
+		Packages: func() *v1.EnvironmentPackagesResponse { value := packageMetadata(cfg.Packages); return &value }(), Files: &files, Plugins: &cfg.Plugins, Skills: &cfg.Skills,
+		ContainerSize: json.RawMessage(`null`), Desktop: json.RawMessage(`{"enabled":false}`)}, nil
 }
 
 func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {

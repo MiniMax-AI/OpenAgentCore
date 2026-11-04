@@ -157,7 +157,7 @@ func TestSourceFilesPublicLifecycleAndEnvironmentCopy(t *testing.T) {
 		body, contentType := sourceMultipart(t, fields, data)
 		status, raw := sourceRequest(t, server, "POST", "/v1/files", "files-key", contentType, body)
 		var file v1.SourceFile
-		if status != 200 || json.Unmarshal(raw, &file) != nil || file.Bytes != int64(len(data)) || file.Object != "file" || file.Purpose != "user_data" || file.Status != "processed" || file.ExpiresAt != nil {
+		if status != 200 || json.Unmarshal(raw, &file) != nil || file.Bytes == nil || *file.Bytes != int64(len(data)) || file.Object != "file" || file.Purpose != "user_data" || file.Status != "processed" || file.ExpiresAt != nil {
 			t.Fatalf("upload: %d %s", status, raw)
 		}
 		for _, path := range []string{"/v1/files/" + file.ID, "/v1/files/" + file.ID + "/content"} {

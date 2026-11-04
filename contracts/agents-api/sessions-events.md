@@ -130,7 +130,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 
 **Turns.** Session Turn routes hold root Turns only, ordered by creation time then ID; a child Turn ID returns 404 there. A failed Turn's `error` has an official `code` and a fixed message for that code, never raw engine diagnostics; [Differences from OpenAI](./index.md#differences-from-openai) lists the codes Core reports. Stream snapshots report the same `error` as reads. Administrators read the failure category through [Session diagnostics](./session-diagnostics.md).
 
-**Items.** Items are ordered by the time they were first observed, then by their position in the Session, then by ID. Updates and retries never move an Item or change its `output_index`, a zero-based position among the Turn's output Items; input Items have none. Reads use the stored history index and never rebuild it from native journals. The Items list includes Items that are still in progress or incomplete.
+**Items.** Items are ordered by the time they were first observed, then by their position in the Session, then by ID. Updates and retries never move an Item or change its `output_index`, a zero-based position among the Turn's output Items; input Items have none. Reads use the stored history index and never rebuild it from native journals. The Items list includes Items that are still in progress or incomplete. `GET /agents/sessions/{session_id}/turns/{turn_id}/items` lists only the Items of that root Turn with the same paging, ordering and cursor rules; a Turn that does not exist in the Session returns 404.
 
 | Item `type` | Content |
 | --- | --- |

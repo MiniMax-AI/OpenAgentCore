@@ -155,20 +155,22 @@ const listSessions = `-- name: ListSessions :many
 SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions
 WHERE tenant_id = $1 AND deleted_at IS NULL
   AND ($2::text IS NULL OR configuration #>> '{agent,id}' = $2::text)
-  AND ($3::timestamptz IS NULL
-       OR (NOT $4::boolean AND (created_at, id) < ($3::timestamptz, $5::uuid))
-       OR ($4::boolean AND (created_at, id) > ($3::timestamptz, $5::uuid)))
+  AND ($3::jsonb IS NULL OR metadata @> $3::jsonb)
+  AND ($4::timestamptz IS NULL
+       OR (NOT $5::boolean AND (created_at, id) < ($4::timestamptz, $6::uuid))
+       OR ($5::boolean AND (created_at, id) > ($4::timestamptz, $6::uuid)))
 ORDER BY
-    CASE WHEN $4::boolean THEN created_at END ASC,
-    CASE WHEN $4::boolean THEN id END ASC,
-    CASE WHEN NOT $4::boolean THEN created_at END DESC,
-    CASE WHEN NOT $4::boolean THEN id END DESC
-LIMIT $6
+    CASE WHEN $5::boolean THEN created_at END ASC,
+    CASE WHEN $5::boolean THEN id END ASC,
+    CASE WHEN NOT $5::boolean THEN created_at END DESC,
+    CASE WHEN NOT $5::boolean THEN id END DESC
+LIMIT $7
 `
 
 type ListSessionsParams struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	AgentID      pgtype.Text        `json:"agent_id"`
+	Metadata     []byte             `json:"metadata"`
 	AfterCreated pgtype.Timestamptz `json:"after_created"`
 	Ascending    bool               `json:"ascending"`
 	AfterID      pgtype.UUID        `json:"after_id"`
@@ -179,6 +181,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	rows, err := q.db.Query(ctx, listSessions,
 		arg.TenantID,
 		arg.AgentID,
+		arg.Metadata,
 		arg.AfterCreated,
 		arg.Ascending,
 		arg.AfterID,

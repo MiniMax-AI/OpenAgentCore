@@ -42,7 +42,7 @@ class ResponseSchemaTests(unittest.TestCase):
                 "purpose": "user_data", "status": "processed", "expires_at": None, "status_details": None}
         self.response("/files/file_1", body)
         with self.assertRaises(ValidationError):
-            self.response("/files/file_1", {**body, "bytes": None})
+            self.response("/files/file_1", {**body, "bytes": "0"})
         with self.assertRaises(ValidationError):
             self.response("/files/file_1", {**body, "purpose": "unknown"})
 

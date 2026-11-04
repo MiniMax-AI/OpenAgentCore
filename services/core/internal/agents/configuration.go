@@ -111,7 +111,12 @@ func mergeConfiguration(saved json.RawMessage, patch map[string]json.RawMessage)
 		corePatch["harness_config"] = json.RawMessage(`{}`)
 	}
 	for field, value := range patch {
-		if field != "x_agents_core" {
+		switch {
+		case field == "x_agents_core":
+		case field == "compaction" && string(value) == "null":
+			// Null compaction restores the official default, which the resource omits.
+			delete(configuration, field)
+		default:
 			configuration[field] = value
 		}
 	}

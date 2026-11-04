@@ -55,7 +55,7 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
     sdk_page(descending[:20], True, {})
     sdk_page(descending[:20], True, {}, limit=None)
     sdk_page(descending[:20], True, {}, status=[])
-    for limit, size in ((0, 1), (-7, 1), (101, 100)):
+    for limit, size in ((0, 1), (101, 100)):
         sdk_page(descending[:size], True, {"limit": [str(limit)]}, limit=limit)
     sdk_page(list(reversed(archived))[:20], True, {"status": ["archived"]}, status="archived")
     sdk_page(active[:20], True, {"status[]": ["active"], "order": ["asc"]},
@@ -81,7 +81,7 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
     headers = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         verify_page(raw.get(endpoint, headers=headers), descending[:20], True)
-        for limit, size in (("0", 1), ("-7", 1), ("101", 100)):
+        for limit, size in (("0", 1), ("101", 100)):
             verify_page(raw.get(endpoint, headers=headers, params={"limit": limit}),
                         descending[:size], True)
         for params, values in (({"status": "active"}, list(reversed(active))),
@@ -107,7 +107,7 @@ def verify_vault_list(client, other, invalid, peer, binding, saved, root, direct
         # A malformed cursor is a missing one.
         invalid_cursor = raw.get(endpoint, headers=headers, params={"after": "invalid-vault"})
         assert invalid_cursor.status_code == 404 and invalid_cursor.json() == response.json()
-        for params in ({"status": "unknown"}, {"limit": "null"}):
+        for params in ({"status": "unknown"}, {"limit": "null"}, {"limit": "-7"}):
             response = raw.get(endpoint, headers=headers, params=params)
             assert response.status_code == 400
             assert response.json()["error"]["type"] == "invalid_request_error"

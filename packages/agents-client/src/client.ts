@@ -5,7 +5,7 @@ import {
   type FieldNames,
 } from "./response-projection";
 import {
-  agentsCoreFields, createVaultCredentialAuthParamStaticBearerFields, createVaultCredentialParamsFields,
+  agentsCoreFields, createVaultCredentialAuthParamStaticBearerFields, createVaultCredentialParamsFields, createVaultCredentialParamsRequired,
   deletedEnvironmentTemplateResourceFields, environmentParamNoneFields, environmentParamSelfHostedFields,
   environmentParamSelfHostedRequired, deletedVaultCredentialResourceFields, deletedVaultResourceFields,
   deleteFileResponseFields, environmentFileListResourceFields, environmentFileResourceFields, environmentResourceNoneFields,
@@ -13,7 +13,7 @@ import {
   hostedEnvironmentFileParamInlineFields, inputContentParamFields, inputMessageParamFields, inputMessageParamRequired,
   listFilesResponseFields, multiAgentConfigResourceFields, openAIFileFields, publicEnvironmentResourceFields,
   reasoningEffortResourceValues, reasoningResourceFields, rotateVaultCredentialAuthParamStaticBearerFields,
-  rotateVaultCredentialParamsFields, reasoningSummaryResourceValues, savedAgentCoreFields,
+  rotateVaultCredentialParamsFields, rotateVaultCredentialParamsRequired, reasoningSummaryResourceValues, savedAgentCoreFields,
   serviceTierResourceValues, sessionAgentResourceFields, sessionAgentResourceRequired, sessionCoreFields,
   sessionEnvironmentErrorResourceFields, sessionEnvironmentStateResourceFields, sessionErrorResourceFields,
   sessionEventAgentSessionCreatedFields, sessionEventErrorFields, sessionEventFields,
@@ -374,7 +374,8 @@ export function projectVaultCredential(
     !sameUuid(value.vault_id, expectedVaultId) ||
     value.object !== "vault.credential" || !isTrimmedName(value.name) ||
     !Number.isSafeInteger(value.created_at) || Number(value.created_at) < 0 ||
-    !Number.isSafeInteger(value.updated_at) || Number(value.updated_at) < Number(value.created_at)
+    !Number.isSafeInteger(value.updated_at) || Number(value.updated_at) < Number(value.created_at) ||
+    !validMetadata(value.metadata)
   ) {
     return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned invalid Credential metadata.");
   }
@@ -386,6 +387,7 @@ export function projectVaultCredential(
     name: value.name,
     object: "vault.credential",
     auth,
+    metadata: { ...value.metadata },
     created_at: Number(value.created_at),
     updated_at: Number(value.updated_at),
   };
@@ -1755,7 +1757,7 @@ export class OpenAIAgentsClient implements AgentCore {
 
   async createVaultCredential(vaultId: string, input: CreateVaultCredentialInput): Promise<VaultCredential> {
     if (
-      !exactFields(input, createVaultCredentialParamsFields) || !isTrimmedName(input.name) ||
+      !schemaFields(input, createVaultCredentialParamsFields, createVaultCredentialParamsRequired) || !isTrimmedName(input.name) ||
       !isRecord(input.auth) || !exactFields(input.auth, createVaultCredentialAuthParamStaticBearerFields) ||
       input.auth.type !== "static_bearer" || !validCredentialURL(input.auth.mcp_server_url) || typeof input.auth.token !== "string"
     ) {
@@ -1793,7 +1795,7 @@ export class OpenAIAgentsClient implements AgentCore {
     input: ReplaceVaultCredentialTokenInput,
   ): Promise<VaultCredential> {
     if (
-      !exactFields(input, rotateVaultCredentialParamsFields) || !isRecord(input.auth) ||
+      !schemaFields(input, rotateVaultCredentialParamsFields, rotateVaultCredentialParamsRequired) || !isRecord(input.auth) ||
       !exactFields(input.auth, rotateVaultCredentialAuthParamStaticBearerFields) ||
       input.auth.type !== "static_bearer" || typeof input.auth.token !== "string"
     ) {

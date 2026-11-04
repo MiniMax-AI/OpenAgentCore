@@ -16,6 +16,18 @@ func resolveProgrammaticTool(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(input)
 }
 
+// resolveComputerUseTool saves the official computer_use tool with its default; Session admission rejects it.
+func resolveComputerUseTool(raw json.RawMessage) (json.RawMessage, error) {
+	input := struct {
+		Type               string `json:"type"`
+		IncludeScreenshots bool   `json:"include_screenshots"`
+	}{}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return nil, &storedDataError{err}
+	}
+	return json.Marshal(input)
+}
+
 // webSearchTool is the resolved web_search projection. A present location
 // projects all four keys; null and empty allowed_domains stay distinct.
 type webSearchTool struct {

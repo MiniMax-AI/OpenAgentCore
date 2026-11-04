@@ -121,6 +121,11 @@ func (s *Store) ListVaults(ctx context.Context, tenantID string, query vaults.Pa
 	var page vaults.VaultPage
 	err = s.read(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		params := sqlc.ListVaultsParams{TenantID: tenant, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending, Statuses: statuses}
+		if len(query.Metadata) > 0 {
+			if params.Metadata, err = json.Marshal(query.Metadata); err != nil {
+				return err
+			}
+		}
 		if query.After != "" {
 			// A cursor that cannot name a Vault follows the missing-cursor path.
 			after, err := getVault(ctx, q, tenant, pgunit.PathID(query.After))
@@ -152,6 +157,29 @@ func (s *Store) ListVaults(ctx context.Context, tenantID string, query vaults.Pa
 		return vaults.VaultPage{}, err
 	}
 	return page, nil
+}
+
+// UpdateVault is ErrNotFound for a Vault the tenant does not own.
+func (s *Store) UpdateVault(ctx context.Context, update vaults.VaultUpdate) (vaults.Vault, error) {
+	var name pgtype.Text
+	if update.Name != nil {
+		name = pgtype.Text{String: *update.Name, Valid: true}
+	}
+	var updated vaults.Vault
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
+		row, err := q.UpdateVault(ctx, sqlc.UpdateVaultParams{TenantID: pgunit.PathID(update.TenantID), ID: pgunit.PathID(update.VaultID), SetName: update.NameSet, Name: name, Metadata: update.Metadata})
+		if err != nil {
+			return err
+		}
+		if updated, err = vaultFromRow(row); err != nil {
+			return err
+		}
+		return auditpg.RecordWriteAudit(ctx, q, update.TenantID, writeaudit.ActionUpdate, writeaudit.ResourceVault, updated.ID, "")
+	})
+	if err != nil {
+		return vaults.Vault{}, err
+	}
+	return updated, nil
 }
 
 // DeleteVault relies on the owning foreign key to remove every stored Credential.

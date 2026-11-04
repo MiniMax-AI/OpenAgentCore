@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 3fa50dff498df9d38e50c5081ed7c5448963f21f1522a4503452057954b63125
+source_hash: f83d80711825f65c897822f172f3a979f3e996eb864355f18f128751575f810d
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -27,8 +27,9 @@ source_hash: 3fa50dff498df9d38e50c5081ed7c5448963f21f1522a4503452057954b63125
 | [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 |
 | `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | `auto`：已准入 | 已拒绝 |
-| 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`、`fast`：已准入 | 已拒绝 | 已拒绝 |
+| 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`、`fast`：已准入；`ultrafast` 已拒绝 | 已拒绝 | 已拒绝 |
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
+| `compaction.async: true`、`experimental.time_awareness: true`，以及 `automations` 和 `computer_use` 工具 | 已拒绝 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |
 
 各 Harness 原生模型参数及提供商协议见[模型执行](model-execution.md)。

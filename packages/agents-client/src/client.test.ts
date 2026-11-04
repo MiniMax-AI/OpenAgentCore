@@ -1662,7 +1662,7 @@ describe("OpenAIAgentsClient", () => {
   it.each([
     null,
     {},
-    { id: "environment", object: "agent.environment", type: "self_hosted", status: "ready", files: [], plugins: [], skills: [] },
+    { id: "environment", object: "agent.environment", type: "self_hosted", status: "unknown", files: [], plugins: [], skills: [] },
     { id: "another", object: "agent.environment", type: "self_hosted", status: "pending", files: [], plugins: [], skills: [] },
     { id: "environment", object: "agent.environment", type: "hosted", status: "pending", files: [], plugins: [], skills: [] },
     { id: "environment", object: "agent.environment", type: "self_hosted", status: "pending", files: null, plugins: [], skills: [] },
@@ -2384,7 +2384,7 @@ describe("OpenAIAgentsClient", () => {
       id: credentialId,
       vault_id: vaultId,
       name: "Internal MCP",
-      object: "vault.credential",
+      object: "vault.credential", metadata: {},
       auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
       created_at: 21,
       updated_at: 21,
@@ -2511,7 +2511,7 @@ describe("OpenAIAgentsClient", () => {
     const vaultId = "11111111-1111-4111-8111-111111111111";
     const credentialId = "22222222-2222-4222-8222-222222222222";
     const valid: Record<string, unknown> = {
-      id: credentialId, vault_id: vaultId, name: "MCP", object: "vault.credential",
+      id: credentialId, vault_id: vaultId, name: "MCP", object: "vault.credential", metadata: {},
       auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
       created_at: 2, updated_at: 3,
     };
@@ -2524,7 +2524,7 @@ describe("OpenAIAgentsClient", () => {
     const responseBearer = ephemeralBearer();
     const body = kind === "vault"
       ? { id: "11111111-1111-4111-8111-111111111111", object: "vault", created_at: 1, name: "Safe", metadata: {}, token: responseBearer }
-      : { id: "22222222-2222-4222-8222-222222222222", vault_id: "11111111-1111-4111-8111-111111111111", name: "Safe", object: "vault.credential", auth: { type: "static_bearer", mcp_server_url: "https://mcp.example", token: responseBearer }, created_at: 1, updated_at: 1 };
+      : { id: "22222222-2222-4222-8222-222222222222", vault_id: "11111111-1111-4111-8111-111111111111", name: "Safe", object: "vault.credential", metadata: {}, auth: { type: "static_bearer", mcp_server_url: "https://mcp.example", token: responseBearer }, created_at: 1, updated_at: 1 };
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse(body), calls) });
     const operation = kind === "vault"
@@ -2548,7 +2548,7 @@ describe("OpenAIAgentsClient", () => {
       id: "22222222-2222-4222-8222-222222222222",
       vault_id: vaultId,
       name: "Internal MCP",
-      object: "vault.credential",
+      object: "vault.credential", metadata: {},
       auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
       created_at: 2,
       updated_at: 2,
@@ -2577,7 +2577,7 @@ describe("OpenAIAgentsClient", () => {
       id: credentialId,
       vault_id: vaultId,
       name: "Internal MCP",
-      object: "vault.credential",
+      object: "vault.credential", metadata: {},
       auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
       created_at: 2,
       updated_at: 2,
@@ -2630,7 +2630,7 @@ describe("OpenAIAgentsClient", () => {
       id: credentialId,
       vault_id: vaultId,
       name: "Internal MCP",
-      object: "vault.credential",
+      object: "vault.credential", metadata: {},
       auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
       created_at: 2,
       updated_at: 2,

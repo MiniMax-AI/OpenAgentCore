@@ -72,11 +72,11 @@ func insertCredential(ctx context.Context, q *sqlc.Queries, credential vaults.Ne
 	switch credential.AuthType {
 	case vaults.AuthStaticBearer:
 		row, err := q.CreateStaticCredential(ctx, sqlc.CreateStaticCredentialParams{ID: id, TenantID: tenant, VaultID: vault,
-			Name: credential.Name, McpServerUrl: credential.MCPServerURL, TokenCiphertext: ciphertext})
+			Name: credential.Name, McpServerUrl: credential.MCPServerURL, TokenCiphertext: ciphertext, Metadata: credential.Metadata})
 		return sqlc.GetCredentialRow(row), err
 	case vaults.AuthMCPOAuth:
 		row, err := q.CreateOAuthCredential(ctx, sqlc.CreateOAuthCredentialParams{ID: id, TenantID: tenant, VaultID: vault,
-			Name: credential.Name, McpServerUrl: credential.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext})
+			Name: credential.Name, McpServerUrl: credential.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext, Metadata: credential.Metadata})
 		return sqlc.GetCredentialRow(row), err
 	}
 	return sqlc.GetCredentialRow{}, errors.New("unknown credential authentication type")
@@ -125,6 +125,11 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 			return err
 		}
 		params := sqlc.ListCredentialsParams{TenantID: tenant, VaultID: vault, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending, Statuses: statuses}
+		if len(query.Metadata) > 0 {
+			if params.Metadata, err = json.Marshal(query.Metadata); err != nil {
+				return err
+			}
+		}
 		if query.After != "" {
 			// A cursor that cannot name a Credential of this Vault follows the
 			// missing-cursor path.
@@ -170,7 +175,7 @@ func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.Stati
 	var updated vaults.Credential
 	err = s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		row, err := q.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
-			TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: replacement.MCPServerURL, TokenCiphertext: ciphertext,
+			TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: replacement.MCPServerURL, TokenCiphertext: ciphertext, Metadata: replacement.Metadata,
 		})
 		if err != nil {
 			return err
@@ -180,6 +185,25 @@ func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.Stati
 			return err
 		}
 		return auditpg.RecordWriteAudit(ctx, q, replacement.TenantID, writeaudit.ActionUpdate, writeaudit.ResourceCredential, updated.ID, updated.VaultID)
+	})
+	if err != nil {
+		return vaults.Credential{}, err
+	}
+	return updated, nil
+}
+
+// ReplaceCredentialMetadata changes no secret, so the seal stays valid.
+func (s *Store) ReplaceCredentialMetadata(ctx context.Context, key vaults.CredentialKey, metadata []byte) (vaults.Credential, error) {
+	var updated vaults.Credential
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
+		row, err := q.UpdateCredentialMetadata(ctx, sqlc.UpdateCredentialMetadataParams{TenantID: pgunit.PathID(key.TenantID), VaultID: pgunit.PathID(key.VaultID), ID: pgunit.PathID(key.CredentialID), Metadata: metadata})
+		if err != nil {
+			return err
+		}
+		if updated, err = credentialFromRow(sqlc.GetCredentialRow(row)); err != nil {
+			return err
+		}
+		return auditpg.RecordWriteAudit(ctx, q, key.TenantID, writeaudit.ActionUpdate, writeaudit.ResourceCredential, updated.ID, updated.VaultID)
 	})
 	if err != nil {
 		return vaults.Credential{}, err
@@ -210,6 +234,9 @@ func credentialFromRow(row sqlc.GetCredentialRow) (vaults.Credential, error) {
 		ID: uuid.UUID(row.ID.Bytes).String(), VaultID: uuid.UUID(row.VaultID.Bytes).String(),
 		Name: row.Name, AuthType: row.AuthType, MCPServerURL: row.McpServerUrl,
 		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+	if err := json.Unmarshal(row.Metadata, &credential.Metadata); err != nil {
+		return vaults.Credential{}, errors.New("invalid stored credential metadata")
 	}
 	if row.AuthType == vaults.AuthMCPOAuth {
 		credential.OAuth = &vaults.OAuthMetadata{}

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: bd7dc591ce52a44b12c19d86054cf56ce0f163038361617660203c4f139022ce
+source_hash: f2b074b5f3011d44555f0abb890f1426e59f676902206c18e4a79b428e37bc8a
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -12,8 +12,8 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 
 | 文件 | 内容 |
 | --- | --- |
-| [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) | 固定版本：提交 `d7c41ef` 时的 [openai-python](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents) 3.13.0；资源位于 `beta/agents` 下；Beta 标头为 `agents=v1` |
-| [upstream/openapi.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream/openapi.json) | 未修改的官方 OpenAPI 3.1，固定提交为 `046a2a0f325bf11f97966f2729219f27281ba71e`，发布于 2026-09-10。其中 58 个 Agents、Vaults、Files 和 Skills 操作与固定 SDK 的路由集合一致。`upstream.json` 记录 SHA-256 校验和 |
+| [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) | 固定版本：提交 `9b3458a` 时的 [openai-python](https://github.com/openai/openai-python/tree/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents) 3.45.0；资源位于 `beta/agents` 下；Beta 标头为 `agents=v1` |
+| [upstream/openapi.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream/openapi.json) | 未修改的官方 OpenAPI 3.1，固定提交为 `820f97adaafea8cadf1e24e19bd3f98463dcb347`，发布于 2026-11-03。其中 73 个 Agents、Vaults、Files 和 Skills 操作与固定 SDK 的路由集合一致。`upstream.json` 记录 SHA-256 校验和 |
 | [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json) | 从官方 schema 生成的标准化方法和路径清单 |
 | [openapi.yaml](../openapi.yaml) | 官方公共契约，并在 Agent 和 Session 请求及响应对象上加入 Core 的 `x_agents_core` 扩展 |
 | [go-bindings.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/go-bindings.json) | Go 名称、字段表示、编码顺序和存储投影；不定义官方字段集合、枚举或约束 |
@@ -30,19 +30,22 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | 资源 | 操作 | 状态 | 契约 |
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | 已实现。所有固定版本设置都会保存；Session 准入只会用到其中一个子集 | [Agents](wire-semantics.md#agents) |
-| Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新仅接受 `metadata`；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
+| Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新只修改 `metadata`，并拒绝 `agent`；列表支持按 `metadata[key]=value` 过滤；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
 | Session events | create, stream | 部分实现：支持包含文本和图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
-| Turns | retrieve, list | 已实现；Session Turn 路由仅承载根级 Turns | [Turns and Items](sessions-events.md#turns-and-items) |
+| Turns | retrieve, list; Turn Items | 已实现；Session Turn 路由仅承载根级 Turns | [Turns and Items](sessions-events.md#turns-and-items) |
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
+| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。Core 拒绝 `environment.environment_id`，因此已有 hosted Environment 无法关联到另一个 Session。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
-| Vaults | create, retrieve, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
-| Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth` | [Vaults and Credentials](vaults.md) |
+| Vaults | create, retrieve, update, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
+| Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth`，含 `metadata` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
+| Automations | 全部 10 个操作 | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
+| Environment 集合 | create, list（`/agents/environments`） | 不支持：404 `unsupported_operation`；Core 的 Environment 以 Session 为范围 | [不支持的操作](wire-semantics.md#unsupported-operations) |
+| Session traces | list | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
 
 各 Harness 在不同部署位置支持哪些操作，请参阅 [Harness capabilities](harness-capabilities.md)。[API 行为](wire-semantics.md) 包含适用于各项资源的通用规则：请求、错误和列表。
 
@@ -68,12 +71,13 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 将已删除的 Agent 用作游标时会返回 404；官方服务仍可从该游标继续分页。
 - 使用来自其他 Session 的 Turn 游标、与 Vault ID 相等的 Credential 游标，或不是 Skill ID 的 Skills 游标时，都会返回 404。
-- Vault 和 Credential 列表会按照固定版本 SDK 的描述钳制负数 `limit`；官方服务返回 400。
 
 **Agents 和 Sessions**（[Agents](wire-semantics.md#agents)、[Sessions](wire-semantics.md#sessions)）
 
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
+- 官方默认的压缩方式是后台压缩，Core 改为运行 Harness 原生的阻塞式压缩（[Agents](wire-semantics.md#agents)）。
+- Core 以 400 拒绝并指出参数的方式处理其没有原生对应的官方字段和输入（[不支持的字段](wire-semantics.md#unsupported-fields)），并对其不运行的路由返回 404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。
 - Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
 - 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
 - Claude Code 在原生层丢弃仅含空白的文本块，全空白消息会发送 `(no content)`；Codex 原样交付仅含空白的文本。
@@ -141,7 +145,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **配置和工具**
 
-- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- `compaction.async: true`、`experimental.time_awareness: true` 以及 `automations` 和 `computer_use` 工具会被保存，但对所有 Harness 都在 Session 准入时被拒绝，因为没有 Harness 原生运行它们（[Session 准入](wire-semantics.md#session-admission)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 
@@ -161,6 +166,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Environments 和模板**
 
+- Core 从不报告 `suspended` 状态，也不发出 `suspended`、`expired` 和 `reset` Environment 事件（[资源与状态](environments.md#resources-and-states)）。
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - MiniMax Code 未声明 `retained_native_history`，因此无法在 microsandbox 上运行（其每个 Environment 都使用工作区存储）；Core 会拒绝该 Session（[Harness 能力](./harness-capabilities.md)）。
 - 模型提供商在公开地址上的端口从沙箱内始终可达，因为 Harness 运行在那里，私有的模型提供商主机只有在网络上限列出其名称或覆盖它的 `*.` 条目时才可达；`disabled` 下主机 53 端口上的 DNS 服务器仍可达；Environment 中的 MCP 连接遵循部署的[网络上限](sandbox-deployment.md#network)。E2B 沙箱无法访问私有网络，且在任何上限下 `169.254.169.254` 都会在 E2B 沙箱内应答。
@@ -172,7 +178,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **Files 和 Environment files**
 
 - Files 仅接受 `purpose=user_data`；不支持其他 `purpose` 值、`expires_after` 和 Uploads API。
-- Skills 创建路由接受单个 `files` 部分，但当 `files` 是单个文件而不是列表时，固定版本的 SDK 不会发送任何部分（[上传 bundle](source-files.md#upload-a-bundle)）。
 - 结果不确定的 Environment file 写入不会自动重试或恢复；它会阻止后续写入以及向 Session 发送消息。
 
 **Vaults 和 Credentials**
@@ -183,6 +188,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Sessions**
 
+- 固定版本 SDK 在 Session 创建和更新中发送 `spend_control`，但固定的 OpenAPI 模式没有定义它；Core 将其作为未知参数拒绝。
 - 删除 Session 不会从物理存储中清除已保存的历史记录。
 - 对于 `self_hosted`、hosted 和无输入创建的流生命周期，以及创建流重试机制，均由 Core 自行决定。
 

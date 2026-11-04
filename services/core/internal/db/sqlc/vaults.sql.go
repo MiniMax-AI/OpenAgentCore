@@ -86,20 +86,22 @@ const listVaults = `-- name: ListVaults :many
 SELECT id, tenant_id, name, metadata, created_at, status FROM vaults
 WHERE tenant_id = $1
   AND status = ANY($2::text[])
-  AND ($3::timestamptz IS NULL
-    OR (NOT $4::boolean AND (created_at, id) < ($3::timestamptz, $5::uuid))
-    OR ($4::boolean AND (created_at, id) > ($3::timestamptz, $5::uuid)))
+  AND ($3::jsonb IS NULL OR metadata @> $3::jsonb)
+  AND ($4::timestamptz IS NULL
+    OR (NOT $5::boolean AND (created_at, id) < ($4::timestamptz, $6::uuid))
+    OR ($5::boolean AND (created_at, id) > ($4::timestamptz, $6::uuid)))
 ORDER BY
-  CASE WHEN $4::boolean THEN created_at END ASC,
-  CASE WHEN $4::boolean THEN id END ASC,
-  CASE WHEN NOT $4::boolean THEN created_at END DESC,
-  CASE WHEN NOT $4::boolean THEN id END DESC
-LIMIT $6
+  CASE WHEN $5::boolean THEN created_at END ASC,
+  CASE WHEN $5::boolean THEN id END ASC,
+  CASE WHEN NOT $5::boolean THEN created_at END DESC,
+  CASE WHEN NOT $5::boolean THEN id END DESC
+LIMIT $7
 `
 
 type ListVaultsParams struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	Statuses     []string           `json:"statuses"`
+	Metadata     []byte             `json:"metadata"`
 	AfterCreated pgtype.Timestamptz `json:"after_created"`
 	Ascending    bool               `json:"ascending"`
 	AfterID      pgtype.UUID        `json:"after_id"`
@@ -110,6 +112,7 @@ func (q *Queries) ListVaults(ctx context.Context, arg ListVaultsParams) ([]Vault
 	rows, err := q.db.Query(ctx, listVaults,
 		arg.TenantID,
 		arg.Statuses,
+		arg.Metadata,
 		arg.AfterCreated,
 		arg.Ascending,
 		arg.AfterID,
@@ -138,4 +141,40 @@ func (q *Queries) ListVaults(ctx context.Context, arg ListVaultsParams) ([]Vault
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateVault = `-- name: UpdateVault :one
+UPDATE vaults
+SET name = CASE WHEN $1::boolean THEN $2 ELSE name END,
+    metadata = COALESCE($3::jsonb, metadata)
+WHERE tenant_id = $4 AND id = $5
+RETURNING id, tenant_id, name, metadata, created_at, status
+`
+
+type UpdateVaultParams struct {
+	SetName  bool        `json:"set_name"`
+	Name     pgtype.Text `json:"name"`
+	Metadata []byte      `json:"metadata"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateVault(ctx context.Context, arg UpdateVaultParams) (Vault, error) {
+	row := q.db.QueryRow(ctx, updateVault,
+		arg.SetName,
+		arg.Name,
+		arg.Metadata,
+		arg.TenantID,
+		arg.ID,
+	)
+	var i Vault
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.Status,
+	)
+	return i, err
 }

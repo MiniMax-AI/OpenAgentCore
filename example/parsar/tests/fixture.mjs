@@ -209,7 +209,10 @@ createServer(async (req, res) => {
           deleted: true,
         });
       }
-      if (req.method === "POST") row.updated_at = now();
+      if (req.method === "POST") {
+        row.updated_at = now();
+        if (body.metadata) row.metadata = body.metadata;
+      }
       return reply(row);
     }
     const row = {
@@ -218,6 +221,7 @@ createServer(async (req, res) => {
       vault_id: vaultId,
       name: body.name,
       auth: { type: "static_bearer", mcp_server_url: body.auth.mcp_server_url },
+      metadata: body.metadata || {},
       created_at: now(),
       updated_at: now(),
     };
@@ -401,6 +405,8 @@ createServer(async (req, res) => {
             : {
                 type: "openai_hosted",
                 id: randomUUID(),
+                container_size: null,
+                desktop: { enabled: false },
                 capability_directories: [],
                 network: { access: "enabled", allowed_domains: [] },
                 packages: { npm: [], python: [], system: [] },

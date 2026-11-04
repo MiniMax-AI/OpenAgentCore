@@ -61,12 +61,46 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 	if err != nil {
 		return agents.CreateCommand{}, err
 	}
+	cfg.Compaction, cfg.Experimental, err = resolveAgentOptions(input.Compaction, input.Experimental)
+	if err != nil {
+		return agents.CreateCommand{}, err
+	}
 	configuration, err := json.Marshal(cfg)
 	result := agents.CreateCommand{Metadata: values, Configuration: configuration}
 	if input.XAgentsCore != nil {
 		result.ModelProvider = input.XAgentsCore.ModelProvider
 	}
 	return result, err
+}
+
+// resolveAgentOptions stores compaction only with an explicit async value: an omitted,
+// null or empty compaction, or a null async, is the official default, which leaves the
+// Harness's native compaction. Experimental always carries its official default, time
+// awareness off. Session admission rejects the values no Harness runs.
+func resolveAgentOptions(compaction, experimental json.RawMessage) (resolvedCompaction, resolvedExperimental json.RawMessage, err error) {
+	if !isNull(compaction) {
+		input := struct {
+			Async *bool `json:"async"`
+		}{}
+		if err = json.Unmarshal(compaction, &input); err != nil {
+			return nil, nil, &storedDataError{err}
+		}
+		if input.Async != nil {
+			resolvedCompaction, _ = json.Marshal(struct {
+				Async bool `json:"async"`
+			}{*input.Async})
+		}
+	}
+	input := struct {
+		TimeAwareness bool `json:"time_awareness"`
+	}{}
+	if !isNull(experimental) {
+		if err = json.Unmarshal(experimental, &input); err != nil {
+			return nil, nil, &storedDataError{err}
+		}
+	}
+	resolvedExperimental, _ = json.Marshal(input)
+	return resolvedCompaction, resolvedExperimental, nil
 }
 
 // resolveSavedMultiAgent and resolveText read values whose pinned shape was

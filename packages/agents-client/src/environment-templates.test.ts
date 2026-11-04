@@ -191,6 +191,8 @@ describe("Session creation with a referenced Template", () => {
       environment: {
         type: "openai_hosted",
         id: "6f9c1d2e-4b5a-4c7d-8e9f-0a1b2c3d4e5f",
+        container_size: null,
+        desktop: { enabled: false },
         capability_directories: [],
         network: { access, allowed_domains: [] },
         packages: { npm: [], python: [], system: [] },
@@ -455,6 +457,8 @@ describe("Sessions created from an advanced Template", () => {
     const basic = {
       type: "openai_hosted",
       id: environment.id,
+      container_size: null,
+      desktop: { enabled: false },
       capability_directories: [],
       network: { access: "enabled", allowed_domains: [] },
       packages: { npm: [], python: [], system: [] },

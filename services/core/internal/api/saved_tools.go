@@ -40,6 +40,14 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 				return nil, err
 			}
 			value = resolved
+		case "computer_use":
+			resolved, err := resolveComputerUseTool(raw)
+			if err != nil {
+				return nil, err
+			}
+			value = resolved
+		case "automations":
+			value = json.RawMessage(`{"type":"automations"}`)
 		case "mcp":
 			resolved, err := resolveMCPTool(raw, fmt.Sprintf("tools[%d]", i), true)
 			if err != nil {

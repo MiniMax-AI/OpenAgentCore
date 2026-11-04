@@ -457,6 +457,8 @@
       "body": {
         "type": "openai_hosted",
         "id": "9d6b4c3f-5e70-4fb1-8c43-0d9e8f7a6b52",
+        "container_size": null,
+        "desktop": { "enabled": false },
         "capability_directories": [
           "/workspace/capabilities"
         ],

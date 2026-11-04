@@ -47,7 +47,7 @@ func (h *Handler) deleteSourceFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func sourceFileResponse(file files.File) v1.SourceFile {
-	return v1.SourceFile{ID: file.ID, Object: "file", Bytes: file.SizeBytes,
+	return v1.SourceFile{ID: file.ID, Object: "file", Bytes: &file.SizeBytes,
 		CreatedAt: file.CreatedAt.Unix(), Filename: file.Filename,
 		Purpose: file.Purpose, Status: "processed"}
 }

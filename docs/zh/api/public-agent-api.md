@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: a32f91dfee6a8eb9c6001310a1d357f5d241a55da12437870ce1c0383fcc3dbc
+source_hash: 8c09bb8ae2cc51057298e4f6524e2145d897fcaaa7155a15c233a5267fe2768b
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -18,7 +18,7 @@ read -rs OPENAI_API_KEY && export OPENAI_API_KEY
 **SDK。** 使用固定版本：
 
 ```sh
-pip install openai==3.13.0
+pip install openai==3.45.0
 ```
 
 ```python
@@ -534,7 +534,6 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 :::
 
 - 不需要 Beta 请求头。每个 Environment 最多可选择 50 个 Skills；每个归档压缩后最大为 5 MiB，展开后最大为 20 MiB。
-- SDK 3.13.0 会上传内容中丢弃唯一的 ZIP 文件；上传 ZIP 时请使用 HTTP。
 - 可通过 Session 的 `environment.skills` 或[模板](#environment-templates)为其附加 Skills。
 
 详细信息请参阅 [文件与 Skill](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。

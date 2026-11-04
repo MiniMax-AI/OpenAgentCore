@@ -31,8 +31,58 @@ func rejectSystemPackages(raw json.RawMessage) error {
 	return nil
 }
 
+func isNull(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
+}
+
+// Pinned shapes of the Environment fields Core cannot honor. Neither environment_id
+// nor container_size is nullable.
+var (
+	environmentIDShape      = shape{kind: stringValue}
+	containerSizeShape      = shape{kind: enumValue, values: []string{"small", "medium", "large"}}
+	environmentDesktopShape = shape{kind: objectValue, members: []member{{"enabled", shape{kind: booleanValue, required: true}}}, nullable: true}
+)
+
+// rejectUnsupportedEnvironmentFields checks the official Environment fields Core cannot
+// honor against their pinned shapes, then rejects every value that asks for them.
+func rejectUnsupportedEnvironmentFields(fields map[string]json.RawMessage) error {
+	for name, field := range map[string]shape{"environment_id": environmentIDShape, "container_size": containerSizeShape, "desktop": environmentDesktopShape} {
+		if raw, supplied := fields[name]; supplied {
+			if err := checkValue(name, raw, field); err != nil {
+				return err
+			}
+		}
+	}
+	for _, name := range []string{"environment_id", "container_size"} {
+		if _, supplied := fields[name]; supplied {
+			return &fieldError{param: name, message: "Environment " + name + " is not supported."}
+		}
+	}
+	if desktop := fields["desktop"]; !isNull(desktop) {
+		var input struct {
+			Enabled bool `json:"enabled"`
+		}
+		if json.Unmarshal(desktop, &input) == nil && input.Enabled {
+			return &fieldError{param: "desktop.enabled", message: "Desktop environments are not supported."}
+		}
+	}
+	if network := fields["network"]; !isNull(network) {
+		var input struct {
+			BlockedDomains []json.RawMessage `json:"blocked_domains"`
+		}
+		if json.Unmarshal(network, &input) == nil && len(input.BlockedDomains) != 0 {
+			return &fieldError{param: "network.blocked_domains", message: "Blocked domains are not supported. Use restricted access with allowed_domains."}
+		}
+	}
+	return nil
+}
+
 func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfig.Setup, error) {
 	var result environmentconfig.Setup
+	if err := rejectUnsupportedEnvironmentFields(fields); err != nil {
+		return result, err
+	}
 	if err := rejectSystemPackages(fields["packages"]); err != nil {
 		return result, err
 	}

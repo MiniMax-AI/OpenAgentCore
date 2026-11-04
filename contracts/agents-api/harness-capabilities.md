@@ -25,8 +25,9 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
-| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted | Rejected | Rejected |
+| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted; `ultrafast` rejected | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
+| `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools | Rejected | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |
 
 Native model parameters and provider protocols per Harness are in [model execution](./model-execution.md).

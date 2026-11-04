@@ -24,7 +24,7 @@ def bundle(marker):
 
 
 def main():
-    assert openai.__version__ == "3.13.0", openai.__version__
+    assert openai.__version__ == "3.45.0", openai.__version__
     settings = json.load(sys.stdin)
     client = OpenAI(base_url=settings["base"] + "/v1", api_key=settings["token"], max_retries=0, http_client=DefaultHttpxClient(trust_env=False), _strict_response_validation=True)
     recovered = OpenAI(base_url=settings["recovered"] + "/v1", api_key=settings["token"], max_retries=0, http_client=DefaultHttpxClient(trust_env=False), _strict_response_validation=True)

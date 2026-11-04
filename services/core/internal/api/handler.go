@@ -42,7 +42,7 @@ type Sessions interface {
 // SessionsReader reads Sessions.
 type SessionsReader interface {
 	GetSession(context.Context, string, string) (sessions.Session, error)
-	ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	ListSessions(context.Context, string, string, int, bool, *string, map[string]string) (sessions.Page, error)
 }
 
 // routes builds the router. HEAD runs the GET route without a body after the
@@ -79,6 +79,7 @@ func (h *Handler) routes() *chi.Mux {
 		r.Post("/vaults", h.createVault)
 		r.Get("/vaults", h.listVaults)
 		r.Get("/vaults/{vault_id}", h.getVault)
+		r.Post("/vaults/{vault_id}", h.updateVault)
 		r.Delete("/vaults/{vault_id}", h.deleteVault)
 		r.Post("/vaults/{vault_id}/credentials", h.createCredential)
 		r.Get("/vaults/{vault_id}/credentials", h.listCredentials)
@@ -110,18 +111,34 @@ func (h *Handler) routes() *chi.Mux {
 		r.Get("/agents/sessions/{session_id}/items", h.listItems)
 		r.Get("/agents/sessions/{session_id}/turns", h.listTurns)
 		r.Get("/agents/sessions/{session_id}/turns/{turn_id}", h.getTurn)
+		r.Get("/agents/sessions/{session_id}/turns/{turn_id}/items", h.listItems)
 		h.registerSubagentRoutes(r)
 		r.Get("/agents/sessions/{session_id}/artifacts", h.listSessionArtifacts)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.getSessionArtifact)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", h.sessionArtifactContent)
 		r.Head("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", methodNotAllowed)
 		r.Delete("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.deleteSessionArtifact)
-		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
-			writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
-		})
+		// Official operations Core does not run answer like an unknown route.
+		const automations = "/agents/automations"
+		for _, route := range []struct{ method, path string }{
+			{http.MethodPost, automations}, {http.MethodGet, automations},
+			{http.MethodGet, automations + "/{automation_id}"}, {http.MethodPost, automations + "/{automation_id}"}, {http.MethodDelete, automations + "/{automation_id}"},
+			{http.MethodPost, automations + "/{automation_id}/pause"}, {http.MethodPost, automations + "/{automation_id}/resume"},
+			{http.MethodPost, automations + "/{automation_id}/invocations"}, {http.MethodGet, automations + "/{automation_id}/invocations"},
+			{http.MethodGet, automations + "/{automation_id}/invocations/{invocation_id}"},
+			{http.MethodPost, "/agents/environments"}, {http.MethodGet, "/agents/environments"},
+			{http.MethodGet, "/agents/sessions/{session_id}/traces"},
+		} {
+			r.MethodFunc(route.method, route.path, unsupportedOperation)
+		}
+		r.NotFound(unsupportedOperation)
 		r.MethodNotAllowed(methodNotAllowed)
 	})
 	return router
+}
+
+func unsupportedOperation(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
 }
 
 // createSession atomically reserves or admits initial text with the Session.
@@ -298,11 +315,15 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	filter, ok := readMetadataFilter(w, r)
+	if !ok {
+		return
+	}
 	var agentID *string
 	if values, present := r.URL.Query()["agent_id"]; present {
 		agentID = &values[0]
 	}
-	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
+	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID, filter)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return
