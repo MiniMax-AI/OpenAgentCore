@@ -154,6 +154,29 @@ func (s *Store) ListVaults(ctx context.Context, tenantID string, query vaults.Pa
 	return page, nil
 }
 
+// UpdateVault is ErrNotFound for a Vault the tenant does not own.
+func (s *Store) UpdateVault(ctx context.Context, update vaults.VaultUpdate) (vaults.Vault, error) {
+	var name pgtype.Text
+	if update.Name != nil {
+		name = pgtype.Text{String: *update.Name, Valid: true}
+	}
+	var updated vaults.Vault
+	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
+		row, err := q.UpdateVault(ctx, sqlc.UpdateVaultParams{TenantID: pgunit.PathID(update.TenantID), ID: pgunit.PathID(update.VaultID), SetName: update.NameSet, Name: name, Metadata: update.Metadata})
+		if err != nil {
+			return err
+		}
+		if updated, err = vaultFromRow(row); err != nil {
+			return err
+		}
+		return auditpg.RecordWriteAudit(ctx, q, update.TenantID, writeaudit.ActionUpdate, writeaudit.ResourceVault, updated.ID, "")
+	})
+	if err != nil {
+		return vaults.Vault{}, err
+	}
+	return updated, nil
+}
+
 // DeleteVault relies on the owning foreign key to remove every stored Credential.
 func (s *Store) DeleteVault(ctx context.Context, tenantID, vaultID string) (string, error) {
 	var deleted string

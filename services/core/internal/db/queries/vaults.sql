@@ -6,6 +6,13 @@ RETURNING *;
 -- name: GetVault :one
 SELECT * FROM vaults WHERE tenant_id = $1 AND id = $2;
 
+-- name: UpdateVault :one
+UPDATE vaults
+SET name = CASE WHEN sqlc.arg(set_name)::boolean THEN sqlc.narg(name) ELSE name END,
+    metadata = COALESCE(sqlc.narg(metadata)::jsonb, metadata)
+WHERE tenant_id = sqlc.arg(tenant_id) AND id = sqlc.arg(id)
+RETURNING *;
+
 -- name: DeleteVault :one
 DELETE FROM vaults WHERE tenant_id = $1 AND id = $2 RETURNING id;
 

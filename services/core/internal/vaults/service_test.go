@@ -21,9 +21,11 @@ type fakeStorage struct {
 	getCredential       func(context.Context, string, string, string) (Credential, error)
 	listCredentials     func(context.Context, string, string, PageQuery) (CredentialPage, error)
 	createVault         func(context.Context, NewVault) (Vault, error)
+	updateVault         func(context.Context, VaultUpdate) (Vault, error)
 	deleteVault         func(context.Context, string, string) (string, error)
 	createCredential    func(context.Context, NewCredential) (Credential, error)
 	replaceStaticToken  func(context.Context, StaticTokenReplacement) (Credential, error)
+	replaceMetadata     func(context.Context, CredentialKey, []byte) (Credential, error)
 	deleteCredential    func(context.Context, CredentialKey) (string, error)
 	withOAuthCredential func(context.Context, CredentialKey, func(OAuthTx) error) error
 	countOwnedVaults    func(context.Context, string, []string) (int, error)
@@ -69,6 +71,20 @@ func (f *fakeStorage) CreateVault(ctx context.Context, vault NewVault) (Vault, e
 		f.unexpected("CreateVault")
 	}
 	return f.createVault(ctx, vault)
+}
+
+func (f *fakeStorage) UpdateVault(ctx context.Context, update VaultUpdate) (Vault, error) {
+	if f.updateVault == nil {
+		f.unexpected("UpdateVault")
+	}
+	return f.updateVault(ctx, update)
+}
+
+func (f *fakeStorage) ReplaceCredentialMetadata(ctx context.Context, key CredentialKey, metadata []byte) (Credential, error) {
+	if f.replaceMetadata == nil {
+		f.unexpected("ReplaceCredentialMetadata")
+	}
+	return f.replaceMetadata(ctx, key, metadata)
 }
 
 func (f *fakeStorage) DeleteVault(ctx context.Context, tenantID, vaultID string) (string, error) {
@@ -149,7 +165,7 @@ func (f *fakeOAuthTx) ApplyOAuthRefresh(ctx context.Context, grant OAuthGrant) e
 	return f.refresh(ctx, grant)
 }
 
-func (f *fakeOAuthTx) ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant) (Credential, error) {
+func (f *fakeOAuthTx) ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant, _ []byte) (Credential, error) {
 	if f.replacement == nil {
 		f.t.Fatal("unexpected call to ApplyOAuthReplacement")
 	}
@@ -253,7 +269,7 @@ func TestCreateCredentialsPassPlaintextUnderANewID(t *testing.T) {
 		stored = append(stored, credential)
 		return Credential{ID: credential.CredentialID}, nil
 	}}, unexpectedRefresh(t))
-	created, err := service.CreateStaticCredential(t.Context(), CreateStaticCredential{TenantID: strings.ToUpper(tenant.String()), VaultID: vault.String(), Name: "static", MCPServerURL: url, Token: "private-token"})
+	created, err := service.CreateStaticCredential(t.Context(), CreateStaticCredential{TenantID: strings.ToUpper(tenant.String()), VaultID: vault.String(), Name: "static", MCPServerURL: url, Token: "private-token", Metadata: map[string]string{"owner": "ops"}})
 	if err != nil || created.ID != stored[0].CredentialID {
 		t.Fatal(err)
 	}
@@ -263,8 +279,8 @@ func TestCreateCredentialsPassPlaintextUnderANewID(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []NewCredential{
-		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[0].CredentialID}, Name: "static", AuthType: AuthStaticBearer, MCPServerURL: url, Token: "private-token"},
-		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[1].CredentialID}, Name: "oauth", AuthType: AuthMCPOAuth, MCPServerURL: url,
+		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[0].CredentialID}, Name: "static", AuthType: AuthStaticBearer, MCPServerURL: url, Token: "private-token", Metadata: []byte(`{"owner":"ops"}`)},
+		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[1].CredentialID}, Name: "oauth", AuthType: AuthMCPOAuth, MCPServerURL: url, Metadata: []byte("{}"),
 			OAuth: OAuthGrant{Metadata: metadata, AccessToken: "access", RefreshToken: "refresh", ClientSecret: "client-secret"}},
 	}
 	if !reflect.DeepEqual(stored, want) || stored[0].CredentialID == stored[1].CredentialID {
@@ -294,7 +310,7 @@ func TestUpdateStaticCredential(t *testing.T) {
 		t.Fatal("an OAuth Credential took a static token", err)
 	}
 	service := testService(t, &fakeStorage{getCredential: current(AuthStaticBearer), replaceStaticToken: func(_ context.Context, replacement StaticTokenReplacement) (Credential, error) {
-		if replacement != (StaticTokenReplacement{CredentialKey: CredentialKey{tenant, vault, id}, MCPServerURL: url, Token: "replacement"}) {
+		if replacement.CredentialKey != (CredentialKey{tenant, vault, id}) || replacement.MCPServerURL != url || replacement.Token != "replacement" || replacement.Metadata != nil {
 			t.Fatalf("unexpected replacement %+v", replacement)
 		}
 		return Credential{}, errStorage

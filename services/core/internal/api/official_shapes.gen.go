@@ -323,6 +323,10 @@ var (
 		{"name", shape{kind: stringValue}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
 	}}
+	updateVaultParams = shape{kind: objectValue, members: []member{
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
+		{"name", shape{kind: stringValue, nullable: true}},
+	}}
 	createVaultCredentialParams = shape{kind: objectValue, members: []member{
 		{"name", shape{kind: stringValue, required: true}},
 		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer", "environment_variable"}, variants: map[string][]member{

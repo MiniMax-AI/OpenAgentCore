@@ -1,27 +1,27 @@
 -- name: CreateStaticCredential :one
-INSERT INTO vault_credentials (id, vault_id, name, auth_type, mcp_server_url, token_ciphertext)
-SELECT sqlc.arg(id), v.id, sqlc.arg(name), 'static_bearer', sqlc.arg(mcp_server_url), sqlc.arg(token_ciphertext)
+INSERT INTO vault_credentials (id, vault_id, name, auth_type, mcp_server_url, token_ciphertext, metadata)
+SELECT sqlc.arg(id), v.id, sqlc.arg(name), 'static_bearer', sqlc.arg(mcp_server_url), sqlc.arg(token_ciphertext), sqlc.arg(metadata)
 FROM vaults v
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id)
-RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at, oauth_metadata;
+RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at, oauth_metadata, metadata;
 
 -- name: GetCredential :one
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id);
 
 -- name: UpdateStaticCredential :one
 UPDATE vault_credentials c
-SET token_ciphertext = sqlc.arg(token_ciphertext), updated_at = statement_timestamp()
+SET token_ciphertext = sqlc.arg(token_ciphertext), metadata = COALESCE(sqlc.narg(metadata)::jsonb, c.metadata), updated_at = statement_timestamp()
 FROM vaults v
 WHERE v.id = c.vault_id AND v.tenant_id = sqlc.arg(tenant_id)
   AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id)
   AND c.auth_type = 'static_bearer' AND c.mcp_server_url = sqlc.arg(mcp_server_url)
-RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata;
+RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata;
 
 -- name: ListCredentials :many
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(vault_id)
@@ -42,3 +42,11 @@ USING vaults v
 WHERE v.id = c.vault_id AND v.tenant_id = sqlc.arg(tenant_id)
   AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id)
 RETURNING c.id;
+
+-- name: UpdateCredentialMetadata :one
+UPDATE vault_credentials c
+SET metadata = sqlc.arg(metadata), updated_at = statement_timestamp()
+FROM vaults v
+WHERE v.id = c.vault_id AND v.tenant_id = sqlc.arg(tenant_id)
+  AND v.id = sqlc.arg(vault_id) AND c.id = sqlc.arg(id)
+RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata;

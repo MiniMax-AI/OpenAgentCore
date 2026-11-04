@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
@@ -15,9 +17,11 @@ import (
 // a Session's MCP servers use at creation.
 type Vaults interface {
 	CreateVault(context.Context, vaults.CreateVault) (vaults.Vault, error)
+	UpdateVault(context.Context, vaults.UpdateVault) (vaults.Vault, error)
 	DeleteVault(context.Context, vaults.DeleteVault) (string, error)
 	CreateStaticCredential(context.Context, vaults.CreateStaticCredential) (vaults.Credential, error)
 	UpdateStaticCredential(context.Context, vaults.UpdateStaticCredential) (vaults.Credential, error)
+	UpdateCredentialMetadata(context.Context, vaults.UpdateCredentialMetadata) (vaults.Credential, error)
 	CreateOAuthCredential(context.Context, vaults.CreateOAuthCredential) (vaults.Credential, error)
 	UpdateOAuthCredential(context.Context, vaults.UpdateOAuthCredential) (vaults.Credential, error)
 	DeleteCredential(context.Context, vaults.DeleteCredential) (string, error)
@@ -62,6 +66,37 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, vaultResponse(vault))
+}
+
+func (h *Handler) updateVault(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readJSONObject(w, r)
+	if !ok || writeFieldError(w, validateBody(raw, updateVaultParams)) {
+		return
+	}
+	var request struct {
+		Name     *string           `json:"name"`
+		Metadata map[string]string `json:"metadata"`
+	}
+	_ = json.Unmarshal(raw, &request)
+	_, fields := orderedMembers(raw)
+	_, nameSet := fields["name"]
+	input := vaults.UpdateVault{TenantID: tenantID(r), VaultID: chi.URLParam(r, "vault_id"), NameSet: nameSet, Metadata: request.Metadata}
+	if request.Name != nil {
+		name, err := normalizedVaultName(*request.Name)
+		if writeFieldError(w, err) {
+			return
+		}
+		input.Name = &name
+	}
+	if writeFieldError(w, metadataFieldError(metadata.Validate(input.Metadata))) {
+		return
+	}
+	vault, err := h.Vaults.UpdateVault(r.Context(), input)
+	if err != nil {
+		writeVaultsError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, vaultResponse(vault))
 }
 
 func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {

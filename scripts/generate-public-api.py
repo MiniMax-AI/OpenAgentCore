@@ -19,7 +19,7 @@ REQUEST_SHAPES = {
     'CreateAgentParams': (), 'UpdateAgentParams': (), 'SessionAgentConfigParam': (),
     'CreateAgentSessionParams': ('agent', 'environment'),
     'UpdateAgentSessionParams': (),
-    'CreateVaultParams': (),
+    'CreateVaultParams': (), 'UpdateVaultParams': (),
     'CreateVaultCredentialParams': (),
     'RotateVaultCredentialParams': (),
     'CreateEnvironmentTemplateParams': ('network',),

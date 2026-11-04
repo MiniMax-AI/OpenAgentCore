@@ -79,6 +79,7 @@ func (h *Handler) routes() *chi.Mux {
 		r.Post("/vaults", h.createVault)
 		r.Get("/vaults", h.listVaults)
 		r.Get("/vaults/{vault_id}", h.getVault)
+		r.Post("/vaults/{vault_id}", h.updateVault)
 		r.Delete("/vaults/{vault_id}", h.deleteVault)
 		r.Post("/vaults/{vault_id}/credentials", h.createCredential)
 		r.Get("/vaults/{vault_id}/credentials", h.listCredentials)
@@ -110,18 +111,34 @@ func (h *Handler) routes() *chi.Mux {
 		r.Get("/agents/sessions/{session_id}/items", h.listItems)
 		r.Get("/agents/sessions/{session_id}/turns", h.listTurns)
 		r.Get("/agents/sessions/{session_id}/turns/{turn_id}", h.getTurn)
+		r.Get("/agents/sessions/{session_id}/turns/{turn_id}/items", h.listItems)
 		h.registerSubagentRoutes(r)
 		r.Get("/agents/sessions/{session_id}/artifacts", h.listSessionArtifacts)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.getSessionArtifact)
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", h.sessionArtifactContent)
 		r.Head("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", methodNotAllowed)
 		r.Delete("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.deleteSessionArtifact)
-		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
-			writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
-		})
+		// Official operations Core does not run answer like an unknown route.
+		const automations = "/agents/automations"
+		for _, route := range []struct{ method, path string }{
+			{http.MethodPost, automations}, {http.MethodGet, automations},
+			{http.MethodGet, automations + "/{automation_id}"}, {http.MethodPost, automations + "/{automation_id}"}, {http.MethodDelete, automations + "/{automation_id}"},
+			{http.MethodPost, automations + "/{automation_id}/pause"}, {http.MethodPost, automations + "/{automation_id}/resume"},
+			{http.MethodPost, automations + "/{automation_id}/invocations"}, {http.MethodGet, automations + "/{automation_id}/invocations"},
+			{http.MethodGet, automations + "/{automation_id}/invocations/{invocation_id}"},
+			{http.MethodPost, "/agents/environments"}, {http.MethodGet, "/agents/environments"},
+			{http.MethodGet, "/agents/sessions/{session_id}/traces"},
+		} {
+			r.MethodFunc(route.method, route.path, unsupportedOperation)
+		}
+		r.NotFound(unsupportedOperation)
 		r.MethodNotAllowed(methodNotAllowed)
 	})
 	return router
+}
+
+func unsupportedOperation(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
 }
 
 // createSession atomically reserves or admits initial text with the Session.

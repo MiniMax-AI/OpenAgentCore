@@ -544,8 +544,9 @@ func (f *fakeInstallationBindings) AddressBindings(a0 context.Context) (deployme
 }
 
 type fakeItems struct {
-	t         testing.TB
-	listItems func(context.Context, string, string, string, int, bool) (sessions.ItemPage, error)
+	t             testing.TB
+	listItems     func(context.Context, string, string, string, int, bool) (sessions.ItemPage, error)
+	listTurnItems func(context.Context, string, string, string, string, int, bool) (sessions.ItemPage, error)
 }
 
 func (f *fakeItems) ListItems(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (sessions.ItemPage, error) {
@@ -553,6 +554,13 @@ func (f *fakeItems) ListItems(a0 context.Context, a1 string, a2 string, a3 strin
 		unexpectedCall(f.t, "ListItems")
 	}
 	return f.listItems(a0, a1, a2, a3, a4, a5)
+}
+
+func (f *fakeItems) ListTurnItems(a0 context.Context, a1 string, a2 string, a3 string, a4 string, a5 int, a6 bool) (sessions.ItemPage, error) {
+	if f.listTurnItems == nil {
+		unexpectedCall(f.t, "ListTurnItems")
+	}
+	return f.listTurnItems(a0, a1, a2, a3, a4, a5, a6)
 }
 
 type fakeMetrics struct {
@@ -1054,11 +1062,13 @@ func (f *fakeTurns) ListTurns(a0 context.Context, a1 string, a2 string, a3 strin
 type fakeVaults struct {
 	t                      testing.TB
 	createVault            func(context.Context, vaults.CreateVault) (vaults.Vault, error)
+	updateVault            func(context.Context, vaults.UpdateVault) (vaults.Vault, error)
 	deleteVault            func(context.Context, vaults.DeleteVault) (string, error)
 	createStaticCredential func(context.Context, vaults.CreateStaticCredential) (vaults.Credential, error)
 	updateStaticCredential func(context.Context, vaults.UpdateStaticCredential) (vaults.Credential, error)
 	createOAuthCredential  func(context.Context, vaults.CreateOAuthCredential) (vaults.Credential, error)
 	updateOAuthCredential  func(context.Context, vaults.UpdateOAuthCredential) (vaults.Credential, error)
+	updateCredentialMeta   func(context.Context, vaults.UpdateCredentialMetadata) (vaults.Credential, error)
 	deleteCredential       func(context.Context, vaults.DeleteCredential) (string, error)
 	resolveMCPCredentials  func(context.Context, vaults.ResolveMCPCredentials) ([]vaults.MCPCredentialBinding, error)
 }
@@ -1068,6 +1078,20 @@ func (f *fakeVaults) CreateVault(a0 context.Context, a1 vaults.CreateVault) (vau
 		unexpectedCall(f.t, "CreateVault")
 	}
 	return f.createVault(a0, a1)
+}
+
+func (f *fakeVaults) UpdateVault(a0 context.Context, a1 vaults.UpdateVault) (vaults.Vault, error) {
+	if f.updateVault == nil {
+		unexpectedCall(f.t, "UpdateVault")
+	}
+	return f.updateVault(a0, a1)
+}
+
+func (f *fakeVaults) UpdateCredentialMetadata(a0 context.Context, a1 vaults.UpdateCredentialMetadata) (vaults.Credential, error) {
+	if f.updateCredentialMeta == nil {
+		unexpectedCall(f.t, "UpdateCredentialMetadata")
+	}
+	return f.updateCredentialMeta(a0, a1)
 }
 
 func (f *fakeVaults) DeleteVault(a0 context.Context, a1 vaults.DeleteVault) (string, error) {

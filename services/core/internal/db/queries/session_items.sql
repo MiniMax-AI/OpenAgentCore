@@ -34,6 +34,7 @@ SELECT i.id, i.created_at,
          THEN jsonb_set(i.payload, '{status}', '"incomplete"') ELSE i.payload END)::jsonb AS payload
 FROM session_items i JOIN turns t ON t.id = i.turn_id
 WHERE i.session_id = sqlc.arg(session_id)
+  AND (sqlc.narg(turn_id)::uuid IS NULL OR i.turn_id = sqlc.narg(turn_id))
   AND (sqlc.narg(after_created)::timestamptz IS NULL
        OR (sqlc.arg(ascending)::boolean AND (i.created_at, i.position, i.id) > (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_position)::integer, sqlc.arg(after_id)::uuid))
        OR (NOT sqlc.arg(ascending)::boolean AND (i.created_at, i.position, i.id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_position)::integer, sqlc.arg(after_id)::uuid)))

@@ -12,11 +12,11 @@ import (
 )
 
 const createStaticCredential = `-- name: CreateStaticCredential :one
-INSERT INTO vault_credentials (id, vault_id, name, auth_type, mcp_server_url, token_ciphertext)
-SELECT $1, v.id, $2, 'static_bearer', $3, $4
+INSERT INTO vault_credentials (id, vault_id, name, auth_type, mcp_server_url, token_ciphertext, metadata)
+SELECT $1, v.id, $2, 'static_bearer', $3, $4, $5
 FROM vaults v
-WHERE v.tenant_id = $5 AND v.id = $6
-RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at, oauth_metadata
+WHERE v.tenant_id = $6 AND v.id = $7
+RETURNING id, vault_id, name, auth_type, mcp_server_url, created_at, updated_at, oauth_metadata, metadata
 `
 
 type CreateStaticCredentialParams struct {
@@ -24,6 +24,7 @@ type CreateStaticCredentialParams struct {
 	Name            string      `json:"name"`
 	McpServerUrl    string      `json:"mcp_server_url"`
 	TokenCiphertext []byte      `json:"token_ciphertext"`
+	Metadata        []byte      `json:"metadata"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
 	VaultID         pgtype.UUID `json:"vault_id"`
 }
@@ -37,6 +38,7 @@ type CreateStaticCredentialRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	OauthMetadata []byte             `json:"oauth_metadata"`
+	Metadata      []byte             `json:"metadata"`
 }
 
 func (q *Queries) CreateStaticCredential(ctx context.Context, arg CreateStaticCredentialParams) (CreateStaticCredentialRow, error) {
@@ -45,6 +47,7 @@ func (q *Queries) CreateStaticCredential(ctx context.Context, arg CreateStaticCr
 		arg.Name,
 		arg.McpServerUrl,
 		arg.TokenCiphertext,
+		arg.Metadata,
 		arg.TenantID,
 		arg.VaultID,
 	)
@@ -58,6 +61,7 @@ func (q *Queries) CreateStaticCredential(ctx context.Context, arg CreateStaticCr
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OauthMetadata,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -84,7 +88,7 @@ func (q *Queries) DeleteCredential(ctx context.Context, arg DeleteCredentialPara
 }
 
 const getCredential = `-- name: GetCredential :one
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = $1 AND v.id = $2 AND c.id = $3
@@ -105,6 +109,7 @@ type GetCredentialRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	OauthMetadata []byte             `json:"oauth_metadata"`
+	Metadata      []byte             `json:"metadata"`
 }
 
 func (q *Queries) GetCredential(ctx context.Context, arg GetCredentialParams) (GetCredentialRow, error) {
@@ -119,12 +124,13 @@ func (q *Queries) GetCredential(ctx context.Context, arg GetCredentialParams) (G
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OauthMetadata,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const listCredentials = `-- name: ListCredentials :many
-SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
+SELECT c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
 FROM vault_credentials c
 JOIN vaults v ON v.id = c.vault_id
 WHERE v.tenant_id = $1 AND v.id = $2
@@ -159,6 +165,7 @@ type ListCredentialsRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	OauthMetadata []byte             `json:"oauth_metadata"`
+	Metadata      []byte             `json:"metadata"`
 }
 
 func (q *Queries) ListCredentials(ctx context.Context, arg ListCredentialsParams) ([]ListCredentialsRow, error) {
@@ -187,6 +194,7 @@ func (q *Queries) ListCredentials(ctx context.Context, arg ListCredentialsParams
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OauthMetadata,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -198,18 +206,69 @@ func (q *Queries) ListCredentials(ctx context.Context, arg ListCredentialsParams
 	return items, nil
 }
 
-const updateStaticCredential = `-- name: UpdateStaticCredential :one
+const updateCredentialMetadata = `-- name: UpdateCredentialMetadata :one
 UPDATE vault_credentials c
-SET token_ciphertext = $1, updated_at = statement_timestamp()
+SET metadata = $1, updated_at = statement_timestamp()
 FROM vaults v
 WHERE v.id = c.vault_id AND v.tenant_id = $2
   AND v.id = $3 AND c.id = $4
-  AND c.auth_type = 'static_bearer' AND c.mcp_server_url = $5
-RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata
+RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
+`
+
+type UpdateCredentialMetadataParams struct {
+	Metadata []byte      `json:"metadata"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	VaultID  pgtype.UUID `json:"vault_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type UpdateCredentialMetadataRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	VaultID       pgtype.UUID        `json:"vault_id"`
+	Name          string             `json:"name"`
+	AuthType      string             `json:"auth_type"`
+	McpServerUrl  string             `json:"mcp_server_url"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	OauthMetadata []byte             `json:"oauth_metadata"`
+	Metadata      []byte             `json:"metadata"`
+}
+
+func (q *Queries) UpdateCredentialMetadata(ctx context.Context, arg UpdateCredentialMetadataParams) (UpdateCredentialMetadataRow, error) {
+	row := q.db.QueryRow(ctx, updateCredentialMetadata,
+		arg.Metadata,
+		arg.TenantID,
+		arg.VaultID,
+		arg.ID,
+	)
+	var i UpdateCredentialMetadataRow
+	err := row.Scan(
+		&i.ID,
+		&i.VaultID,
+		&i.Name,
+		&i.AuthType,
+		&i.McpServerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OauthMetadata,
+		&i.Metadata,
+	)
+	return i, err
+}
+
+const updateStaticCredential = `-- name: UpdateStaticCredential :one
+UPDATE vault_credentials c
+SET token_ciphertext = $1, metadata = COALESCE($2::jsonb, c.metadata), updated_at = statement_timestamp()
+FROM vaults v
+WHERE v.id = c.vault_id AND v.tenant_id = $3
+  AND v.id = $4 AND c.id = $5
+  AND c.auth_type = 'static_bearer' AND c.mcp_server_url = $6
+RETURNING c.id, c.vault_id, c.name, c.auth_type, c.mcp_server_url, c.created_at, c.updated_at, c.oauth_metadata, c.metadata
 `
 
 type UpdateStaticCredentialParams struct {
 	TokenCiphertext []byte      `json:"token_ciphertext"`
+	Metadata        []byte      `json:"metadata"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
 	VaultID         pgtype.UUID `json:"vault_id"`
 	ID              pgtype.UUID `json:"id"`
@@ -225,11 +284,13 @@ type UpdateStaticCredentialRow struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	OauthMetadata []byte             `json:"oauth_metadata"`
+	Metadata      []byte             `json:"metadata"`
 }
 
 func (q *Queries) UpdateStaticCredential(ctx context.Context, arg UpdateStaticCredentialParams) (UpdateStaticCredentialRow, error) {
 	row := q.db.QueryRow(ctx, updateStaticCredential,
 		arg.TokenCiphertext,
+		arg.Metadata,
 		arg.TenantID,
 		arg.VaultID,
 		arg.ID,
@@ -245,6 +306,7 @@ func (q *Queries) UpdateStaticCredential(ctx context.Context, arg UpdateStaticCr
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OauthMetadata,
+		&i.Metadata,
 	)
 	return i, err
 }

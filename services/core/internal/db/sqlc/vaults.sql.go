@@ -139,3 +139,39 @@ func (q *Queries) ListVaults(ctx context.Context, arg ListVaultsParams) ([]Vault
 	}
 	return items, nil
 }
+
+const updateVault = `-- name: UpdateVault :one
+UPDATE vaults
+SET name = CASE WHEN $1::boolean THEN $2 ELSE name END,
+    metadata = COALESCE($3::jsonb, metadata)
+WHERE tenant_id = $4 AND id = $5
+RETURNING id, tenant_id, name, metadata, created_at, status
+`
+
+type UpdateVaultParams struct {
+	SetName  bool        `json:"set_name"`
+	Name     pgtype.Text `json:"name"`
+	Metadata []byte      `json:"metadata"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateVault(ctx context.Context, arg UpdateVaultParams) (Vault, error) {
+	row := q.db.QueryRow(ctx, updateVault,
+		arg.SetName,
+		arg.Name,
+		arg.Metadata,
+		arg.TenantID,
+		arg.ID,
+	)
+	var i Vault
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.Status,
+	)
+	return i, err
+}

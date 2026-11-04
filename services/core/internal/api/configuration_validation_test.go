@@ -76,7 +76,7 @@ func assertConfigurationError(t *testing.T, w *httptest.ResponseRecorder, code s
 }
 
 func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
-	const tools = `, 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'.`
+	const tools = `, 'tool_search', 'programmatic_tool_calling', 'mcp', 'web_search', 'computer_use', and 'automations'.`
 	cases := []struct{ name, fields, param, message string }{
 		// C1, observed (TV-01). {p} is the Session "agent." prefix.
 		{"F02", `"tools":[{"type":"function","name":"lookup","description":"Look up a value.","parameters":[]}]`, "{p}tools[0].parameters", "Invalid type for '{p}tools[0].parameters': expected an object with string keys and unknown value values, but got an array instead."},
@@ -94,7 +94,7 @@ func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
 		{"T03", `"text":{"format":{"type":"json_object"}}`, "{p}text.format.type", "Invalid value: 'json_object'. Supported values are: 'text' and 'json_schema'."},
 		{"R01", `"reasoning":{"effort":"extreme"}`, "{p}reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."},
 		{"R02", `"reasoning":{"summary":"verbose"}`, "{p}reasoning.summary", "Invalid value: 'verbose'. Supported values are: 'concise', 'detailed', and 'auto'."},
-		{"S01", `"service_tier":"turbo"`, "{p}service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."},
+		{"S01", `"service_tier":"turbo"`, "{p}service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', 'fast', and 'ultrafast'."},
 		{"X01", `"tool_choice":"auto"`, "{p}tool_choice", "Unknown parameter: '{p}tool_choice'."},
 		{"TS1", `"tools":[{"type":"tool_search","max_results":3}]`, "{p}tools[0].max_results", "Unknown parameter: '{p}tools[0].max_results'."},
 		{"F09", `"tools":["lookup"]`, "{p}tools[0]", "Invalid type for '{p}tools[0]': expected an object, but got a string instead."},
@@ -343,8 +343,8 @@ func TestAgentConfigurationErrorsBoundEchoedInput(t *testing.T) {
 			{`"tools":[{"type":"tool_search","\ufffd":1}]`, nil, "Unknown parameter."},
 			{`"tools":[{"type":"tool_search","` + strings.Repeat("<>", 64) + `":1}]`, param(p + "tools[0]." + strings.Repeat("<>", 64)), "Unknown parameter: '" + p + "tools[0]." + strings.Repeat("<>", 64) + "'."},
 			{`"reasoning":{"` + strings.Repeat("a", 4<<10) + `":1}`, nil, "Unknown parameter."},
-			{`"service_tier":"` + long + `"`, param(p + "service_tier"), "Invalid value. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."},
-			{`"tools":[{"type":"line\u2028break"}]`, param(p + "tools[0].type"), "Invalid value. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'."},
+			{`"service_tier":"` + long + `"`, param(p + "service_tier"), "Invalid value. Supported values are: 'auto', 'default', 'flex', 'priority', 'fast', and 'ultrafast'."},
+			{`"tools":[{"type":"line\u2028break"}]`, param(p + "tools[0].type"), "Invalid value. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', 'web_search', 'computer_use', and 'automations'."},
 			{`"tools":[` + lookupTool(long, "") + `,` + lookupTool(long, "") + `]`, nil, "duplicate function tool name"},
 			{`"tools":[{"type":"function","name":"` + long + `","description":"","parameters":{"type":"string"}}]`, nil, `Invalid schema for function: schema must be a JSON Schema of 'type: "object"', got 'type: "string"'.`},
 			{`"tools":[{"type":"function","name":"lookup","description":"","parameters":{"type":"` + long + `"}}]`, nil, `Invalid schema for function 'lookup': schema must be a JSON Schema of 'type: "object"'.`},

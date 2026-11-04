@@ -39,7 +39,7 @@ func (t *oauthTx) LoadOAuthGrant(ctx context.Context, destination string) (vault
 		return vaults.OAuthGrant{}, translate(err)
 	}
 	credential, err := credentialFromRow(sqlc.GetCredentialRow{ID: row.ID, VaultID: row.VaultID, Name: row.Name, AuthType: row.AuthType,
-		McpServerUrl: row.McpServerUrl, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, OauthMetadata: row.OauthMetadata})
+		McpServerUrl: row.McpServerUrl, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, OauthMetadata: row.OauthMetadata, Metadata: row.Metadata})
 	if err != nil {
 		return vaults.OAuthGrant{}, err
 	}
@@ -55,12 +55,12 @@ func (t *oauthTx) LoadOAuthGrant(ctx context.Context, destination string) (vault
 }
 
 func (t *oauthTx) ApplyOAuthRefresh(ctx context.Context, grant vaults.OAuthGrant) error {
-	_, err := t.update(ctx, grant)
+	_, err := t.update(ctx, grant, nil)
 	return err
 }
 
-func (t *oauthTx) ApplyOAuthReplacement(ctx context.Context, grant vaults.OAuthGrant) (vaults.Credential, error) {
-	updated, err := t.update(ctx, grant)
+func (t *oauthTx) ApplyOAuthReplacement(ctx context.Context, grant vaults.OAuthGrant, metadata []byte) (vaults.Credential, error) {
+	updated, err := t.update(ctx, grant, metadata)
 	if err != nil {
 		return vaults.Credential{}, err
 	}
@@ -72,7 +72,7 @@ func (t *oauthTx) ApplyOAuthReplacement(ctx context.Context, grant vaults.OAuthG
 
 // update seals the grant to the loaded Credential and matches the destination
 // it is sealed to.
-func (t *oauthTx) update(ctx context.Context, grant vaults.OAuthGrant) (vaults.Credential, error) {
+func (t *oauthTx) update(ctx context.Context, grant vaults.OAuthGrant, publicMetadata []byte) (vaults.Credential, error) {
 	if t.loaded == nil {
 		return vaults.Credential{}, errors.New("OAuth credential was not loaded")
 	}
@@ -81,7 +81,7 @@ func (t *oauthTx) update(ctx context.Context, grant vaults.OAuthGrant) (vaults.C
 		return vaults.Credential{}, err
 	}
 	row, err := t.q.UpdateOAuthCredential(ctx, sqlc.UpdateOAuthCredentialParams{TenantID: t.tenant, VaultID: t.vault, ID: t.id,
-		McpServerUrl: t.loaded.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext})
+		McpServerUrl: t.loaded.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext, Metadata: publicMetadata})
 	if err != nil {
 		return vaults.Credential{}, translate(err)
 	}
