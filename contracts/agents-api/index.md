@@ -33,7 +33,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](./subagents.md) |
-| Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). The pinned contract rejects `environment.environment_id`; existing hosted Environments cannot be attached across Sessions. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
+| Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). Core rejects `environment.environment_id`, so an existing hosted Environment cannot be attached to another Session. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
 | Vaults | create, retrieve, update, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
@@ -73,7 +73,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
-- Omitted or null `compaction` keeps the Harness's native blocking compaction; the official default is background compaction.
+- The official default compaction, which is background compaction, runs as the Harness's native blocking compaction ([Agents](./wire-semantics.md#agents)).
 - Core rejects official fields and inputs it has no native home for with 400 naming the param ([unsupported fields](./wire-semantics.md#unsupported-fields)), and answers 404 `unsupported_operation` on the routes it does not run ([unsupported operations](./wire-semantics.md#unsupported-operations)).
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
@@ -142,7 +142,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Configuration and tools**
 
-- A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `text.verbosity`, `web_search` mode or setting, `programmatic_tool_calling` value, `compaction.async: true`, `experimental.time_awareness: true` or `automations` or `computer_use` tool that the selected Harness does not declare is saved but rejected at Session admission; no Harness declares them yet ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `text.verbosity`, `web_search` mode or setting, `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools are saved but rejected at Session admission for every Harness, because none runs them natively ([Session admission](./wire-semantics.md#session-admission)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 
@@ -162,6 +163,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Environments and Templates**
 
+- Core never reports the `suspended` state or the `suspended`, `expired` and `reset` Environment events ([resources and states](./environments.md#resources-and-states)).
 - Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the [input reservation deadline](./environments.md#reservations).
 - MiniMax Code does not declare `retained_native_history`, so it cannot run on microsandbox, which keeps every Environment on workspace storage; Core rejects the Session ([Harness capabilities](./harness-capabilities.md)).
 - The model provider's port stays reachable at public addresses from the sandbox because the Harness runs there, and a private model provider host only when the network cap lists its name or a `*.` entry that covers it; under `disabled` the host's DNS server stays reachable on port 53; MCP connections from the Environment follow the deployment's [network cap](./sandbox-deployment.md#network). E2B sandboxes cannot reach private networks, and `169.254.169.254` answers inside an E2B sandbox under every cap.

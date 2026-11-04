@@ -159,8 +159,8 @@ func TestSelfHostedAdmissionRejectsNetworkPolicy(t *testing.T) {
 	}
 }
 
-// Saved settings that need a native home are rejected unless the Harness declares them.
-func TestAgentOptionsRequireDeclaredSupport(t *testing.T) {
+// Saved settings no Harness runs natively are rejected at admission on every Harness.
+func TestAgentOptionsWithoutNativeHomeAreRejected(t *testing.T) {
 	declaration := harnesstest.Declaration("fixture", nil)
 	agent := func(mutate func(*v1.Agent)) Snapshot {
 		a := v1.Agent{Model: "fixture", ServiceTier: "auto", Tools: []json.RawMessage{}}

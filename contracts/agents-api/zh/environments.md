@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: b24a90ebd1c4e8edaf878798fdd1017fcc90b9bafd648739e8780926ea0e4a53
+source_hash: 029df42249e47ea130d35b2883572e3f89f10bf2fbd756060f2e53cd63559e11
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -38,7 +38,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`ready`、`connected`、`disconnected`、`suspended`、`expired`、`failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | 相同的七种状态，并带可为 null 的 error |
 
-Core 只在事件中发出 `ready`，从不发出 `suspended`。资源状态按下图变化，失败或过期的 Environment 不再改变：
+Core 只在事件中发出 `ready`。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
 
 ```mermaid
 stateDiagram-v2

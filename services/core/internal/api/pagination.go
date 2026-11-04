@@ -58,12 +58,21 @@ func readMetadataFilter(w http.ResponseWriter, r *http.Request) (map[string]stri
 	var filter map[string]string
 	for name, values := range r.URL.Query() {
 		key, found := strings.CutPrefix(name, "metadata[")
-		if key, closed := strings.CutSuffix(key, "]"); found && closed && key != "" {
-			if filter == nil {
-				filter = map[string]string{}
-			}
-			filter[key] = values[len(values)-1]
+		key, closed := strings.CutSuffix(key, "]")
+		switch {
+		case !found || !closed:
+			continue
+		case len(values) > 1:
+			writeListDuplicateError(w, r, name, nil)
+			return nil, false
+		case key == "":
+			writeFieldError(w, &fieldError{param: "metadata", message: "Invalid property name in 'metadata': '' is too short. Expected a string with minimum length 1, but got a string with length 0 instead."})
+			return nil, false
 		}
+		if filter == nil {
+			filter = map[string]string{}
+		}
+		filter[key] = values[0]
 	}
 	if len(filter) > 0 {
 		if err := metadata.Validate(filter); err != nil {

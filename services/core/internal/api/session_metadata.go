@@ -25,7 +25,8 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		Metadata json.RawMessage `json:"metadata"`
 	}
 	_ = json.Unmarshal(raw, &request)
-	if !isNull(request.Agent) {
+	// An agent object without members changes nothing, as in the official update.
+	if request.Agent != nil && !emptyObject(request.Agent) {
 		writeFieldError(w, &fieldError{param: "agent", message: "Updating the Session agent is not supported."})
 		return
 	}
@@ -33,7 +34,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(request.Metadata) == 0 {
-		if request.Review == nil {
+		if request.Review == nil && request.Agent == nil {
 			writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
 			return
 		}

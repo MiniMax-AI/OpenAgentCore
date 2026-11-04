@@ -115,7 +115,7 @@ Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an 
 
 The Sessions, Vaults and Credentials lists accept `metadata[key]=value` pairs and keep the resources whose metadata holds every pair. A key is nonempty, and at most 16 pairs, 64-character keys and 512-character values apply.
 
-The pinned Python SDK drops empty query values, so `list(order="")` sends no `order` and uses the default. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
+An empty `order` returns the invalid `order` error, like any value other than `asc` and `desc`. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
 
 Vault and Credential lists accept `status` as a scalar, as `status[]` entries, or both, and filter by their union. Both statuses are listed by default. Another value returns 400 `invalid_request_error` with a null param and "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam".
 
@@ -161,7 +161,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | `multi_agent` | Disabled. When enabled without `max_concurrent_subagents`, 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `compaction`, `experimental` | `compaction` is omitted unless sent. Core saves `compaction.async` (true when `compaction` is an object without it) and `experimental.time_awareness` as sent; null `compaction` clears it and the resource omits it. Omitted or null `compaction` keeps the Harness's native blocking compaction, while the official default is background compaction. `experimental` always reads `{"time_awareness": false}` unless set, an `experimental` object without members keeps the saved value, and an update or Session override changes only the members it sends |
+| `compaction`, `experimental` | Core saves `compaction` only with an explicit `async` and otherwise omits it: an omitted, null or empty `compaction`, or a null `async`, is the official default of background compaction, and the Harness runs its native blocking compaction instead. A null `compaction` on update clears the saved value. `experimental` always reads `{"time_awareness": false}` unless set, an `experimental` object without members keeps the saved value, and an update or Session override changes only the members it sends |
 | `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP transport | Saved with `headers: {}`; nonempty headers are stored as given and an `Authorization` header is rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
@@ -195,10 +195,10 @@ These official fields have no Core meaning. A request that sets one returns 400 
 
 | Field | Param |
 | --- | --- |
-| Session update `agent`, when not null | `agent` |
+| Session update `agent` with any member; `{}` changes nothing | `agent` |
 | Session `review: auto_review` on create or update; `none` is accepted and responses omit `review` | `review` |
-| `environment.environment_id`, when not null | `environment_id` |
-| `environment.container_size`, when not null; responses carry `container_size: null` | `container_size` |
+| `environment.environment_id` | `environment_id` |
+| `environment.container_size`; responses carry `container_size: null` | `container_size` |
 | `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
 | A nonempty `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` `environment_variable` | `auth.type` |
@@ -210,7 +210,8 @@ A Session's effective configuration must also pass execution admission, which ap
 
 | Configuration | Message |
 | --- | --- |
-| A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `web_search` mode or setting, `programmatic_tool_calling` value, `text.verbosity`, `compaction.async: true`, `experimental.time_awareness: true` or `automations` or `computer_use` tool the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
+| A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
+| `compaction.async: true`, `experimental.time_awareness: true`, or an `automations` or `computer_use` tool, on every Harness, since none runs them natively | A message naming the field, such as `compaction.async=true is not supported.` |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
 | A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -250,7 +251,7 @@ Keys are scoped to the Project; any key of the Project, including one issued aft
 
 ### Update and list
 
-`POST /agents/sessions/{session_id}` changes only `metadata`: null or `{}` clears it and an object replaces all pairs. A body with `review` alone changes nothing and returns the Session; a body with none of `metadata`, `agent` or `review` returns 400. A non-null `agent` is rejected ([unsupported fields](#unsupported-fields)). Execution state and the creation retry identity are unchanged.
+`POST /agents/sessions/{session_id}` changes only `metadata`: null or `{}` clears it and an object replaces all pairs. A body with only `review` or an empty `agent` changes nothing and returns the Session; a body with none of `metadata`, `agent` or `review` returns 400. An `agent` with members is rejected ([unsupported fields](#unsupported-fields)). Execution state and the creation retry identity are unchanged.
 
 `GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission. The [`metadata` filter](#query-parameters) applies too.
 

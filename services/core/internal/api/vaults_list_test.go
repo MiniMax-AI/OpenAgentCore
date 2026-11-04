@@ -45,7 +45,7 @@ func TestVaultListParameters(t *testing.T) {
 			}
 		})
 	}
-	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=-8", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=deleted", "after=a&after=b"} {
+	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=-8", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=deleted", "after=a&after=b", "metadata[k]=a&metadata[k]=b", "metadata[]=x"} {
 		h, f := vaultResourceHandler(t)
 		w := vaultRequest(h, http.MethodGet, "/v1/vaults?"+query, "")
 		if w.Code != 400 || f.calls != 0 {

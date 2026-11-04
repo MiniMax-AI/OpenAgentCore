@@ -121,6 +121,7 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
     for fields in [{"review": "auto_review"}, {"agent": {"model": "other"}}]:
         expect_error(BadRequestError, lambda: sessions.update(first.id, **fields))
     assert sessions.update(first.id, review="none") == current
+    assert sessions.update(first.id, agent={}) == current
     assert sessions.retrieve(first.id) == current
     print("Session metadata: pinned SDK and raw HTTP replacement, clearing, omission, limits, authentication, tenant isolation, unchanged configuration and creation retry identity passed.")
     return current

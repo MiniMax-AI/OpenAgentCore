@@ -348,6 +348,13 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	if !slices.Equal(served, pinned.Routes) {
 		t.Errorf("/v1 routes differ from the pinned set:\nserved %v\npinned %v", served, pinned.Routes)
 	}
+	// Official operations Core does not run answer like an unknown route.
+	for _, route := range []string{"POST /v1/agents/automations", "GET /v1/agents/automations/a/invocations/i", "GET /v1/agents/environments", "GET /v1/agents/sessions/s/traces"} {
+		method, target, _ := strings.Cut(route, " ")
+		if got := serve(handler, method, target, "", withHeaders(project, beta)); got.Code != http.StatusNotFound || !strings.Contains(got.Body.String(), `"code":"unsupported_operation"`) {
+			t.Errorf("%s = %d %s", route, got.Code, got.Body)
+		}
+	}
 	if routes < 88 || len(s.lookups) != 0 || len(s.updates) != 0 {
 		t.Fatalf("walked %d routes; store lookups %v updates %v", routes, s.lookups, s.updates)
 	}

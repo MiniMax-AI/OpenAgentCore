@@ -125,10 +125,10 @@ func rejectUnsupportedAgentOptions(agent v1.Agent) error {
 	_ = json.Unmarshal(agent.Compaction, &compaction)
 	_ = json.Unmarshal(agent.Experimental, &experimental)
 	if compaction.Async {
-		return errors.New("compaction.async=true is not supported by this Harness.")
+		return errors.New("compaction.async=true is not supported.")
 	}
 	if experimental.TimeAwareness {
-		return errors.New("experimental.time_awareness=true is not supported by this Harness.")
+		return errors.New("experimental.time_awareness=true is not supported.")
 	}
 	for _, raw := range agent.Tools {
 		var tool struct {
@@ -136,7 +136,7 @@ func rejectUnsupportedAgentOptions(agent v1.Agent) error {
 		}
 		_ = json.Unmarshal(raw, &tool)
 		if tool.Type == "automations" || tool.Type == "computer_use" {
-			return fmt.Errorf("The %s tool is not supported by this Harness.", tool.Type)
+			return fmt.Errorf("The %s tool is not supported.", tool.Type)
 		}
 	}
 	return nil

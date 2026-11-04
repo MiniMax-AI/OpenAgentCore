@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 51679090ebed13f911a16986c9677bad3395bd2d5f280def1a944b24614b42bc
+source_hash: f2b074b5f3011d44555f0abb890f1426e59f676902206c18e4a79b428e37bc8a
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -36,7 +36,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
+| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。Core 拒绝 `environment.environment_id`，因此已有 hosted Environment 无法关联到另一个 Session。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
 | Vaults | create, retrieve, update, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
@@ -76,7 +76,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
-- 未指定或为 null 的 `compaction` 会保留 Harness 原生的阻塞式压缩；官方默认值为后台压缩。
+- 官方默认的压缩方式是后台压缩，Core 改为运行 Harness 原生的阻塞式压缩（[Agents](wire-semantics.md#agents)）。
 - Core 以 400 拒绝并指出参数的方式处理其没有原生对应的官方字段和输入（[不支持的字段](wire-semantics.md#unsupported-fields)），并对其不运行的路由返回 404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。
 - Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
 - 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
@@ -145,7 +145,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **配置和工具**
 
-- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值、`compaction.async: true`、`experimental.time_awareness: true`，以及 `automations` 或 `computer_use` 工具，会被保存，但在 Session 准入时被拒绝；目前没有 Harness 声明这些（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- `compaction.async: true`、`experimental.time_awareness: true` 以及 `automations` 和 `computer_use` 工具会被保存，但对所有 Harness 都在 Session 准入时被拒绝，因为没有 Harness 原生运行它们（[Session 准入](wire-semantics.md#session-admission)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 
@@ -165,6 +166,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Environments 和模板**
 
+- Core 从不报告 `suspended` 状态，也不发出 `suspended`、`expired` 和 `reset` Environment 事件（[资源与状态](environments.md#resources-and-states)）。
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - MiniMax Code 未声明 `retained_native_history`，因此无法在 microsandbox 上运行（其每个 Environment 都使用工作区存储）；Core 会拒绝该 Session（[Harness 能力](./harness-capabilities.md)）。
 - 模型提供商在公开地址上的端口从沙箱内始终可达，因为 Harness 运行在那里，私有的模型提供商主机只有在网络上限列出其名称或覆盖它的 `*.` 条目时才可达；`disabled` 下主机 53 端口上的 DNS 服务器仍可达；Environment 中的 MCP 连接遵循部署的[网络上限](sandbox-deployment.md#network)。E2B 沙箱无法访问私有网络，且在任何上限下 `169.254.169.254` 都会在 E2B 沙箱内应答。

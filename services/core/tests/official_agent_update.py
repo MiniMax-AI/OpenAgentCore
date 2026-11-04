@@ -50,6 +50,7 @@ def main():
         updated = touched
         # Compaction and experimental settings: saved, returned, merged per member and cleared by null.
         assert updated.experimental.time_awareness is False and updated.compaction is None
+        assert agents.create(model="default", compaction={}).compaction is None
         tuned = agents.create(model="tuned", compaction={"async": False}, experimental={"time_awareness": True})
         assert tuned.compaction.async_ is False and tuned.experimental.time_awareness is True
         assert agents.update(tuned.id, experimental={}).experimental.time_awareness is True

@@ -36,7 +36,7 @@ An Environment read joins its live owning Session within the caller's Project an
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `ready`, `connected`, `disconnected`, `suspended`, `expired`, `failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | The same seven states, with a nullable error |
 
-Core emits `ready` only in events and never emits `suspended`. The resource moves as follows, and a failed or expired Environment is final:
+Core emits `ready` only in events. It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
 
 ```mermaid
 stateDiagram-v2

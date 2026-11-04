@@ -20,9 +20,6 @@ func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor strin
 
 // ListTurnItems lists the Items of one root Turn with the Session Item cursor rules.
 func (s *Store) ListTurnItems(ctx context.Context, tenantID, sessionID, turnID, cursor string, limit int, ascending bool) (sessions.ItemPage, error) {
-	if turnID == "" {
-		return sessions.ItemPage{}, sessions.ErrInvalidInput
-	}
 	return s.listItems(ctx, tenantID, sessionID, turnID, cursor, limit, ascending)
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: a2147426bef35dc881c87949204b77a2744dee78e7acebf806e4e5aec24016ba
+source_hash: b481386ff50d930d3b8698e0bed882aa512c85adf62d4dc61a42bb77d5a7abe1
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -117,7 +117,7 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 
 Sessions、Vaults 和 Credentials 列表接受 `metadata[key]=value` 键值对，并保留元数据中含全部键值对的资源。键不能为空，最多 16 个键值对，键最长 64 个字符，值最长 512 个字符。
 
-已锁定版本的 Python SDK 会丢弃空查询值，因此 `list(order="")` 不会发送 `order`，而是使用默认值。`after` 会去除首尾空白。检查按以下顺序执行：重复键、`limit`、`order`；Vault 和 Credential 的 `status` 最先检查。这些检查都在任何资源查找之前执行。
+空的 `order` 与 `asc`、`desc` 以外的其他值一样，返回无效 `order` 错误。`after` 会去除首尾空白。检查按以下顺序执行：重复键、`limit`、`order`；Vault 和 Credential 的 `status` 最先检查。这些检查都在任何资源查找之前执行。
 
 Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，并按其并集进行筛选。默认会列出两个状态。其他值会返回 400 `invalid_request_error`，param 为 null，消息为 "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam"。
 
@@ -163,7 +163,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 | `multi_agent` | 禁用。启用但未提供 `max_concurrent_subagents` 时为 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `compaction`、`experimental` | `compaction` 未发送则省略。Core 按所发送的值保存 `compaction.async`（`compaction` 为不含该字段的对象时为 true）和 `experimental.time_awareness`；null `compaction` 会清除它，资源中也不再出现。未指定或为 null 的 `compaction` 保留 Harness 原生的阻塞式压缩，而官方默认值为后台压缩。除非设置，`experimental` 始终读作 `{"time_awareness": false}`；不含成员的 `experimental` 对象保留已保存的值，更新或 Session 覆盖只修改其所发送的成员 |
+| `compaction`、`experimental` | Core 仅在显式给出 `async` 时保存 `compaction`，否则省略：未指定、为 null 或为空对象的 `compaction`，以及为 null 的 `async`，都是官方默认的后台压缩，而 Harness 会改为运行其原生的阻塞式压缩。更新时 null 的 `compaction` 会清除已保存的值。除非设置，`experimental` 始终读作 `{"time_awareness": false}`；不含成员的 `experimental` 对象保留已保存的值，更新或 Session 覆盖只修改其所发送的成员 |
 | `web_search` | 保存每个已锁定模式；请参阅 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP 传输方式 | 以 `headers: {}` 保存；非空标头按给定值存储，`Authorization` 标头被拒绝。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
@@ -197,10 +197,10 @@ Session 创建和更新、Vault 创建、Credential 创建和更新、Environmen
 
 | 字段 | Param |
 | --- | --- |
-| 非 null 的 Session 更新 `agent` | `agent` |
+| 含任何成员的 Session 更新 `agent`；`{}` 不改变任何内容 | `agent` |
 | Session 创建或更新中的 `review: auto_review`；接受 `none`，响应省略 `review` | `review` |
-| 非 null 的 `environment.environment_id` | `environment_id` |
-| 非 null 的 `environment.container_size`；响应携带 `container_size: null` | `container_size` |
+| `environment.environment_id` | `environment_id` |
+| `environment.container_size`；响应携带 `container_size: null` | `container_size` |
 | `desktop.enabled: true`；响应携带 `desktop: {"enabled": false}` | `desktop.enabled` |
 | 非空的 `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` 为 `environment_variable` | `auth.type` |
@@ -212,7 +212,8 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 
 | 配置 | 消息 |
 | --- | --- |
-| Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`web_search` 模式或设置、`programmatic_tool_calling` 取值、`text.verbosity`、`compaction.async: true`、`experimental.time_awareness: true`，或 `automations`、`computer_use` 工具 | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
+| Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
+| 任何 Harness 上的 `compaction.async: true`、`experimental.time_awareness: true`，或 `automations`、`computer_use` 工具，因为没有 Harness 原生运行它们 | 指出字段的消息，例如 `compaction.async=true is not supported.` |
 | 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -252,7 +253,7 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 ### 更新和列表 {#update-and-list}
 
-`POST /agents/sessions/{session_id}` 只修改 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。仅含 `review` 的正文不改变任何内容并返回该 Session；`metadata`、`agent`、`review` 都不含的正文返回 400。非 null 的 `agent` 会被拒绝（[不支持的字段](#unsupported-fields)）。执行状态和创建重试标识保持不变。
+`POST /agents/sessions/{session_id}` 只修改 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。仅含 `review` 或空 `agent` 的正文不改变任何内容并返回该 Session；`metadata`、`agent`、`review` 都不含的正文返回 400。含成员的 `agent` 会被拒绝（[不支持的字段](#unsupported-fields)）。执行状态和创建重试标识保持不变。
 
 `GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。[`metadata` 筛选](#query-parameters)同样适用。
 
