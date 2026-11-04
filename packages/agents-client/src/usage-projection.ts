@@ -1,6 +1,6 @@
 import type { AgentSession } from "./types";
 import { isRecord, exactFields, isNonnegativeInteger } from "./response-projection";
-import { inputTokensDetailsResourceFields, outputTokensDetailsResourceFields, tokenUsageResourceFields } from "./generated/public-api";
+import { inputTokensDetailsResource2Fields, outputTokensDetailsResource2Fields, tokenUsageResourceFields } from "./generated/public-api";
 
 export function projectTokenUsage(value: unknown, invalid: () => never): AgentSession["usage"] {
   if (value === null) return null;
@@ -11,9 +11,9 @@ export function projectTokenUsage(value: unknown, invalid: () => never): AgentSe
     !isNonnegativeInteger(value.input_tokens) ||
     !isNonnegativeInteger(value.output_tokens) ||
     !isNonnegativeInteger(value.total_tokens) ||
-    !isRecord(inputDetails) || !exactFields(inputDetails, inputTokensDetailsResourceFields) ||
+    !isRecord(inputDetails) || !exactFields(inputDetails, inputTokensDetailsResource2Fields) ||
     !isNonnegativeInteger(inputDetails.cached_tokens) ||
-    !isRecord(outputDetails) || !exactFields(outputDetails, outputTokensDetailsResourceFields) ||
+    !isRecord(outputDetails) || !exactFields(outputDetails, outputTokensDetailsResource2Fields) ||
     !isNonnegativeInteger(outputDetails.reasoning_tokens)
   ) return invalid();
   return {

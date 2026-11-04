@@ -25,7 +25,7 @@ Core serves the OpenAI Agents API, so the official OpenAI SDK works unchanged. I
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install openai==3.13.0
+pip install openai==3.45.0
 export OPENAI_BASE_URL=https://core.example/v1
 read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the key; it is not echoed
 ```
@@ -96,7 +96,7 @@ print(session.id)
 This makes a real model request and may incur charges.
 
 - `x_agents_core` holds Core's additions to the OpenAI API; see [Core extensions](../api/public-agent-api.md#core-extensions).
-- Keep the whole `agent` object in `extra_body`. SDK 3.13.0 replaces a body field with the matching `extra_body` field instead of merging them.
+- Keep the whole `agent` object in `extra_body`. SDK 3.45.0 replaces a body field with the matching `extra_body` field instead of merging them.
 
 ## 3. Wait for the result
 

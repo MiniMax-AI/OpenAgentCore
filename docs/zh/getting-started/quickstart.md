@@ -1,7 +1,7 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 784dd62e274e49975af1bc1b136cec5d6028ed0896cbe6e9345d4c686d7423df
+source_hash: 463bfed6afcc95bc85284a7063f2303690816d7d1e6fd1c7495e5084615254a0
 ---
 
 使用官方 OpenAI Python SDK 通过 Core 运行 Agent：用项目 API 密钥连接，启动一个会写入文件的 Session，并读取结果。你需要管理员提供的密钥和 API 基础 URL。
@@ -27,7 +27,7 @@ Core 提供 OpenAI Agents API，因此无需修改官方 OpenAI SDK。SDK 读取
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install openai==3.13.0
+pip install openai==3.45.0
 export OPENAI_BASE_URL=https://core.example/v1
 read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the key; it is not echoed
 ```
@@ -98,7 +98,7 @@ print(session.id)
 这会发起真实模型请求，可能产生费用。
 
 - `x_agents_core` 包含 Core 对 OpenAI API 的扩展；参阅 [Core 扩展](../api/public-agent-api.md#core-extensions)。
-- 将整个 `agent` 对象放入 `extra_body`。SDK 3.13.0 使用 `extra_body` 中的同名字段替换请求体字段，而非合并。
+- 将整个 `agent` 对象放入 `extra_body`。SDK 3.45.0 使用 `extra_body` 中的同名字段替换请求体字段，而非合并。
 
 ## 3. 等待结果 {#_3-wait-for-the-result}
 

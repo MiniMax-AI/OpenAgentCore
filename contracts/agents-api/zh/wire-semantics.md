@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 6f57c50e736d1837b3609209812438063cc96c24c145ffe9302a93d5f9c7746f
+source_hash: 588ade70b1344cea32f404af7ee345e890a776b4ac27997c06101b95a4cf2aca
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -20,7 +20,12 @@ source_hash: 6f57c50e736d1837b3609209812438063cc96c24c145ffe9302a93d5f9c7746f
 | 对事件流、File 内容、Skill 内容、Skill 版本内容、Artifact 内容或 Environment 文件列表使用 `HEAD` | 返回 405，因此 `HEAD` 绝不会保持流打开或读取内容。 |
 | 不支持的方法，包括 `FOO` 等未知方法 | 返回 405、代码 `unsupported_operation`、消息 "This API method is not supported."，并返回一个 `Allow` 头，按 `GET,HEAD,POST,DELETE` 的顺序列出该路由支持的方法。 |
 | `/v1` 下的未知子路由，包括带尾斜杠的情况 | 在 Beta 和身份验证检查后返回 404、代码 `unsupported_operation`。 |
+| Core 不运行的固定版本路由 | 参见[不支持的操作](#unsupported-operations)。 |
 | `OPTIONS` 和 CORS | 不处理 CORS。 |
+
+### 不支持的操作 {#unsupported-operations}
+
+Automations 路由（共 10 个）、`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API method is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 Automations 或 trace 存储。
 
 创建 Agent、Vault、Credential、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
 
@@ -118,7 +123,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 默认值 | 接受范围 | 其他值 |
 | --- | --- | --- | --- |
-| Agents、Sessions、Items、Environment 模板、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
+| Agents、Sessions、Items、Turn Items、Environment 模板、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
 | Vaults、Credentials | 20 | 1–100 | 0、负数和更大的整数，包括溢出值，都会限制在 1–100 范围内 |
 | Turns、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
@@ -133,7 +138,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 | 列表 | 响应 |
 | --- | --- |
 | Agents、Sessions、Turns、Environment 模板、Vaults、Credentials | 404，`type` 和 `code` 均为 `not_found_error`，"Resource not found." |
-| Session Items、Subagent Items、Subagent Turn Items | 400 `invalid_request_error`，param 为 null，"Invalid session item ID in `after`" |
+| Session Items、Turn Items、Subagent Items、Subagent Turn Items | 400 `invalid_request_error`，param 为 null，"Invalid session item ID in `after`" |
 | Subagents、Subagent Turns | 400 `invalid_request_error`，param 为 null，"Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`，param 为 null，"after is not a valid artifact ID" |
 | Skill 版本 | 不以 `skillver` 开头的值：400 `invalid_value`，param 为 `after`，`"Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'."`。其他 Skill 的版本：字段相同，消息为 "Skill version cursor does not match this skill."。格式错误的 `skillver` 后缀，或版本缺失、已删除、属于外部租户：404，code 和 param 均为 null |
@@ -157,6 +162,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 | `multi_agent` | 禁用。启用但未提供 `max_concurrent_subagents` 时为 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
+| `compaction`、`experimental` | 未发送则省略。Core 按所发送的值保存 `compaction.async`（`compaction` 为不含该字段的对象时为 true）和 `experimental.time_awareness`；null `compaction` 会清除它。未指定或为 null 的 `compaction` 保留 Harness 原生的阻塞式压缩，而官方默认值为后台压缩 |
 | `web_search` | 保存每个已锁定模式；请参阅 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP 传输方式 | 以 `headers: {}` 保存；非空标头按给定值存储，`Authorization` 标头被拒绝。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
@@ -184,13 +190,28 @@ Session 创建和更新、Vault 创建、Credential 创建和更新、Environmen
 
 即使所选 Harness 无法执行，Core 也会保存已锁定形状允许的值：任意长度的函数名称，以及 Harness 未声明的 reasoning、service tier、Web 搜索和 programmatic tool calling 取值。
 
+### 不支持的字段 {#unsupported-fields}
+
+这些官方字段在 Core 中没有含义。设置其中任何一个的请求都会返回 400 `invalid_request_error`，以该字段作为 `param`，且不写入任何内容：
+
+| 字段 | Param |
+| --- | --- |
+| 非 null 的 Session 更新 `agent` | `agent` |
+| Session 创建或更新中的 `review: auto_review`；接受 `none`，响应省略 `review` | `review` |
+| 非 null 的 `environment.environment_id` | `environment_id` |
+| 非 null 的 `environment.container_size`；响应携带 `container_size: null` | `container_size` |
+| `desktop.enabled: true`；响应携带 `desktop: {"enabled": false}` | `desktop.enabled` |
+| 非空的 `network.blocked_domains` | `network.blocked_domains` |
+| Credential `auth.type` 为 `environment_variable` | `auth.type` |
+| Session 输入 `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
+
 ### Session 准入 {#session-admission}
 
 Session 的有效配置还必须通过执行准入，无论配置来自保存还是内联方式。准入会先报告上表中的协议错误，包括已保存 Agent 中的重复工具和 schema 根，然后报告以下错误；在任何写入之前，这些错误均为 400 `unsupported_or_invalid_configuration`：
 
 | 配置 | 消息 |
 | --- | --- |
-| Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
+| Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`web_search` 模式或设置、`programmatic_tool_calling` 取值、`text.verbosity`、`compaction.async: true`、`experimental.time_awareness: true`，或 `automations`、`computer_use` 工具 | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
 | 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -230,9 +251,9 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 ### 更新和列表 {#update-and-list}
 
-`POST /agents/sessions/{session_id}` 仅接受必需的 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。执行状态和创建重试标识保持不变。
+`POST /agents/sessions/{session_id}` 只修改 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。仅含 `review` 的正文不改变任何内容并返回该 Session；`metadata`、`agent`、`review` 都不含的正文返回 400。非 null 的 `agent` 会被拒绝（[不支持的字段](#unsupported-fields)）。执行状态和创建重试标识保持不变。
 
-`GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。
+`GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。`metadata[key]=value` 保留元数据中含该键值对的 Session；重复的键值对必须全部匹配，键不能为空，键和值遵循上文的元数据限制。
 
 ### 删除 {#delete}
 

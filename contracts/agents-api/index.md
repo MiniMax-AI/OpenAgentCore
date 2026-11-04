@@ -10,8 +10,8 @@ The target is the complete API ([public API rule](https://github.com/MiniMax-AI/
 
 | File | Contents |
 | --- | --- |
-| [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) | The pin: [openai-python](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents) 3.13.0 at commit `d7c41ef`, resources under `beta/agents`, Beta header `agents=v1` |
-| [upstream/openapi.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream/openapi.json) | Unmodified official OpenAPI 3.1 at commit `046a2a0f325bf11f97966f2729219f27281ba71e`, published on 2026-09-10. Its 58 Agents, Vaults, Files and Skills operations match the pinned SDK route set. `upstream.json` records the SHA-256 checksum |
+| [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) | The pin: [openai-python](https://github.com/openai/openai-python/tree/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents) 3.45.0 at commit `9b3458a`, resources under `beta/agents`, Beta header `agents=v1` |
+| [upstream/openapi.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream/openapi.json) | Unmodified official OpenAPI 3.1 at commit `820f97adaafea8cadf1e24e19bd3f98463dcb347`, published on 2026-11-03. Its 73 Agents, Vaults, Files and Skills operations match the pinned SDK route set. `upstream.json` records the SHA-256 checksum |
 | [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json) | The normalized method/path inventory generated from the official schema |
 | [openapi.yaml](./openapi.yaml) | The official public contract with Core's `x_agents_core` extension on Agent and Session request/response objects |
 | [go-bindings.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/go-bindings.json) | Go names, field representations, encoding order and stored projections; it does not define official field membership, enums or constraints |
@@ -27,19 +27,22 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Resource | Operations | Status | Contract |
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](./wire-semantics.md#agents) |
-| Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
+| Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only and `agent` is rejected; list filters on `metadata[key]=value`; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
 | Session events | create, stream | Partial: messages with text and images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
-| Turns | retrieve, list | Implemented; Session Turn routes hold root Turns only | [Turns and Items](./sessions-events.md#turns-and-items) |
+| Turns | retrieve, list; Turn Items | Implemented; Session Turn routes hold root Turns only | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](./subagents.md) |
 | Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). The pinned contract rejects `environment.environment_id`; existing hosted Environments cannot be attached across Sessions. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
-| Vaults | create, retrieve, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
-| Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](./vaults.md) |
+| Vaults | create, retrieve, update, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
+| Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth`, with `metadata` | [Vaults and Credentials](./vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
+| Automations | all 10 operations | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
+| Environments collection | create, list (`/agents/environments`) | Not supported: 404 `unsupported_operation`; Core's Environments are Session-scoped | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
+| Session traces | list | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 
 Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [API behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
 
@@ -71,6 +74,9 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
+- Omitted or null `compaction` keeps the Harness's native blocking compaction; the official default is background compaction.
+- Core rejects, with 400 naming the param: Session update `agent`; `review: auto_review` on Session create and update (`none` is accepted and responses omit `review`); `environment.environment_id`; `environment.container_size` (responses carry `container_size: null`); `desktop.enabled: true` (responses carry `desktop: {"enabled": false}`); a nonempty `network.blocked_domains`; and the input `agent.session.input.computer_use_approval_request_result` ([unsupported fields](./wire-semantics.md#unsupported-fields)).
+- Core answers 404 `unsupported_operation` on the Automations routes, `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` ([unsupported operations](./wire-semantics.md#unsupported-operations)).
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
 - Claude Code drops whitespace-only text blocks natively and sends `(no content)` for an all-blank message; Codex delivers whitespace-only text unchanged.
@@ -127,6 +133,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
 - MiniMax Code serves public functions as a native MCP server whose client fails a call after 120 s with no way to change it. After 120 s native reports the failure to the model, the call is withdrawn and the Turn continues.
+- Core rejects a Credential `auth` of type `environment_variable` with 400; Core injects a Credential only through an MCP server `credential_id`, never into a process environment ([Credentials](./vaults.md#credentials)).
+- A Credential update with neither `auth` nor `metadata` returns 400.
 - Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
 - An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
@@ -138,7 +146,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Configuration and tools**
 
-- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `text.verbosity`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `text.verbosity`, `web_search` mode or setting, `programmatic_tool_calling` value, `compaction.async: true`, `experimental.time_awareness: true` or `automations` or `computer_use` tool that the selected Harness does not declare is saved but rejected at Session admission; no Harness declares them yet ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 
@@ -169,7 +177,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Files and Environment files**
 
 - Files accept only `purpose=user_data`; other purposes, `expires_after` and the Uploads API are not supported.
-- The Skills create route accepts a single `files` part, but the pinned SDK sends no part when `files` is one file instead of a list ([upload a bundle](./source-files.md#upload-a-bundle)).
 - An Environment file write whose outcome is uncertain is never retried or recovered automatically; it blocks further writes and messages to the Session.
 
 **Vaults and Credentials**
@@ -180,6 +187,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Sessions**
 
+- The pinned SDK sends `spend_control` on Session create and update, but the pinned OpenAPI schema does not define it; Core rejects it as an unknown parameter.
+- Environment status `suspended` is never emitted.
 - Session deletion does not purge the stored history physically.
 - Stream lifetimes for `self_hosted`, hosted and no-input creation, and the creation-stream retry, are Core's own choices.
 

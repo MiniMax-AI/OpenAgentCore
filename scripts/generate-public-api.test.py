@@ -62,7 +62,7 @@ class PublicAPITests(unittest.TestCase):
         schemas['ServiceTierParam']['enum'].append('future_tier')
         generated = generator.request_shapes(source, generator.extension_owners(self.bindings)).decode()
         self.assertIn('{"future_field", shape{kind: stringValue}}', generated)
-        self.assertEqual(generated.count('"future_tier"'), 3)
+        self.assertEqual(generated.count('"future_tier"'), 4)
 
     def test_open_request_objects_are_rejected(self):
         source = copy.deepcopy(self.source)

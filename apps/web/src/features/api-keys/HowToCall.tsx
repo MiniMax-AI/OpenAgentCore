@@ -9,7 +9,7 @@ import { useCopy } from "./IssuedKey";
 import "./how-to-call.css";
 
 /** The official SDK release Core is pinned to (contracts/agents-api/upstream.json). */
-const SDK_PIN = "openai==3.13.0";
+const SDK_PIN = "openai==3.45.0";
 
 /** Stands for the model name in the Session example; the note under the samples says what to put there. */
 export const MODEL_PLACEHOLDER = "<model>";

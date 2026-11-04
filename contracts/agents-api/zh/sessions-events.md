@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: ffddefb51fd2dcd04532d210f658caf96a6f825057c9025c3c18dbf8eb3ddc5a
+source_hash: 180e08dbdd9c85ae85005cc202f73316f2b1b04828cca67df13b804206f49f02
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -132,7 +132,7 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 
 **Turn。** Session Turn 路由只包含根 Turn，按创建时间、再按 ID 排序；在该路由中使用子 Turn ID 会返回 404。失败 Turn 的 `error` 包含官方 `code` 和该 code 对应的固定消息，绝不包含引擎原始诊断信息；[与 OpenAI 的差异](index.md#differences-from-openai)列出 Core 报告的 code。流中的快照与读取返回相同的 `error`。管理员可通过[Session 诊断](session-diagnostics.md)读取失败类别。
 
-**Item。** Item 按首次观察时间、再按其在 Session 中的位置、最后按 ID 排序。更新和重试绝不会移动 Item，也不会更改其 `output_index`；`output_index` 是 Item 在该 Turn 输出 Item 中从零开始的位置，输入 Item 没有此值。读取操作使用已存储的历史索引，绝不会根据原生日志重新构建该索引。Item 列表包含仍在进行中或尚未完成的 Item。
+**Item。** Item 按首次观察时间、再按其在 Session 中的位置、最后按 ID 排序。更新和重试绝不会移动 Item，也不会更改其 `output_index`；`output_index` 是 Item 在该 Turn 输出 Item 中从零开始的位置，输入 Item 没有此值。读取操作使用已存储的历史索引，绝不会根据原生日志重新构建该索引。Item 列表包含仍在进行中或尚未完成的 Item。`GET /agents/sessions/{session_id}/turns/{turn_id}/items` 只列出该根 Turn 的 Item，分页、排序和游标规则相同；Session 中不存在的 Turn 返回 404。
 
 | Item `type` | 内容 |
 | --- | --- |

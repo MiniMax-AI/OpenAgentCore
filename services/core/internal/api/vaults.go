@@ -88,7 +88,7 @@ func (h *Handler) updateVault(w http.ResponseWriter, r *http.Request) {
 		}
 		input.Name = &name
 	}
-	if writeFieldError(w, metadataFieldError(metadata.Validate(input.Metadata))) {
+	if writeFieldError(w, metadataFieldError(metadata.ValidateStorable(input.Metadata))) {
 		return
 	}
 	vault, err := h.Vaults.UpdateVault(r.Context(), input)

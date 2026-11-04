@@ -8,6 +8,8 @@
   "session_environment": {
     "type": "openai_hosted",
     "id": "7a263c51-6bf0-4d53-8518-c792eb1f0d21",
+    "container_size": null,
+    "desktop": { "enabled": false },
     "capability_directories": [],
     "network": { "access": "enabled", "allowed_domains": [] },
     "packages": { "npm": [], "python": [], "system": [] },
@@ -57,6 +59,8 @@
     "missing_packages": {
       "type": "openai_hosted",
       "id": "7a263c51-6bf0-4d53-8518-c792eb1f0d21",
+      "container_size": null,
+      "desktop": { "enabled": false },
       "capability_directories": [],
       "network": { "access": "enabled", "allowed_domains": [] },
       "files": [],
@@ -66,6 +70,8 @@
     "restricted_network": {
       "type": "openai_hosted",
       "id": "7a263c51-6bf0-4d53-8518-c792eb1f0d21",
+      "container_size": null,
+      "desktop": { "enabled": false },
       "capability_directories": [],
       "network": { "access": "restricted", "allowed_domains": [] },
       "packages": { "npm": [], "python": [], "system": [] },
@@ -76,6 +82,8 @@
     "populated_profile": {
       "type": "openai_hosted",
       "id": "7a263c51-6bf0-4d53-8518-c792eb1f0d21",
+      "container_size": null,
+      "desktop": { "enabled": false },
       "capability_directories": ["/workspace/capabilities"],
       "network": { "access": "enabled", "allowed_domains": ["example.com"] },
       "packages": { "npm": ["package"], "python": [], "system": [] },
