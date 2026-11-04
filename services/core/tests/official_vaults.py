@@ -138,3 +138,32 @@ def verify_vault_recovery(client, other, peer, saved):
             assert response.status_code == 200 and response.json() == value.to_dict()
         assert other.beta.agents.vaults.retrieve(foreign.id) == foreign
     print("Vault resources: exact SDK/raw responses and shared-project reads survived the server restart.")
+
+
+def verify_vault_update(client, other, expect_error):
+    """Vault update replaces name and metadata; Credential metadata rides on create and update."""
+    from official_credentials import verify_credential
+    vaults = client.beta.agents.vaults
+    vault = vaults.create(name="Before", metadata={"old": "1"})
+    only_name = vaults.update(vault.id, name="After")
+    assert only_name.name == "After" and only_name.metadata == {"old": "1"} and only_name.id == vault.id
+    only_metadata = vaults.update(vault.id, metadata={"team": "core", "empty": ""})
+    assert only_metadata.name == "After" and only_metadata.metadata == {"team": "core", "empty": ""}
+    cleared = vaults.update(vault.id, name=None, metadata={})
+    assert cleared.name is None and cleared.metadata == {}
+    assert vaults.retrieve(vault.id) == cleared
+    expect_error(NotFoundError, lambda: other.beta.agents.vaults.update(vault.id, name="Foreign"))
+    expect_error(BadRequestError, lambda: vaults.update(vault.id, extra_body={"metadata": {"k": 1}}))
+
+    credentials = vaults.credentials
+    auth = {"type": "static_bearer", "mcp_server_url": "https://example.invalid/mcp", "token": "metadata-token"}
+    created = credentials.create(vault.id, name="With metadata", auth=auth, metadata={"team": "core"})
+    verify_credential(created.to_dict(), vault.id, "With metadata", auth["mcp_server_url"], {"team": "core"})
+    updated = credentials.update(created.id, vault_id=vault.id, metadata={"team": "ops", "empty": ""})
+    assert updated.metadata == {"team": "ops", "empty": ""} and updated.auth == created.auth
+    rotated = credentials.update(created.id, vault_id=vault.id, auth={"type": "static_bearer", "token": "rotated-token"})
+    assert rotated.metadata == updated.metadata and credentials.retrieve(created.id, vault_id=vault.id) == rotated
+    environment = {"type": "environment_variable", "name": "X", "value": "v"}
+    expect_error(BadRequestError, lambda: credentials.create(vault.id, name="Environment", auth=environment))
+    credentials.delete(created.id, vault_id=vault.id)
+    vaults.delete(vault.id)

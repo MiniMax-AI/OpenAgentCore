@@ -2,6 +2,10 @@
 from openai import AuthenticationError, BadRequestError, NotFoundError
 
 
+def items_b_turn(b, session, turn):
+    return b.beta.agents.sessions.turns.items.list(turn, session_id=session)
+
+
 def verify_items(a, b, invalid, session, peer_session, turns, expect_error):
     items = a.beta.agents.sessions.items
     recovered = list(items.list(session, limit=3, order="asc"))
@@ -41,5 +45,12 @@ def verify_items(a, b, invalid, session, peer_session, turns, expect_error):
         assert patch.arguments["changes"][0]["diff"] == "+example"
         search = next(item for item in group if item.type == "web_search_call")
         assert search.status == "completed" and search.action.query == "reference"
+        turn_items = a.beta.agents.sessions.turns.items
+        assert list(turn_items.list(turn, session_id=session, order="asc")) == group
+        assert list(turn_items.list(turn, session_id=session, order="desc")) == list(reversed(group))
+        assert turn_items.list(turn, session_id=session, after=group[2].id, order="asc", limit=2).data == group[3:5]
+    expect_error(NotFoundError, lambda: items_b_turn(b, session, turns[0]))
+    expect_error(NotFoundError, lambda: a.beta.agents.sessions.turns.items.list(turns[0], session_id=peer_session))
+    expect_error(BadRequestError, lambda: a.beta.agents.sessions.turns.items.list(turns[1], session_id=session, after=recovered[1].id if recovered[1].turn_id != turns[1] else recovered[0].id))
     print("Official Items client: native result shapes, partial/completed states, ordering, pagination and isolation passed.")
     return recovered

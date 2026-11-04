@@ -403,17 +403,12 @@ def main():
                 assert body["type"] == "invalid_request_error" and body["code"] == expected_code and body["param"] == expected_param, (name, body)
                 assert isinstance(body["message"], str) and body["message"], name
                 assert secret not in response.text and all(value not in response.text for value in owned[name]), name
-                if order:
-                    try:
-                        listing(order=order)
-                    except APIStatusError as error:
-                        assert error.status_code == 400 and error.body == body, (name, error.body)
-                    else:
-                        raise AssertionError(f"SDK accepted invalid {name} order")
+                try:
+                    listing(order=order)
+                except APIStatusError as error:
+                    assert error.status_code == 400 and error.body == body, (name, error.body)
                 else:
-                    # Fixed 3.13 drops empty query values in _qs.stringify_items.
-                    # Only the raw request above exercises an explicit order=.
-                    assert [value.id for value in listing(order="", limit=1)] == owned[name][::-1], name
+                    raise AssertionError(f"SDK accepted invalid {name} order")
                 foreign_error = raw.get(url, headers={**headers, "Authorization": "Bearer " + foreign}, params={"order": order})
                 assert foreign_error.status_code == 400 and foreign_error.json() == response.json(), name
                 unauthorized = raw.get(url, headers={k: v for k, v in headers.items() if k != "Authorization"}, params={"order": order})

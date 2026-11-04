@@ -71,7 +71,6 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
             {"auth": {"type": "static_bearer", "token": 3}},
             {"auth": {"type": "mcp_oauth", "access_token": canary}},
             {**replacement, "name": "Unexpected rename"},
-            {**replacement, "metadata": {}},
             {"auth": {**replacement["auth"], "mcp_server_url": destination + "/other"}},
         ]
         for body in invalid_bodies:

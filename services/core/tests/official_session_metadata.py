@@ -52,7 +52,7 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
 
         invalid_fields = [
             ({"metadata": []}, "metadata"), ({"metadata": "value"}, "metadata"), ({"metadata": False}, "metadata"),
-            ({"agent": spec["agent"]}, "agent"), ({"environment": spec["environment"]}, "environment"),
+            ({"agent": spec["agent"]}, "agent.instructions"), ({"environment": spec["environment"]}, "environment"),
             ({"tenant_id": str(uuid.uuid4())}, "tenant_id"), ({"Metadata": {}}, "Metadata"),
         ]
         for fields, param in invalid_fields:
@@ -111,6 +111,17 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             expect_error(NotFoundError, lambda: sessions.update(malformed, metadata={}))
         expect_error(BadRequestError, lambda: sessions.update(first.id, extra_headers={"OpenAI-Beta": ""}))
         assert sessions.retrieve(first.id) == current
+    key, value = next(iter(current.metadata.items()))
+    assert first.id in {item.id for item in sessions.list(metadata={key: value})}
+    assert list(sessions.list(metadata={key: "no-such-value"})) == []
+    assert list(sessions.list(metadata={key: value, "absent": "x"})) == []
+    assert list(other.beta.agents.sessions.list(metadata={key: value})) == []
+    expect_error(BadRequestError, lambda: sessions.list(metadata={"k" * 65: "v"}))
+    # Core cannot run a Session review or change the agent of a Session.
+    for fields in [{"review": "auto_review"}, {"agent": {"model": "other"}}]:
+        expect_error(BadRequestError, lambda: sessions.update(first.id, **fields))
+    assert sessions.update(first.id, review="none") == current
+    assert sessions.retrieve(first.id) == current
     print("Session metadata: pinned SDK and raw HTTP replacement, clearing, omission, limits, authentication, tenant isolation, unchanged configuration and creation retry identity passed.")
     return current
 

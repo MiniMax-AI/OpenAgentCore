@@ -64,7 +64,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	if err := json.Unmarshal(output, &receipt); err != nil {
 		t.Fatalf("invalid acceptance receipt: %v %s", err, output)
 	}
-	if len(receipt.Sessions) != 6 || len(receipt.RejectedKeys) != 10 {
+	if len(receipt.Sessions) != 6 || len(receipt.RejectedKeys) != 8 {
 		t.Fatalf("incomplete acceptance receipt: %s", output)
 	}
 	t.Cleanup(func() {

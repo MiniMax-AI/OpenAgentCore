@@ -73,7 +73,7 @@ def main():
         # the Agent lookup, so owned, foreign and missing Agents get the same response.
         for body, param, message in [
             ({"reasoning": {"effort": "extreme"}}, "reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."),
-            ({"service_tier": "turbo"}, "service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."),
+            ({"service_tier": "turbo"}, "service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', 'fast', and 'ultrafast'."),
             ({"text": {"format": {"type": "json_schema"}}}, "text.format.schema", "Missing required parameter: 'text.format.schema'."),
             ({"tools": [{**tool, "strict": True}]}, "tools[0].strict", "Unknown parameter: 'tools[0].strict'."),
             ({"tools": ["lookup"]}, "tools[0]", "Invalid type for 'tools[0]': expected an object, but got a string instead."),
