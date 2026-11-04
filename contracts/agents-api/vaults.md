@@ -44,15 +44,16 @@ All routes are under `/v1`, take a Project API key and require `OpenAI-Beta: age
 | --- | --- | --- |
 | Create a Vault | `POST /vaults` | 201 Vault |
 | Retrieve a Vault | `GET /vaults/{vault_id}` | Vault |
+| Update a Vault | `POST /vaults/{vault_id}` | Vault |
 | List Vaults | `GET /vaults` | List of Vaults |
 | Delete a Vault | `DELETE /vaults/{vault_id}` | `{id, object: "vault.deleted", deleted: true}` |
 | Create a Credential | `POST /vaults/{vault_id}/credentials` | 201 Credential |
 | Retrieve a Credential | `GET /vaults/{vault_id}/credentials/{credential_id}` | Credential |
 | List Credentials | `GET /vaults/{vault_id}/credentials` | List of Credentials |
-| Replace secrets | `POST /vaults/{vault_id}/credentials/{credential_id}` | Credential |
+| Update a Credential | `POST /vaults/{vault_id}/credentials/{credential_id}` | Credential |
 | Delete a Credential | `DELETE /vaults/{vault_id}/credentials/{credential_id}` | `{id, object: "vault.credential.deleted", deleted: true}` |
 
-A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a Credential addressed through a Vault that does not own it. Both lists order by creation time, then ID, and filter by `status` (`active`, `archived` or both); the [list rules](./wire-semantics.md#lists) give the paging and filter details. Core stores the status privately, defaults it to `active` and has no operation that archives a Vault or Credential. A Credential's status is independent of its Vault's.
+A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a Credential addressed through a Vault that does not own it. Both lists order by creation time, then ID, and filter by `status` (`active`, `archived` or both) and by `metadata[key]=value`; the [list rules](./wire-semantics.md#lists) give the paging and filter details. Core stores the status privately, defaults it to `active` and has no operation that archives a Vault or Credential. A Credential's status is independent of its Vault's.
 
 ## Vaults
 
@@ -61,21 +62,21 @@ A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a 
 | `name` | Optional. Omitted stays `null`; explicit `null` is rejected. A string is trimmed and must then hold 1–256 UTF-8 bytes (param `name`) |
 | `metadata` | Omitted or `null` becomes `{}`. Values must be strings; another type returns 400 `invalid_request_error` with param `metadata.<key>`. The encoded object is limited to 64 KiB, with no pair-count or length limits |
 
-A Vault reads as `id`, `object: "vault"`, `created_at`, `name` and `metadata`. There is no update route.
+A Vault reads as `id`, `object: "vault"`, `created_at`, `name` and `metadata`. An update takes `name` and `metadata`, each optional. The name is validated as on creation and an explicit `null` clears it. `metadata` follows the official update limits of 16 pairs, 64-character keys and 512-character values; an object, including `{}`, replaces all pairs, and an omitted `metadata` keeps them.
 
 Deleting a Vault removes it and all its Credentials in one transaction, whatever their status. It needs no storage key and sends no request to any provider. The effects on Sessions are under [Deletion](#deletion).
 
 ## Credentials
 
-Creation takes a required `name` (trimmed, 1–256 UTF-8 bytes) and an `auth` object whose `type` is `static_bearer` or `mcp_oauth`. `mcp_server_url` must be an absolute HTTPS URL without userinfo or fragment; Core keeps it byte for byte, including any query, and performs no DNS or HTTP request. Field errors name the field as param, such as `auth.type`, `auth.access_token` or `auth.mcp_server_url`, and an unknown or missing member has the official `Unknown parameter` or `Missing required parameter` message ([request validation](./wire-semantics.md#configuration-validation)).
+Creation takes a required `name` (trimmed, 1–256 UTF-8 bytes), an `auth` object whose `type` is `static_bearer` or `mcp_oauth`, and optional `metadata`. Credential `metadata` follows the official limits of 16 pairs, 64-character keys and 512-character values, and non-string values return the same errors as on a Session. The pinned `environment_variable` type is rejected ([unsupported fields](./wire-semantics.md#unsupported-fields)): Core injects a Credential only through an MCP server `credential_id`, never into a process environment. `mcp_server_url` must be an absolute HTTPS URL without userinfo or fragment; Core keeps it byte for byte, including any query, and performs no DNS or HTTP request. Field errors name the field as param, such as `auth.type`, `auth.access_token` or `auth.mcp_server_url`, and an unknown or missing member has the official `Unknown parameter` or `Missing required parameter` message ([request validation](./wire-semantics.md#configuration-validation)).
 
-A Credential reads as `id`, `vault_id`, `name`, `object: "vault.credential"`, `created_at`, `updated_at` and `auth`. `auth` holds `type` and `mcp_server_url`; an OAuth Credential adds `expires_at` and `refresh` with `client_id`, `token_endpoint`, `token_endpoint_auth.type`, `resource` and `scope`. Reads and lists need no storage key.
+A Credential reads as `id`, `vault_id`, `name`, `object: "vault.credential"`, `created_at`, `updated_at`, `metadata` and `auth`. `auth` holds `type` and `mcp_server_url`; an OAuth Credential adds `expires_at` and `refresh` with `client_id`, `token_endpoint`, `token_endpoint_auth.type`, `resource` and `scope`. Reads and lists need no storage key.
 
 ### Static bearer
 
 `auth` is `{type: "static_bearer", mcp_server_url, token}`. `token` is a required nonempty string. Core stores it as opaque bytes without trimming. To run, the token must be an RFC 6750 `b64token`; a Session that selects a stored token with other characters, such as whitespace, fails at dispatch.
 
-Replace the token with `POST /vaults/{vault_id}/credentials/{credential_id}` and exactly `{"auth": {"type": "static_bearer", "token": "…"}}`. A missing, null or empty token or any other field is rejected. Only the token and `updated_at` change; the ID, Vault, name, type, `mcp_server_url`, `created_at` and every Session binding stay. A failed replacement leaves the old token in place.
+Replace the token with `POST /vaults/{vault_id}/credentials/{credential_id}` and `{"auth": {"type": "static_bearer", "token": "…"}}`; the same request may carry `metadata`, which replaces all pairs (an `{}` object clears them), and a request with `metadata` only changes just the metadata. A request with neither `auth` nor `metadata` returns 400, as the official `minProperties` requires. A missing, null or empty token or any other `auth` field is rejected. Only the token, `metadata` and `updated_at` change; the ID, Vault, name, type, `mcp_server_url`, `created_at` and every Session binding stay. A failed replacement leaves the old token in place.
 
 ### OAuth
 

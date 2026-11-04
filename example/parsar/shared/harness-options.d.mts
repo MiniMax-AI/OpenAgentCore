@@ -1,4 +1,6 @@
-export type HarnessKind = "codex" | "claude_sdk" | "mcode";
+import type { CoreHarnessKind, ModelProviderProtocol } from "@oac/agents-client";
+
+export type HarnessKind = CoreHarnessKind;
 export type ExecutionOptionField =
   | "reasoning_effort"
   | "reasoning_summary"
@@ -7,10 +9,13 @@ export type ExecutionOptionField =
   | "service_tier";
 export const harnessOptions: Record<
   HarnessKind,
-  { label: string; protocol: "responses" | "anthropic" } & Record<
-    ExecutionOptionField,
-    string[]
-  >
+  {
+    label: string;
+    protocol: ModelProviderProtocol;
+    protocols: ModelProviderProtocol[];
+    message_images: boolean;
+    mcp_http_required: boolean;
+  } & Record<ExecutionOptionField, string[]>
 >;
 export const executionOptionFields: ExecutionOptionField[];
 export function unsupportedOption(

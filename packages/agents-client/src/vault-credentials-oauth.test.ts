@@ -11,6 +11,7 @@ const staticCredential: VaultCredential = {
   object: "vault.credential",
   name: "Internal MCP",
   auth: { type: "static_bearer", mcp_server_url: "https://mcp.example/tools" },
+  metadata: {},
   created_at: 1,
   updated_at: 2,
 };

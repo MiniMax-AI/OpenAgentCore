@@ -19,7 +19,7 @@ REQUEST_SHAPES = {
     'CreateAgentParams': (), 'UpdateAgentParams': (), 'SessionAgentConfigParam': (),
     'CreateAgentSessionParams': ('agent', 'environment'),
     'UpdateAgentSessionParams': (),
-    'CreateVaultParams': (),
+    'CreateVaultParams': (), 'UpdateVaultParams': (),
     'CreateVaultCredentialParams': (),
     'RotateVaultCredentialParams': (),
     'CreateEnvironmentTemplateParams': ('network',),
@@ -179,7 +179,7 @@ def go_types(document, bindings):
             if nullable(document, schema):
                 tags.append('extensions:"x-nullable"')
             enums = enum_values(document, schema)
-            if enums:
+            if enums and 'json.RawMessage' not in typ:
                 tags.append('enums:"' + ','.join(str(v).lower() if isinstance(v, bool) else str(v) for v in enums) + '"')
             # Swag still projects the internal APIs that reference these types.
             if 'json.RawMessage' in typ:
@@ -216,7 +216,7 @@ def go_shape(document, schema, required=False):
         for option in value['oneOf']:
             option = dereference(document, option)
             tag, = option['properties']['type']['enum']
-            variants[tag] = go_members(document, option, 'type')
+            variants[tag] = go_members(document, merge_union(document, option), 'type')
         fields = ['kind: unionValue', 'values: []string{' + ', '.join(json.dumps(tag) for tag in variants) + '}',
                   'variants: map[string][]member{\n' + ''.join(f'{json.dumps(tag)}: {members.removeprefix("[]member")},\n' for tag, members in variants.items()) + '}']
     elif 'enum' in value:
@@ -239,6 +239,28 @@ def go_shape(document, schema, required=False):
     if nullable(document, schema):
         fields.append('nullable: true')
     return 'shape{' + ', '.join(fields) + '}'
+
+
+def merge_union(document, schema):
+    """Project a variant that is itself a union, such as one selected again by "action", onto one object.
+
+    The walker selects variants by "type" only. The members of the nested variants
+    merge: a member is required when every variant requires it, and the values of a
+    member that is an enum in several variants join.
+    """
+    if 'oneOf' not in schema:
+        return schema
+    leaves = [dereference(document, leaf) for leaf in schema['oneOf']]
+    properties = {}
+    for leaf in leaves:
+        for name, value in {**schema['properties'], **leaf['properties']}.items():
+            if name in properties and properties[name] != value:
+                if 'enum' not in value or 'enum' not in properties[name]:
+                    raise ValueError(f'Cannot merge union member {name}')
+                value = {**value, 'enum': list(dict.fromkeys(properties[name]['enum'] + value['enum']))}
+            properties[name] = value
+    required = set.intersection(*(set(leaf.get('required', [])) for leaf in leaves))
+    return {'type': 'object', 'properties': properties, 'required': sorted(required, key=list(properties).index), 'additionalProperties': False}
 
 
 def go_members(document, schema, skip=None, opaque=()):

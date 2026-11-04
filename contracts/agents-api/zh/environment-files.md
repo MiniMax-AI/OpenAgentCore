@@ -1,12 +1,12 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: ad6e0c122104ff5600d07305902871253c81aef0525e12358a5cc8abdc42600a
+source_hash: 0ed7d7e903ead70f209808a991c15e6156749f7abb111b145b1de1f58d3037d8
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。
 
-路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Environment files 资源](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py)、[列表参数](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/file_list_params.py)、[EnvironmentFile](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/environment_file.py) 和 [TokenPage](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/pagination.py)。要求 `OpenAI-Beta: agents=v1` 头。
+路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Environment files 资源](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py)、[列表参数](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environments/file_list_params.py)、[EnvironmentFile](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environments/environment_file.py) 和 [TokenPage](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/pagination.py)。要求 `OpenAI-Beta: agents=v1` 头。
 
 ## 文件适用范围 {#where-files-work}
 

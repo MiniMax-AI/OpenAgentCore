@@ -1,12 +1,12 @@
 ---
 title: "文件与 Skill"
 source: contracts/agents-api/source-files.md
-source_hash: a87f5745f8d96e7399726fa99cb8c69fc083ee03faf122bce7c4fc33ad95b5d0
+source_hash: d5f0952e765550f370491c52556ae0fee60df3c279c304bdf0bb333319f00eb3
 ---
 
 Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的项目资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由模板和 Session 引用。项目的所有 API 密钥共享这些资源。
 
-这些路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Files 资源](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py)、[创建参数](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py)、[FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) 和 [Skills 资源](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills)。要求项目 API 密钥，不要求 `OpenAI-Beta` 头。不存在 ID 与其他项目的 ID 返回相同的 404。
+这些路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Files 资源](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/files.py)、[创建参数](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/file_create_params.py)、[FileObject](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/file_object.py) 和 [Skills 资源](https://github.com/openai/openai-python/tree/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/skills)。要求项目 API 密钥，不要求 `OpenAI-Beta` 头。不存在 ID 与其他项目的 ID 返回相同的 404。
 
 ## 文件 {#files}
 
@@ -77,7 +77,7 @@ Core 在自身数据库中以 PostgreSQL 大对象存储 File 字节。上传和
 
 ### 上传包 {#upload-a-bundle}
 
-将一个 ZIP 作为 `files` 部分发送，或将目录作为重复的 `files[]` 部分发送，文件名使用 `report/SKILL.md` 等相对路径。SDK 3.13.0 在 `files` 为单文件而非列表时不发送部分，因此上传单个 ZIP 应使用普通 HTTP：
+将一个 ZIP 作为 `files` 部分发送，或将目录作为重复的 `files[]` 部分发送，文件名使用 `report/SKILL.md` 等相对路径。使用普通 HTTP：
 
 ```sh
 curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@report.zip

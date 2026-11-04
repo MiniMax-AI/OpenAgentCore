@@ -33,7 +33,7 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	agent := client.created(owner, "/v1/agents", `{"model":"config-model","tools":[`+lookup+`]}`)
 	before := databaseDigest(t, pool)
 
-	const tools = `'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'.`
+	const tools = `'function', 'tool_search', 'programmatic_tool_calling', 'mcp', 'web_search', 'computer_use', and 'automations'.`
 	cases := []struct{ name, fields, param, message string }{
 		{"F01", `"tools":[{"type":"function","name":"lookup","description":"Look up a value.","parameters":{"type":"string"}}]`, "", `Invalid schema for function 'lookup': schema must be a JSON Schema of 'type: "object"', got 'type: "string"'.`},
 		{"F02", `"tools":[{"type":"function","name":"lookup","description":"Look up a value.","parameters":[]}]`, "{p}tools[0].parameters", "Invalid type for '{p}tools[0].parameters': expected an object with string keys and unknown value values, but got an array instead."},
@@ -57,7 +57,7 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 		{"T04", `"text":{"format":{"type":"json_schema","schema":{"type":"array","items":{"type":"string"}}}}`, "", `agent.text.format.schema must have top-level type "object"; got "array"`},
 		{"R01", `"reasoning":{"effort":"extreme"}`, "{p}reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."},
 		{"R02", `"reasoning":{"summary":"verbose"}`, "{p}reasoning.summary", "Invalid value: 'verbose'. Supported values are: 'concise', 'detailed', and 'auto'."},
-		{"S01", `"service_tier":"turbo"`, "{p}service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."},
+		{"S01", `"service_tier":"turbo"`, "{p}service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', 'fast', and 'ultrafast'."},
 		{"X01", `"tool_choice":"auto"`, "{p}tool_choice", "Unknown parameter: '{p}tool_choice'."},
 		{"M01", `"multi_agent":{}`, "{p}multi_agent.enabled", "Missing required parameter: '{p}multi_agent.enabled'."},
 		{"M02", `"multi_agent":{"enabled":true,"max_concurrent_subagents":0}`, "{p}multi_agent.max_concurrent_subagents", "Invalid '{p}multi_agent.max_concurrent_subagents': integer below minimum value. Expected a value >= 1, but got 0 instead."},

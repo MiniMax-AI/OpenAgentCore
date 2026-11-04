@@ -8,7 +8,7 @@ Related owners:
 
 - [Environment files](./environment-files.md): the Files API on a live workspace.
 - [Executor credentials](./environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
-- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B or microsandbox) hosts `openai_hosted` Environments.
+- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (microsandbox, E2B or OpenSandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
 - [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
 
@@ -18,13 +18,14 @@ Paths follow the SDK resource methods, before the service's `/v1` prefix. The li
 
 | Resource | Operations | Rules |
 | --- | --- | --- |
-| [Environment](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | Created through Session configuration. Returns `id`, `type`, `status` and the `files`, `plugins` and `skills` recorded at Session creation. |
-| [Template](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/templates.py) | `POST`, `GET /agents/environments/templates`; `GET`, `POST`, `DELETE /agents/environments/templates/{id}` | See [Templates](#templates). |
-| [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](./environment-files.md). |
+| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | Created through Session configuration. Returns `id`, `type`, `status` and the `files`, `plugins` and `skills` recorded at Session creation. |
+| Environment collection | `POST`, `GET /agents/environments` | Not supported: 404 `unsupported_operation` ([unsupported operations](./wire-semantics.md#unsupported-operations)). Environments are created only through Session configuration. |
+| [Template](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`, `GET /agents/environments/templates`; `GET`, `POST`, `DELETE /agents/environments/templates/{id}` | See [Templates](#templates). |
+| [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](./environment-files.md). |
 
 An Environment read joins its live owning Session within the caller's Project and returns the durable connection status. It needs no live Runtime, starts no native work and changes no connection state. The installation arrays list API-managed files, Plugins and Skills for both placements: files as `{id, type, path, file_id, size_bytes}` without content, Skills as `{type, name, description, skill_id, version}` and Plugins as `{type, name, description}`. Capabilities discovered in local capability directories are not listed.
 
-[Session environment input](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment_param.py) and [output](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment.py) have different shapes:
+[Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) and [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) have different shapes:
 
 - `none` selects no Environment.
 - `self_hosted` input requires `workspace_directory`; the nullable `capability_directories` defaults to an empty list. Output adds the Environment ID and the output-only `remote_url`. The output's `/workspace` default does not make the input field optional.
@@ -32,10 +33,10 @@ An Environment read joins its live owning Session within the caller's Project an
 
 | Projection | States |
 | --- | --- |
-| [Environment resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environment_info.py) | `pending`, `connected`, `disconnected`, `expired`, `failed` |
-| [Session environment event](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agent_session_environment_state.py) | `pending`, `ready`, `connected`, `disconnected`, `failed`, with a nullable error |
+| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `ready`, `connected`, `disconnected`, `suspended`, `expired`, `failed` |
+| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | The same seven states, with a nullable error |
 
-The two vocabularies are separate; never cast one to the other. The resource moves as follows, and a failed or expired Environment is final:
+Core emits `ready` only in events. It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
 
 ```mermaid
 stateDiagram-v2
@@ -71,7 +72,7 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
+The deployment's configured Sandbox Provider (microsandbox, E2B or OpenSandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
@@ -313,6 +314,7 @@ Limits ([adapter rules](../../docs/sandbox-provider.md#network-egress)):
 
 - A model provider host that the cap lists, by name or through a `*.` entry, is reachable like a listed domain, not only on its port.
 - On E2B, a restricted domain is reachable only on ports 80 and 443, and a model provider on another port is reachable on every port of its public addresses.
+- On OpenSandbox, the Core host, an allowed domain and the model provider host are reachable on every port of their public addresses.
 
 `disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.
 

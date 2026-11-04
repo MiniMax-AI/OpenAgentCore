@@ -17,6 +17,7 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 | --- | --- |
 | microsandbox | Required (`host_directory`, `user_xattr`) |
 | E2B | Not supported; the Provider's own Environment disk |
+| OpenSandbox | Not supported; the Provider's own Environment disk |
 
 ## Implement an adapter
 

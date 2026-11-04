@@ -204,7 +204,7 @@ describe("AdminClient response contracts", () => {
   });
 
   it("reuses Vault metadata validation including write-only credential rejection", async () => {
-    const credential = { id: resourceId, vault_id: sessionId, object: "vault.credential", name: "MCP", created_at: 1, updated_at: 1, auth: { type: "static_bearer", mcp_server_url: "https://mcp.test" } };
+    const credential = { id: resourceId, vault_id: sessionId, object: "vault.credential", metadata: {}, name: "MCP", created_at: 1, updated_at: 1, auth: { type: "static_bearer", mcp_server_url: "https://mcp.test" } };
     const { client } = clientWith(credential);
     expect(await client.retrieveVaultCredential(projectId, sessionId, resourceId)).toEqual(credential);
     await expect(clientWith({ ...credential, auth: { ...credential.auth, token: "leak" } }).client.retrieveVaultCredential(projectId, sessionId, resourceId)).rejects.toMatchObject({ code: "invalid_vault_credential" });

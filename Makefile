@@ -142,6 +142,7 @@ check-example: example-deps
 	pnpm --filter @oac/parsar-example test
 	pnpm --filter @oac/parsar-example build
 	pnpm --filter @oac/parsar-example test:e2e
+	PYTHONDONTWRITEBYTECODE=1 python3 example/rl-eval/rl_eval_test.py
 
 check-mcode-harness:
 	node --test packages/mcode-harness/*.test.mjs

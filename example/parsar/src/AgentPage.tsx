@@ -260,6 +260,7 @@ function AgentEditor({
         </Section>
         {!creating && <AgentHealth id={initial.id} />}
         <ConfigurationFields
+          agentId={form.id}
           value={form}
           errors={errors}
           change={(configuration) => setForm({ ...form, ...configuration })}

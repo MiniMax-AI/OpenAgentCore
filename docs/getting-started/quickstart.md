@@ -7,7 +7,7 @@ Run an agent through Core with the official OpenAI Python SDK: connect with a Pr
 Before you start, have:
 
 - a Project API key and the API base URL ([Issue a Project API key](./install.md#issue-a-project-api-key));
-- a ready node or E2B backend, so Core has somewhere to run the agent ([Add and manage nodes](./nodes.md));
+- a ready node, or an E2B or OpenSandbox backend, so Core has somewhere to run the agent ([Add and manage nodes](./nodes.md));
 - Python 3.9 or newer;
 - a model: the installation's default model, or your own provider's model ID, base URL and API key. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which one a Session uses and which protocols each Harness speaks.
 
@@ -25,7 +25,7 @@ Core serves the OpenAI Agents API, so the official OpenAI SDK works unchanged. I
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install openai==3.13.0
+pip install openai==3.45.0
 export OPENAI_BASE_URL=https://core.example/v1
 read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the key; it is not echoed
 ```
@@ -52,7 +52,7 @@ An empty list (`[]`) means you are connected.
 
 ## 2. Start a Session
 
-A Session is one agent conversation with its own workspace. With `openai_hosted`, Core creates a sandbox for it on a node or E2B and starts the Harness inside.
+A Session is one agent conversation with its own workspace. With `openai_hosted`, Core creates a sandbox for it on a node, E2B or OpenSandbox and starts the Harness inside.
 
 To use your own provider instead of the installation's default model, export its settings and run the second tab:
 
@@ -96,7 +96,7 @@ print(session.id)
 This makes a real model request and may incur charges.
 
 - `x_agents_core` holds Core's additions to the OpenAI API; see [Core extensions](../api/public-agent-api.md#core-extensions).
-- Keep the whole `agent` object in `extra_body`. SDK 3.13.0 replaces a body field with the matching `extra_body` field instead of merging them.
+- Keep the whole `agent` object in `extra_body`. SDK 3.45.0 replaces a body field with the matching `extra_body` field instead of merging them.
 
 ## 3. Wait for the result
 

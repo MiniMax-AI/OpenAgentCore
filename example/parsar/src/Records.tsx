@@ -302,9 +302,12 @@ export function Records({ view }: { view: "conversations" | "usage" }) {
               )}
             </LedgerHeader>
             {data.flatMap((row) => {
+              // A deleted Agent keeps the name its conversation was created with.
               const agent =
                 agents.data?.find((agent) => agent.id === row.record.agent_id)
-                  ?.name || "—";
+                  ?.name ||
+                row.record.configuration?.agent_name ||
+                "—";
               if (view === "usage")
                 return [
                   <LedgerRow key={row.record.id}>

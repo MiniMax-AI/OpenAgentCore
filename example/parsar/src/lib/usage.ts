@@ -1,10 +1,9 @@
 import { tr } from "./i18n";
-import { useAgents, useMCPs } from "./product";
+import { useAgents } from "./product";
 
 // Who uses a building block, so lists can show it and block removal up front.
 export function useUsage() {
-  const agents = useAgents().data || [],
-    mcps = useMCPs().data || [];
+  const agents = useAgents().data || [];
   const count = (n: number, unit: string) =>
     n ? tr("被 {{count}} 个{{unit}}使用", { count: n, unit }) : "";
   return {
@@ -22,6 +21,16 @@ export function useUsage() {
         "Agent",
       ),
     credential: (id: string) =>
-      count(mcps.filter((row) => row.credential_id === id).length, "MCP"),
+      count(
+        agents.filter((row) =>
+          Object.values(row.mcp_credentials || {}).some((choice) => choice.credential_id === id),
+        ).length,
+        "Agent",
+      ),
+    secret: (id: string) =>
+      count(
+        agents.filter((row) => Object.values(row.credentials || {}).includes(id)).length,
+        "Agent",
+      ),
   };
 }

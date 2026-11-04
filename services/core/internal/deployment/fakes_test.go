@@ -596,7 +596,7 @@ func (f *fakeSessionReader) MeasuredSessionUsage(ctx context.Context, tenantID, 
 	return f.measuredSessionUsage(ctx, tenantID, sessionID)
 }
 
-func (f *fakeSessionReader) ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error) {
+func (f *fakeSessionReader) ListSessions(context.Context, string, string, int, bool, *string, map[string]string) (sessions.Page, error) {
 	unexpected(f.t, "ListSessions")
 	return sessions.Page{}, nil
 }

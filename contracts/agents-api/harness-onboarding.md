@@ -34,7 +34,7 @@ flowchart TB
 | Declaration | The Harness's maximum capabilities, placements, configuration and pure admission restrictions, read by Core admission and the Runtime | `internal/harnessconfig/<package>/declaration.go` |
 | Runtime binding | The declaration plus discovery, installed factories and verified capabilities | `apps/daemon/internal/agent/<package>/declaration.go` |
 
-An Environment supplies execution resources. Managed E2B and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
+An Environment supplies execution resources. Managed microsandbox, E2B and OpenSandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
 
 ## Steps
 
@@ -176,7 +176,7 @@ The runnable test-only example [`testdata/onboarding/main.go`](https://github.co
 
 ## Declare the Harness
 
-Each Harness is one `var Declaration = harnessconfig.Declaration{...}` in `internal/harnessconfig/<package>/declaration.go`. The package name is the kind without underscores. Creating the file registers the Harness: `make generate-harness-catalog` generates the Core registry, the Runtime's `harnessDeclarations`, the client identifiers and display names and the [registration reference](./harness-catalog.md), and `make check-harness-catalog` rejects stale projections. `make openapi` derives the Harness enums from the same declarations, so do not add handwritten enums to DTO tags or route annotations. There is no dynamic plugin loader, and a declaration cannot state a machine's availability.
+Each Harness is one `var Declaration = harnessconfig.Declaration{...}` in `internal/harnessconfig/<package>/declaration.go`. The package name is the kind without underscores. Creating the file registers the Harness: `make generate-harness-catalog` generates the Core registry, the Runtime's `harnessDeclarations`, the client identifiers and display names, the Parsar example's protocols and execution options and the [registration reference](./harness-catalog.md), and `make check-harness-catalog` rejects stale projections. `make openapi` derives the Harness enums from the same declarations, so do not add handwritten enums to DTO tags or route annotations. There is no dynamic plugin loader, and a declaration cannot state a machine's availability.
 
 The declaration holds:
 

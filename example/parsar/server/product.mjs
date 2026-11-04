@@ -8,6 +8,8 @@ import { runtimeProfile, publicRuntime } from "./runtime-profile.mjs";
 import { feishuAPI } from "./feishu.mjs";
 import { trialAPI } from "./trials.mjs";
 import { sessionAPI } from "./sessions.mjs";
+import { coreResources } from "./core-resources.mjs";
+import { boundAgents, capabilityKinds, credentialNames, requiredCredentials } from "./capability-kinds.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import {
   harnessOptions,
@@ -30,24 +32,29 @@ const kinds = new Set([
   "runtimes",
   "agents",
   "sessions",
+  "secrets",
 ]);
+// A secret's value is write-only: reads say only whether one is saved.
+const publicSecret = ({ value, ...row }) => ({ ...row, has_value: !!value });
 export function productAPI(store, core, fetchImpl = fetch, origin) {
-  const sessions = sessionAPI(store, core);
+  const resources = coreResources(store, core);
+  const sessions = sessionAPI(store, core, resources);
   const publicRow = (kind, row) => {
     if (kind === "providers") return publicProvider(row);
     if (kind === "runtimes") return publicRuntime(row);
+    if (kind === "secrets") return publicSecret(row);
     if (kind === "sessions") {
-      const { request, ...record } = row;
+      const { request, recovery, ...record } = row;
       return { ...record, turn: sessions.turns.summary(record.id) };
     }
     return row;
   };
   const capabilities = capabilityAPI(store);
   const oauth = mcpOAuthAPI(store, core, origin, fetchImpl);
-  const feishu = feishuAPI(store);
+  const feishu = feishuAPI(store, fetchImpl);
   const registration = feishuRegistrationAPI(store, fetchImpl);
   const providers = providerAPI(store, fetchImpl);
-  const trials = trialAPI(store, core);
+  const trials = trialAPI(store, core, resources);
   const sessionAfter = (run) => async (id, body) => {
     await run(id, body);
     return publicRow("sessions", store.get("sessions", id));
@@ -136,6 +143,16 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       return store.list("audit").sort((a, b) => b.created_at - a.created_at);
     if (path === "/app/skills/registry/preview" && method === "POST")
       return previewRegistrySkill(body);
+    if (path === "/app/skills/credentials" && method === "GET") return store.list("skill_credentials");
+    // The credentials a Core Skill needs; the Skill itself stays in Core.
+    const skillCredentials = path.match(/^\/app\/skills\/(skill_[A-Za-z0-9][A-Za-z0-9_-]{0,127})\/credentials$/)?.[1];
+    if (skillCredentials) {
+      if (method === "GET") return store.get("skill_credentials", skillCredentials) || { id: skillCredentials, credentials: [] };
+      if (method !== "PUT") throw new AppError(405, "Method not allowed.");
+      const value = { id: skillCredentials, credentials: credentialNames(body.credentials) };
+      store.put("skill_credentials", value);
+      return value;
+    }
     if (path.startsWith("/app/feishu/provision/"))
       return registration(method, path, body);
     if (path === "/app/feishu" || path.startsWith("/app/feishu/"))
@@ -201,21 +218,16 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     }
     const previous = store.get(kind, id);
     if (method === "DELETE") {
+      // Only live configuration blocks deletion. Conversations keep the
+      // snapshot they were created with, and their Core Sessions keep running.
       const used =
         store.list("feishu_bots").some((row) => row.agent_id === id) ||
         store.list("models").some((row) => row.provider_id === id) ||
-        store
-          .list("agents")
-          .some(
-            (row) =>
-              row.model_id === id ||
-              row.runtime_id === id ||
-              row.mcp_ids.includes(id),
-          ) ||
-        store
-          .list("sessions")
-          .some((row) => row.agent_id === id || row.runtime_id === id);
+        store.list("agents").some((row) => row.model_id === id || row.runtime_id === id) ||
+        (kind === "mcps" && boundAgents(store, "mcps", id).length > 0) ||
+        (kind === "secrets" && store.list("agents").some((row) => Object.values(row.credentials || {}).includes(id)));
       if (used) throw new AppError(409, "资源仍被引用，请先调整绑定。");
+      if (kind === "agents" || kind === "runtimes") await resources.remove(kind, previous);
       store.transaction(() => {
         store.remove(kind, id);
         if (kind === "models") touchProviders(previous?.provider_id);
@@ -264,34 +276,13 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       )
         throw new AppError(409, "此 Provider 已有相同的模型 ID。");
     }
-    if (kind === "mcps") {
-      let url;
-      try {
-        url = new URL(body.url);
-      } catch {
-        throw new AppError(400, "请填写有效的 MCP URL。");
-      }
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        url.hash ||
-        url.search
-      )
-        throw new AppError(400, "MCP 使用不含凭据的 HTTPS 地址。");
-      value.url = url.href;
-      if (body.vault_id && !uuid.test(body.vault_id))
-        throw new AppError(400, "凭据库标识无效。");
-      if (
-        body.credential_id &&
-        (!body.vault_id || !uuid.test(body.credential_id))
-      )
-        throw new AppError(400, "凭据标识无效。");
-      value.vault_id = body.vault_id || "";
-      value.credential_id = body.credential_id || "";
-      value.label = text(body.label, "MCP 标识", 64, true);
-      if (!/^[a-zA-Z0-9_-]+$/.test(value.label))
-        throw new AppError(400, "MCP 标识仅支持字母、数字、下划线和连字符。");
+    if (kind === "mcps") Object.assign(value, capabilityKinds.mcps.validate(body));
+    if (kind === "secrets") {
+      // Omitting the value keeps the saved one.
+      const secret = body.value ?? previous?.value;
+      if (typeof secret !== "string" || !secret || secret.includes("\0") || secret.length > 8192)
+        throw new AppError(400, "请填写密钥的值。");
+      value.value = secret;
     }
     if (kind === "runtimes") {
       Object.assign(value, runtimeProfile(body, previous));
@@ -349,6 +340,25 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         if (version) value.capability_versions[capabilityId] = version;
       }
       value.mcp_ids = references("mcps", body.mcp_ids);
+      // Which secret supplies each required variable, and which Vault
+      // credential each MCP that needs one uses. Completeness is checked when
+      // the saved Core Agent is built.
+      const credentials = body.credentials ?? {};
+      if (!credentials || typeof credentials !== "object" || Array.isArray(credentials))
+        throw new AppError(400, "凭据选择无效。");
+      credentialNames(Object.keys(credentials));
+      value.credentials = Object.fromEntries(
+        Object.entries(credentials).map(([name, secretId]) => [name, requireReference("secrets", secretId)]),
+      );
+      const mcpCredentials = body.mcp_credentials ?? {};
+      if (!mcpCredentials || typeof mcpCredentials !== "object" || Array.isArray(mcpCredentials))
+        throw new AppError(400, "MCP 凭据选择无效。");
+      value.mcp_credentials = {};
+      for (const [mcpId, choice] of Object.entries(mcpCredentials)) {
+        if (!value.mcp_ids.includes(mcpId) || !uuid.test(choice?.vault_id || "") || !uuid.test(choice?.credential_id || ""))
+          throw new AppError(400, "MCP 凭据选择无效。");
+        value.mcp_credentials[mcpId] = { vault_id: choice.vault_id, credential_id: choice.credential_id };
+      }
       if (Array.isArray(body.skill_ids) && body.skill_ids.length > maxSkills)
         throw new AppError(400, `最多选择 ${maxSkills} 个 Skill。`);
       if (
@@ -380,12 +390,30 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         if (version) value.skill_versions[skillId] = version;
       }
     }
+    // Choices for credentials the bindings no longer need are dropped.
+    if (kind === "agents") {
+      const needed = requiredCredentials(store, value);
+      value.credentials = Object.fromEntries(Object.entries(value.credentials).filter(([name]) => needed.env.has(name)));
+      value.mcp_credentials = Object.fromEntries(Object.entries(value.mcp_credentials).filter(([id]) => needed.mcps.has(id)));
+    }
+    // The saved Core Agent or Template keeps its identity across edits.
+    for (const field of ["core_agent_id", "core_template_id", "core_digest"])
+      if (previous?.[field]) value[field] = previous[field];
     store.transaction(() => {
       store.put(kind, value);
       if (kind === "models")
         touchProviders(previous?.provider_id, value.provider_id);
     });
-    return publicRow(kind, value);
+    // Core validates the Agent or Template now, so a rejected edit is not kept.
+    if (kind === "agents" || kind === "runtimes")
+      try {
+        await resources.ensure(kind, id);
+      } catch (error) {
+        if (previous) store.put(kind, previous);
+        else store.remove(kind, id);
+        throw error;
+      }
+    return publicRow(kind, store.get(kind, id));
   };
   const handler = async (method, path, body) => {
     const result = await handle(method, path, body);
@@ -399,5 +427,6 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     return result;
   };
   handler.sessions = sessions;
+  handler.resources = resources;
   return handler;
 }

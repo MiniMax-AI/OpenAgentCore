@@ -1,3 +1,4 @@
+import { withoutFeishuSource } from "../shared/feishu-source.mjs";
 import {
   TurnNavRail,
   turnPreview,
@@ -89,7 +90,7 @@ export function SessionDetail({
     .map((item) => ({
       key: item.id,
       preview: turnPreview(
-        item.content?.map((part) => part.text || "").join("\n") || "",
+        withoutFeishuSource(item.content?.map((part) => part.text || "").join("\n") || ""),
       ),
     }));
   const activeTurn = useActiveTurnKey(

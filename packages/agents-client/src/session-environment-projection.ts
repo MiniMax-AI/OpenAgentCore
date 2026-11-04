@@ -1,5 +1,5 @@
 import { exactFields, isRecord } from "./response-projection";
-import { environmentPackagesResourceFields, environmentResourceOpenaiHostedFields, networkPolicyResourceFields } from "./generated/public-api";
+import { desktopResourceFields, environmentPackagesResourceFields, environmentResourceOpenaiHostedFields, networkPolicyResourceFields } from "./generated/public-api";
 import type { OpenAIHostedAgentEnvironment } from "./types";
 
 function strings(list: unknown): list is string[] {
@@ -24,6 +24,8 @@ export function projectOpenAIHostedSessionEnvironment(value: unknown): OpenAIHos
   if (
     !exactFields(value, environmentResourceOpenaiHostedFields) ||
     typeof value.id !== "string" || value.id.trim() === "" ||
+    !(value.container_size === undefined || value.container_size === null) ||
+    !isRecord(value.desktop) || !exactFields(value.desktop, desktopResourceFields) || typeof value.desktop.enabled !== "boolean" ||
     !strings(value.capability_directories) ||
     !isRecord(network) || !exactFields(network, networkPolicyResourceFields) ||
     !strings(network.allowed_domains) ||
@@ -36,6 +38,8 @@ export function projectOpenAIHostedSessionEnvironment(value: unknown): OpenAIHos
   return {
     type: "openai_hosted",
     id: value.id,
+    container_size: null,
+    desktop: { enabled: value.desktop.enabled },
     capability_directories: [...value.capability_directories],
     network: { access: network.access, allowed_domains: [...network.allowed_domains] },
     packages: { npm: [...packages.npm], python: [...packages.python], system: [...packages.system] },

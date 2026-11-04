@@ -42,7 +42,7 @@ export function buildResources(now) {
   ].map((template, index) => ({
     id: uuid(), object: "agent.environment.template", name: template.name,
     created_at: now - 86400 * (4 + index * 5), updated_at: now - 86400 * (1 + index * 2),
-    capability_directories: index === 0 ? ["/workspace/capabilities"] : [], network: template.network, packages: template.packages,
+    capability_directories: index === 0 ? ["/workspace/capabilities"] : [], network: template.network, desktop: { enabled: false }, packages: template.packages,
     files: template.files, plugins: [], skills: template.skills,
   }));
 
@@ -56,7 +56,7 @@ export function buildResources(now) {
     const created = vault.created_at + 3600 * (index + 1);
     return { id: uuid(), vault_id: vault.id, name, object: "vault.credential",
       auth: { type: "static_bearer", mcp_server_url: `https://mcp.example.com/${name.toLowerCase().replace(/\s+/g, "-")}` },
-      created_at: created, updated_at: created + (index % 2 ? 86400 : 0) };
+      metadata: {}, created_at: created, updated_at: created + (index % 2 ? 86400 : 0) };
   }).reverse()]));
 
   return {

@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 const appOrigin = `http://127.0.0.1:${process.env.OAC_EXAMPLE_PORT || "18180"}`;
 async function navigate(page: Page, name: string) {
-  if (["Skills", "MCP", "模型", "凭据"].includes(name)) {
+  if (["能力", "模型", "凭据"].includes(name)) {
     await page.getByRole("link", { name: "资源库", exact: true }).click();
     await page.getByRole("tab", { name, exact: true }).click();
   } else
@@ -41,15 +42,13 @@ async function resources(page: Page) {
   await page.getByLabel("名称", { exact: true }).fill("开发沙箱");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await navigate(page, "MCP");
-  await page.getByRole("button", { name: "添加MCP" }).click();
+  await addCapability(page, "添加 HTTP MCP");
   await page.getByLabel("名称", { exact: true }).fill("文档服务");
   await page.getByLabel("服务标识").fill("docs");
   await page.getByLabel("MCP 地址").fill("https://mcp.example/docs");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await navigate(page, "Skills");
-  await page.getByRole("button", { name: "创建 Skill" }).click();
+  await addCapability(page, "编写 Skill");
   await page.getByLabel("技能名称").fill("code-review");
   await page.getByLabel("用途").fill("检查代码质量");
   await page
@@ -57,6 +56,12 @@ async function resources(page: Page) {
     .fill("Inspect changed files and report actionable issues.");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+}
+// The library has one entry for every kind of capability.
+async function addCapability(page: Page, choice: string) {
+  await navigate(page, "能力");
+  await page.getByRole("button", { name: "新建能力", exact: true }).click();
+  await page.getByRole("button", { name: choice, exact: true }).click();
 }
 async function agent(page: Page, name = "审查助手") {
   await page.goto("/#/agents/new");
@@ -143,10 +148,7 @@ test("environment template edits preparation and hides saved variable values", a
   await page.getByRole("button", { name: "添加变量" }).click();
   await page.getByLabel("变量名称").fill("OFFICE_TOKEN");
   await page.getByLabel("变量值").fill("private-fixture-token");
-  await page.getByRole("button", { name: "添加机器人变量" }).click();
-  await page.getByLabel("机器人变量名称").fill("FEISHU_APP_SECRET");
-  await page.getByLabel("机器人字段").click();
-  await page.getByRole("option", { name: "App Secret", exact: true }).click();
+  await page.getByLabel("需要的密钥（环境变量名，每行一个）").fill("FEISHU_APP_SECRET");
   await page.getByRole("button", { name: "添加文件", exact: true }).click();
   await page.getByLabel("文件路径").fill("/workspace/settings.txt");
   await page.getByLabel("文件内容").fill("office=true");
@@ -177,7 +179,7 @@ test("environment template edits preparation and hides saved variable values", a
     (row: { name: string }) => row.name === "飞书办公",
   );
   expect(template.env).toEqual({ OFFICE_TOKEN: null });
-  expect(template.bot_env).toEqual({ FEISHU_APP_SECRET: "app_secret" });
+  expect(template.credentials).toEqual(["FEISHU_APP_SECRET"]);
   expect(template.files).toEqual([
     { path: "/workspace/settings.txt", content: "office=true" },
   ]);
@@ -203,7 +205,7 @@ test("model edits persist and bound resources cannot be removed", async ({
 
 test("Skill version upload and default selection", async ({ page }) => {
   await resources(page);
-  await page.getByRole("button", { name: /code-review v1/ }).click();
+  await page.getByRole("button", { name: "编辑 code-review", exact: true }).click();
   await page.getByRole("button", { name: "查看文件", exact: true }).click();
   await expect(
     page.getByText("Inspect changed files and report actionable issues.", {
@@ -611,18 +613,17 @@ test("an active reply without a replayed item baseline refreshes immediately on 
 
 test("conversation uploads insert a file path and download binary artifacts without leaving the conversation", async ({
   page,
-}) => {
+}, testInfo) => {
   await resources(page);
   await agent(page);
   await converse(page);
   await expect(page.getByLabel("继续对话")).toBeVisible();
   await page.getByRole("button", { name: "文件", exact: true }).click();
-  await page.getByLabel("选择上传文件").setInputFiles({
-    name: "large.bin",
-    mimeType: "application/octet-stream",
-    buffer: Buffer.alloc(5 * 1024 * 1024 + 1),
-  });
-  await expect(page.getByRole("alert")).toContainText("文件不能超过 5 MiB");
+  // Playwright passes buffers only up to 50 MB, so the oversized file is on disk.
+  const large = testInfo.outputPath("large.bin");
+  await writeFile(large, Buffer.alloc(50 * 1024 * 1024 + 1));
+  await page.getByLabel("选择上传文件").setInputFiles(large);
+  await expect(page.getByRole("alert")).toContainText("文件不能超过 50 MiB");
   await page.getByLabel("选择上传文件").setInputFiles({
     name: "numbers.csv",
     mimeType: "text/csv",
@@ -635,14 +636,16 @@ test("conversation uploads insert a file path and download binary artifacts with
   await page.getByRole("button", { name: "文件", exact: true }).click();
   const uploaded = page.waitForRequest(
     (request) =>
-      request.method() === "POST" && request.url().endsWith("/files"),
+      request.method() === "POST" && /\/environments\/[^/]+\/files$/.test(request.url()),
   );
   await page.getByLabel("选择上传文件").setInputFiles({
     name: "中".repeat(80) + ".txt",
     mimeType: "text/plain",
     buffer: Buffer.from("small"),
   });
-  const uploadedPath = (await uploaded).postDataJSON().path;
+  const written = (await uploaded).postDataJSON();
+  expect(written.type, "the workspace gets the file by its Files API ID").toBe("file_id");
+  const uploadedPath = written.path;
   expect(
     Buffer.byteLength(uploadedPath.split("/").at(-1), "utf8"),
   ).toBeLessThanOrEqual(255);
@@ -748,12 +751,12 @@ test("a Feishu bot binds one Agent, which then shows the bot as its identity", a
   const id = await agent(page);
   await navigate(page, "飞书");
   await page.getByRole("button", { name: "使用已有应用" }).click();
-  await page.getByLabel("机器人名称").fill("工作助手");
   await page.getByLabel("App ID").fill("cli_0123456789abcdef");
   await page.getByLabel("App Secret").fill("fixture-bot-secret");
   await page.getByRole("button", { name: "添加", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const card = page.getByRole("region", { name: "工作助手" });
+  // Feishu supplies the bot's name when it connects; until then it shows the App ID.
+  const card = page.getByRole("region", { name: "cli_0123456789abcdef" });
   await card.getByLabel("Agent", { exact: true }).click();
   await page.getByRole("option", { name: "审查助手", exact: true }).click();
   await card.getByRole("switch", { name: "私聊" }).check({ force: true });
@@ -771,9 +774,9 @@ test("a Feishu bot binds one Agent, which then shows the bot as its identity", a
   expect(JSON.stringify(bot)).not.toContain("fixture-bot-secret");
   await page.screenshot({ path: testInfo.outputPath("feishu.png") });
   await page.goto(`/#/agents/${id}`);
-  await expect(page.getByText("工作助手", { exact: true })).toBeVisible();
+  await expect(page.getByText("cli_0123456789abcdef", { exact: true }).first()).toBeVisible();
   await page.getByRole("link", { name: "Agent", exact: true }).click();
-  await expect(page.getByText("工作助手", { exact: true })).toBeVisible();
+  await expect(page.getByText("cli_0123456789abcdef", { exact: true }).first()).toBeVisible();
 });
 
 test("workspace settings retain the name and switch the complete navigation between languages", async ({
@@ -1071,4 +1074,48 @@ test("the runs view shows running conversations with their stage, stops them and
   await expect(recent.getByRole("heading", { name: "Review code" })).toBeVisible();
   await recent.getByRole("link", { name: /^Review code/ }).click();
   await expect(page.getByLabel("继续对话")).toBeVisible();
+});
+
+test("an environment trial reports its result on the button, without extra status text", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await page.goto("/#/runtimes");
+  const trial = page.getByRole("button", { name: /^试运行 / }).first();
+  await trial.click();
+  await expect(trial).toHaveText("可用", { timeout: 30000 });
+  await expect(page.getByText(/首次回复|可用 ·/)).toHaveCount(0);
+});
+
+test("the library lists every capability with its enabled Agents and credentials, and Agents choose the secrets", async ({ page }) => {
+  await resources(page);
+  const agentId = await agent(page);
+  await navigate(page, "能力");
+  // A Skill declares the variable it needs.
+  await page.getByRole("button", { name: "编辑 code-review", exact: true }).click();
+  await page.getByLabel("需要的密钥（环境变量名，每行一个）").fill("REVIEW_KEY");
+  await page.getByRole("button", { name: "保存凭据需求", exact: true }).click();
+  await expect(page.getByRole("button", { name: "保存凭据需求" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  // Every kind is one list; filters narrow it.
+  const rowOf = (name: string) => page.getByRole("button", { name: `编辑 ${name}`, exact: true }).locator("..");
+  const row = rowOf("code-review");
+  await expect(row).toContainText("Skill");
+  await expect(row).toContainText("REVIEW_KEY");
+  await expect(row).toContainText("1");
+  await expect(rowOf("文档服务")).toContainText("无需凭据");
+  await page.getByRole("tab", { name: "MCP", exact: true }).click();
+  await expect(rowOf("code-review")).toHaveCount(0);
+  // The Agent supplies the variable from a secret it creates in place.
+  await page.goto(`/#/agents/${agentId}`);
+  const choice = page.getByLabel("REVIEW_KEY 使用的密钥");
+  await page.getByRole("button", { name: "新建 REVIEW_KEY 的密钥" }).click();
+  await expect(page.getByLabel("名称", { exact: true }).last()).toHaveValue("REVIEW_KEY");
+  await page.getByLabel("值", { exact: true }).fill("review-secret");
+  await page.getByRole("dialog").getByRole("button", { name: "保存", exact: true }).click();
+  await expect(choice).toContainText("REVIEW_KEY");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
+  await navigate(page, "凭据");
+  await expect(page.getByRole("button", { name: "删除密钥 REVIEW_KEY" }).locator("../..")).toContainText("被 1 个Agent使用");
+  await expect(page.getByText("review-secret")).toHaveCount(0);
 });

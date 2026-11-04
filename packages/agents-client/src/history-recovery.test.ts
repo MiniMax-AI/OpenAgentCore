@@ -57,7 +57,7 @@ function itemEvent(item: Record<string, unknown>) {
 }
 
 // Exact wire examples also exercised by contracts/agents-api/v1/subagents_test.go.
-// The pinned SDK is openai-python d7c41ef, types/beta/agent_session_item.py.
+// The pinned SDK is openai-python 9b3458a, types/beta/agent_session_item.py.
 const items: Record<string, unknown>[] = [
   { id: "create", turn_id: "turn", type: "create_subagent_call", status: "completed", agent_id: "root", content: [], model: null, reasoning_effort: null },
   { id: "create-model", turn_id: "turn", type: "create_subagent_call", status: "failed", agent_id: "root", content: [{ type: "output_text", text: "" }], model: "requested-model", reasoning_effort: "high" },

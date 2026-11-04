@@ -55,6 +55,44 @@ func (s *Service) CreateVault(ctx context.Context, command CreateVault) (Vault, 
 	return s.storage.CreateVault(ctx, NewVault{TenantID: command.TenantID, Name: command.Name, Metadata: encoded})
 }
 
+// UpdateVault replaces the name when NameSet, which clears it for a nil Name,
+// and the metadata unless it is nil.
+type UpdateVault struct {
+	TenantID, VaultID string
+	Name              *string
+	NameSet           bool
+	Metadata          map[string]string
+}
+
+// UpdateVault applies the update to the Vault.
+func (s *Service) UpdateVault(ctx context.Context, command UpdateVault) (Vault, error) {
+	tenant, ok1 := canonicalID(command.TenantID)
+	vault, ok2 := canonicalID(command.VaultID)
+	if !ok1 || !ok2 {
+		return Vault{}, ErrNotFound
+	}
+	if command.Name != nil && !validName(*command.Name) {
+		return Vault{}, fmt.Errorf("%w: vault name must contain 1–256 UTF-8 bytes", ErrInvalidInput)
+	}
+	encoded, err := encodeUpdate(command.Metadata)
+	if err != nil {
+		return Vault{}, err
+	}
+	return s.storage.UpdateVault(ctx, VaultUpdate{TenantID: tenant, VaultID: vault, Name: command.Name, NameSet: command.NameSet, Metadata: encoded})
+}
+
+// encodeUpdate encodes replacement metadata; nil keeps the stored metadata.
+func encodeUpdate(values map[string]string) ([]byte, error) {
+	if values == nil {
+		return nil, nil
+	}
+	encoded, err := metadata.Encode(values)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	return encoded, nil
+}
+
 type DeleteVault struct{ TenantID, VaultID string }
 
 // DeleteVault deletes a Vault with its Credentials. Sessions keep their frozen
@@ -66,6 +104,7 @@ func (s *Service) DeleteVault(ctx context.Context, command DeleteVault) (string,
 type CreateStaticCredential struct {
 	TenantID, VaultID         string
 	Name, MCPServerURL, Token string
+	Metadata                  map[string]string
 }
 
 // CreateStaticCredential stores a bearer token under a new Credential ID.
@@ -81,16 +120,22 @@ func (s *Service) CreateStaticCredential(ctx context.Context, command CreateStat
 	// Storage reports a missing credential key before a malformed or missing
 	// Vault.
 	key := CredentialKey{TenantID: tenant, VaultID: command.VaultID, CredentialID: uuid.NewString()}
+	encoded, err := metadata.Encode(command.Metadata)
+	if err != nil {
+		return Credential{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
 	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: key, Name: command.Name,
-		AuthType: AuthStaticBearer, MCPServerURL: command.MCPServerURL, Token: command.Token})
+		AuthType: AuthStaticBearer, MCPServerURL: command.MCPServerURL, Token: command.Token, Metadata: encoded})
 }
 
 type UpdateStaticCredential struct {
 	TenantID, VaultID, CredentialID string
 	Token                           string
+	// Metadata replaces the stored metadata unless it is nil.
+	Metadata map[string]string
 }
 
-// UpdateStaticCredential replaces only the token and the update time. The
+// UpdateStaticCredential replaces only the token, the metadata and the update time. The
 // stored destination is the seal's scope, which the write checks again, so
 // the existing frozen bindings read the replacement.
 func (s *Service) UpdateStaticCredential(ctx context.Context, command UpdateStaticCredential) (Credential, error) {
@@ -105,7 +150,29 @@ func (s *Service) UpdateStaticCredential(ctx context.Context, command UpdateStat
 	if current.AuthType != AuthStaticBearer {
 		return Credential{}, ErrInvalidInput
 	}
-	return s.storage.ReplaceStaticToken(ctx, StaticTokenReplacement{CredentialKey: key, MCPServerURL: current.MCPServerURL, Token: command.Token})
+	encoded, err := encodeUpdate(command.Metadata)
+	if err != nil {
+		return Credential{}, err
+	}
+	return s.storage.ReplaceStaticToken(ctx, StaticTokenReplacement{CredentialKey: key, MCPServerURL: current.MCPServerURL, Token: command.Token, Metadata: encoded})
+}
+
+// UpdateCredentialMetadata replaces only a Credential's metadata, whatever its authentication type.
+type UpdateCredentialMetadata struct {
+	TenantID, VaultID, CredentialID string
+	Metadata                        map[string]string
+}
+
+func (s *Service) UpdateCredentialMetadata(ctx context.Context, command UpdateCredentialMetadata) (Credential, error) {
+	key, ok := credentialKey(command.TenantID, command.VaultID, command.CredentialID)
+	if !ok {
+		return Credential{}, ErrNotFound
+	}
+	encoded, err := metadata.Encode(command.Metadata)
+	if err != nil {
+		return Credential{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	return s.storage.ReplaceCredentialMetadata(ctx, key, encoded)
 }
 
 // CreateOAuthCredential keeps the write-only secrets apart from the metadata.
@@ -114,6 +181,7 @@ type CreateOAuthCredential struct {
 	Name, MCPServerURL, AccessToken string
 	OAuth                           OAuthMetadata
 	RefreshToken, ClientSecret      string
+	Metadata                        map[string]string
 }
 
 // CreateOAuthCredential stores a grant, with the metadata it is refreshed by,
@@ -130,18 +198,24 @@ func (s *Service) CreateOAuthCredential(ctx context.Context, command CreateOAuth
 	// Storage reports a missing credential key before a malformed or missing
 	// Vault.
 	key := CredentialKey{TenantID: tenant, VaultID: command.VaultID, CredentialID: uuid.NewString()}
-	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: key, Name: command.Name, AuthType: AuthMCPOAuth, MCPServerURL: command.MCPServerURL,
+	encoded, err := metadata.Encode(command.Metadata)
+	if err != nil {
+		return Credential{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: key, Name: command.Name, AuthType: AuthMCPOAuth, MCPServerURL: command.MCPServerURL, Metadata: encoded,
 		OAuth: OAuthGrant{Metadata: command.OAuth, AccessToken: command.AccessToken, RefreshToken: command.RefreshToken, ClientSecret: command.ClientSecret}})
 }
 
 // UpdateOAuthCredential patches an OAuth grant. ExpiresAtSet keeps omitted
-// apart from null; a nil AccessToken keeps the stored one.
+// apart from null; a nil AccessToken keeps the stored one, and nil Metadata
+// keeps the stored metadata.
 type UpdateOAuthCredential struct {
 	TenantID, VaultID, CredentialID string
 	AccessToken                     *string
 	ExpiresAt                       *string
 	ExpiresAtSet                    bool
 	Refresh                         *OAuthRefreshUpdate
+	Metadata                        map[string]string
 }
 
 // UpdateOAuthCredential applies the patch to the locked grant, so it
@@ -158,6 +232,10 @@ func (s *Service) UpdateOAuthCredential(ctx context.Context, command UpdateOAuth
 	if current.AuthType != AuthMCPOAuth {
 		return Credential{}, ErrInvalidInput
 	}
+	encoded, err := encodeUpdate(command.Metadata)
+	if err != nil {
+		return Credential{}, err
+	}
 	var updated Credential
 	err = s.withOAuth(ctx, key, "", "credential update failed", func(tx OAuthTx, grant OAuthGrant) error {
 		grant, err := applyOAuthUpdate(grant, command)
@@ -167,7 +245,7 @@ func (s *Service) UpdateOAuthCredential(ctx context.Context, command UpdateOAuth
 		if !validOAuthMetadata(grant.Metadata) {
 			return ErrInvalidInput
 		}
-		updated, err = tx.ApplyOAuthReplacement(ctx, grant)
+		updated, err = tx.ApplyOAuthReplacement(ctx, grant, encoded)
 		return err
 	})
 	if err != nil {

@@ -1,7 +1,5 @@
 // What a conversation shows about a running Turn. Web and Feishu cards read
 // the same copy; Web translates it, Feishu shows it as is.
-export const typicalWait = "通常约 {{value0}} 秒";
-
 // Before the first output: where the time goes.
 export function waitingHeadline(turn) {
   if (turn?.stage === "retrying") return "响应较慢，正在自动重试";

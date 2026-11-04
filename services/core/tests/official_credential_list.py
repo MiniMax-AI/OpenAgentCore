@@ -64,7 +64,7 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
     sdk_page(descending[:20], True, {})
     sdk_page(descending[:20], True, {}, limit=None)
     sdk_page(descending[:20], True, {}, status=[])
-    for limit, size in ((0, 1), (-7, 1), (101, 100)):
+    for limit, size in ((0, 1), (101, 100)):
         sdk_page(descending[:size], True, {"limit": [str(limit)]}, limit=limit)
     sdk_page(list(reversed(archived))[:20], True, {"status": ["archived"]}, status="archived")
     sdk_page(active[:20], True, {"status[]": ["active"], "order": ["asc"]},
@@ -108,7 +108,7 @@ def verify_credential_list(client, other, invalid, peer, binding, saved_vaults, 
 
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         verify_page(raw.get(endpoint, headers=headers), vault.id, descending[:20], True, canary)
-        for limit, size in (("0", 1), ("-7", 1), ("101", 100)):
+        for limit, size in (("0", 1), ("101", 100)):
             verify_page(raw.get(endpoint, headers=headers, params={"limit": limit}),
                         vault.id, descending[:size], True, canary)
         for params, values in (({"status": "active"}, list(reversed(active))),

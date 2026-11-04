@@ -140,7 +140,7 @@ Provider input validation uses the adapter rules in `internal/harnessconfig`: on
 - Credential deletion is one mutation checked by tenant, Vault and ID; Vault deletion removes the parent and its Credentials through the foreign-key cascade in one SQL statement, without decrypting, needing the key or calling providers.
 
 - `credentialcrypto` ciphertext is a format version byte followed by the standard AEAD nonce, ciphertext and tag. The authenticated data holds a fixed domain and version plus the binding (tenant, Vault, Credential, auth type, exact destination). Keep the domain string unchanged: existing rows must still decrypt.
-- Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/core/credential.key` also seals model providers, the E2B key, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
+- Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/core/credential.key` also seals model providers, the E2B and OpenSandbox keys, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
 - OAuth dispatch refresh holds the Credential row lock and the external exchange under one 20-second context (`vaults.oauthRefreshTimeout`). The refresh HTTP client has a 10-second overall timeout and 5-second TLS handshake and response-header timeouts, uses no proxy and treats any redirect as failure.
 
 ## MCP
@@ -210,7 +210,7 @@ The check between Turns changes nothing and never revives a cleanup request. Ter
 
 ### Per-node lifecycle workers
 
-Each registered node has one serial lifecycle worker that owns its gate, allocation and pending cursors, connections and wake hints; E2B allocations share one serial lifecycle without a node. A thin coordinator discovers nodes and shuts workers down, and never holds its map mutex during database, provider or wait operations. Offline workers stay, so their retained resources remain observable after reconnection.
+Each registered node has one serial lifecycle worker that owns its gate, allocation and pending cursors, connections and wake hints; a direct Provider's allocations (E2B, OpenSandbox) share one serial lifecycle without a node. A thin coordinator discovers nodes and shuts workers down, and never holds its map mutex during database, provider or wait operations. Offline workers stay, so their retained resources remain observable after reconnection.
 
 Allocation scans filter by node before their 32-row page limit, and pending scans join the unreleased committed placement. Each node advances its own cursor, including past failed observations, and wraps once at the end. Direct provisioning resolves the tenant-scoped placement before entering that node's gate, and an active allocation must agree with it.
 

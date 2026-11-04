@@ -48,6 +48,15 @@ def main():
             k: v for k, v in updated.to_dict().items() if k != "updated_at"}
         assert sessions.retrieve(old.id) == old
         updated = touched
+        # Compaction and experimental settings: saved, returned, merged per member and cleared by null.
+        assert updated.experimental.time_awareness is False and updated.compaction is None
+        assert agents.create(model="default", compaction={}).compaction is None
+        tuned = agents.create(model="tuned", compaction={"async": False}, experimental={"time_awareness": True})
+        assert tuned.compaction.async_ is False and tuned.experimental.time_awareness is True
+        assert agents.update(tuned.id, experimental={}).experimental.time_awareness is True
+        assert agents.update(tuned.id, experimental={"time_awareness": False}).experimental.time_awareness is False
+        cleared = agents.update(tuned.id, compaction=None)
+        assert cleared.compaction is None and "compaction" not in http.get(base + "/v1/agents/" + tuned.id, headers=headers).json()
         for body in ([], {"model": None}, {"model": 3}, {"name": "x" * 129},
                      {"metadata": {"bad": None}}, {"text": {"unexpected": True}},
                      {"metadata": {"replace": "no"}, "instructions": False},
@@ -73,7 +82,7 @@ def main():
         # the Agent lookup, so owned, foreign and missing Agents get the same response.
         for body, param, message in [
             ({"reasoning": {"effort": "extreme"}}, "reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."),
-            ({"service_tier": "turbo"}, "service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', and 'fast'."),
+            ({"service_tier": "turbo"}, "service_tier", "Invalid value: 'turbo'. Supported values are: 'auto', 'default', 'flex', 'priority', 'fast', and 'ultrafast'."),
             ({"text": {"format": {"type": "json_schema"}}}, "text.format.schema", "Missing required parameter: 'text.format.schema'."),
             ({"tools": [{**tool, "strict": True}]}, "tools[0].strict", "Unknown parameter: 'tools[0].strict'."),
             ({"tools": ["lookup"]}, "tools[0]", "Invalid type for 'tools[0]': expected an object, but got a string instead."),

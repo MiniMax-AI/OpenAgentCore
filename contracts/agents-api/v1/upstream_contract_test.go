@@ -104,7 +104,7 @@ func TestPublicOperationsPreserveOfficialContract(t *testing.T) {
 		}
 		delete(published, path)
 	}
-	if count != 58 || len(published) != 0 {
-		t.Fatalf("expected pinned 58 operations, got %d, extra paths %v", count, published)
+	if count != 73 || len(published) != 0 {
+		t.Fatalf("expected pinned 73 operations, got %d, extra paths %v", count, published)
 	}
 }

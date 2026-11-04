@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 258dc7cba6a5b2959d9b7b525ab5a6a9ef4ed53939e44276773b71095467946e
+source_hash: bb67d20b3c7684d18944ac0bf51038835df199a91fda3445b727aaae7a049e64
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -36,7 +36,7 @@ flowchart TB
 | 声明 | Harness 的最大能力、放置位置、配置和纯准入限制，由 Core 准入和 Runtime 共同读取 | `internal/harnessconfig/<package>/declaration.go` |
 | Runtime 绑定 | 声明加上发现、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<package>/declaration.go` |
 
-Environment 提供执行资源。受管 E2B 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
+Environment 提供执行资源。受管 microsandbox、E2B 和 OpenSandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 
@@ -178,7 +178,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 
 ## 声明 Harness {#declare-the-harness}
 
-每个 Harness 是 `internal/harnessconfig/<package>/declaration.go` 中的一个 `var Declaration = harnessconfig.Declaration{...}`。包名是去掉下划线的 kind。创建该文件即注册 Harness：`make generate-harness-catalog` 生成 Core 注册表、Runtime 的 `harnessDeclarations`、客户端标识符和显示名称以及[注册参考](harness-catalog.md)，`make check-harness-catalog` 拒绝过期的投影。`make openapi` 从同一批声明派生 Harness 枚举，因此不要在 DTO 标签或路由注解中手写枚举。没有动态插件加载器，声明也不能表示机器的可用性。
+每个 Harness 是 `internal/harnessconfig/<package>/declaration.go` 中的一个 `var Declaration = harnessconfig.Declaration{...}`。包名是去掉下划线的 kind。创建该文件即注册 Harness：`make generate-harness-catalog` 生成 Core 注册表、Runtime 的 `harnessDeclarations`、客户端标识符和显示名称、Parsar 示例使用的协议和执行选项，以及[注册参考](harness-catalog.md)，`make check-harness-catalog` 拒绝过期的投影。`make openapi` 从同一批声明派生 Harness 枚举，因此不要在 DTO 标签或路由注解中手写枚举。没有动态插件加载器，声明也不能表示机器的可用性。
 
 声明包含：
 

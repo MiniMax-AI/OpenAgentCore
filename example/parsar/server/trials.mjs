@@ -8,7 +8,7 @@ const prompt = "只回复 OK，不要调用任何工具。";
 
 // A trial run creates one real Session for an Agent that uses the environment
 // template, waits for its first reply, records the outcome and deletes the Session.
-export function trialAPI(store, core) {
+export function trialAPI(store, core, resources) {
   const get = (runtimeId) => {
     const trial = store.get("runtime_trials", runtimeId);
     if (trial?.state === "running" && Date.now() - trial.started_at > limitMs + 30_000)
@@ -46,7 +46,7 @@ export function trialAPI(store, core) {
     if (running?.state === "running") return running;
     const agent = store.list("agents").find((a) => a.runtime_id === runtimeId && a.enabled !== false);
     if (!agent) throw new AppError(400, "先把这个环境模板绑定到一个 Agent，再试运行。");
-    const { request } = prepareSession(store, randomUUID(), { agent_id: agent.id, name: "试运行", input: prompt });
+    const { request } = await prepareSession(store, resources, randomUUID(), { agent_id: agent.id, name: "试运行", input: prompt });
     request.metadata = { ...request.metadata, application: "parsar-trial", title: "试运行" };
     const started_at = Date.now();
     const session = await core("/v1/agents/sessions", "POST", request, randomUUID());

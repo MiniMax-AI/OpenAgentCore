@@ -41,7 +41,7 @@ def verify_session_create_requests(client, spec):
         # prefix, and precede the none input requirement (TV-01..04).
         lookup = {"type": "function", "name": "lookup", "description": "Look up a value.", "parameters": {"type": "object"}}
         agent_errors = [
-            ({"tools": [{"type": "bogus_tool"}]}, "agent.tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'."),
+            ({"tools": [{"type": "bogus_tool"}]}, "agent.tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function', 'tool_search', 'programmatic_tool_calling', 'mcp', 'web_search', 'computer_use', and 'automations'."),
             ({"tools": [{k: v for k, v in lookup.items() if k != "parameters"}]}, "agent.tools[0].parameters", "Missing required parameter: 'agent.tools[0].parameters'."),
             ({"reasoning": {"effort": "extreme"}}, "agent.reasoning.effort", "Invalid value: 'extreme'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."),
             ({"tool_choice": "auto"}, "agent.tool_choice", "Unknown parameter: 'agent.tool_choice'."),

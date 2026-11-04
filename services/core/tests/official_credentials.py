@@ -10,8 +10,9 @@ from openai import AuthenticationError, BadRequestError, InternalServerError, No
 import official_body
 
 
-def verify_credential(body, vault_id, name, destination):
-    assert set(body) == {"id", "auth", "created_at", "name", "object", "updated_at", "vault_id"}
+def verify_credential(body, vault_id, name, destination, metadata=None):
+    assert set(body) == {"id", "auth", "created_at", "metadata", "name", "object", "updated_at", "vault_id"}
+    assert body["metadata"] == (metadata or {})
     assert uuid.UUID(body["id"]).int != 0 and body["object"] == "vault.credential"
     assert body["vault_id"] == vault_id and body["name"] == name
     assert body["auth"] == {"type": "static_bearer", "mcp_server_url": destination}
@@ -75,7 +76,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
             {**request, "auth": {**auth, "token": 3}},
             {**request, "auth": {**auth, "token": ""}},
             {**request, "auth": {"type": "mcp_oauth", "mcp_server_url": destination, "access_token": None}},
-            {**request, "metadata": {"unexpected": "field"}},
+            {**request, "metadata": {"unexpected": 1}},
         ]
         for field in ("type", "mcp_server_url", "token"):
             invalid_requests.extend([{**request, "auth": {key: value for key, value in auth.items() if key != field}},

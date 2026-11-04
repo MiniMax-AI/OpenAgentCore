@@ -12,7 +12,7 @@ Anything this page does not list follows the Harness's native behavior with the 
 | Admitted | Core admits it through the same Runtime path, but no real-model acceptance has run on that placement |
 | Rejected | Core rejects the request before execution |
 
-Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted (`self_hosted`). E2B and microsandbox run the same Runtime and adapters, and every Verified hosted cell counts as Admitted on both. Self-hosted acceptance ran on Linux machines; the [self-hosted guide](../../docs/getting-started/self-hosted.md#platforms) lists the supported platforms. A verified operation is verified on its own, not in every combination with other options; combinations that a profile rejects are listed in the operation's contract.
+Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted (`self_hosted`). microsandbox, E2B and OpenSandbox run the same Runtime and adapters, and every Verified hosted cell counts as Admitted on each. Self-hosted acceptance ran on Linux machines; the [self-hosted guide](../../docs/getting-started/self-hosted.md#platforms) lists the supported platforms. A verified operation is verified on its own, not in every combination with other options; combinations that a profile rejects are listed in the operation's contract.
 
 ## Execution and input
 
@@ -25,8 +25,9 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
-| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted | Rejected | Rejected |
+| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted; `ultrafast` rejected | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
+| `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools | Rejected | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |
 
 Native model parameters and provider protocols per Harness are in [model execution](./model-execution.md).
@@ -65,4 +66,4 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, with literal headers or HTTPS bearer | Verified: self-hosted; admitted: hosted; literal headers or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; E2B, which keeps its own disks, does not. microsandbox always uses external storage, so MiniMax Code, which does not declare the capability, cannot run on it. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; E2B and OpenSandbox, which keep their own disks, do not. microsandbox always uses external storage, so MiniMax Code, which does not declare the capability, cannot run on it. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

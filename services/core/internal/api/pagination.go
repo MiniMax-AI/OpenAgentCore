@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 )
 
 type pageOptions struct {
@@ -48,4 +50,35 @@ func readPageQueryLimits(w http.ResponseWriter, r *http.Request, q url.Values, d
 		return pageOptions{}, false
 	}
 	return pageOptions{after: strings.TrimSpace(q.Get("after")), limit: limit, ascending: order == "asc"}, true
+}
+
+// readMetadataFilter reads the exact-match pairs of metadata[key]=value. Every
+// pair must match; keys and values follow the official metadata limits.
+func readMetadataFilter(w http.ResponseWriter, r *http.Request) (map[string]string, bool) {
+	var filter map[string]string
+	for name, values := range r.URL.Query() {
+		key, found := strings.CutPrefix(name, "metadata[")
+		key, closed := strings.CutSuffix(key, "]")
+		switch {
+		case !found || !closed:
+			continue
+		case len(values) > 1:
+			writeListDuplicateError(w, r, name, nil)
+			return nil, false
+		case key == "":
+			writeFieldError(w, &fieldError{param: "metadata", message: "Invalid property name in 'metadata': '' is too short. Expected a string with minimum length 1, but got a string with length 0 instead."})
+			return nil, false
+		}
+		if filter == nil {
+			filter = map[string]string{}
+		}
+		filter[key] = values[0]
+	}
+	if len(filter) > 0 {
+		if err := metadata.Validate(filter); err != nil {
+			writeFieldError(w, metadataFieldError(err))
+			return nil, false
+		}
+	}
+	return filter, true
 }

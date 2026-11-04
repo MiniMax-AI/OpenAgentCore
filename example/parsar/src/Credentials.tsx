@@ -3,7 +3,8 @@ import { OAuthCredentialDialog } from "./OAuthCredential";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, KeyRound, Trash2 } from "lucide-react";
-import type { VaultCredential } from "@oac/agents-client";
+import { randomUuid, type VaultCredential } from "@oac/agents-client";
+import { product, useSecrets, type Secret } from "./lib/product";
 import { api, readHistory } from "./lib/api";
 import { ErrorNotice, Field } from "./components/shared";
 import { Ledger, LedgerHeader, LedgerRow } from "./components/ui/ledger";
@@ -24,7 +25,160 @@ export const useVaults = () =>
     queryFn: ({ signal }) =>
       readHistory((options) => api.listVaults(options), signal),
   });
+// Every MCP credential across Vaults, with the Vault that holds it.
+export const useAllVaultCredentials = () => {
+  const vaults = useVaults();
+  return useQuery({
+    queryKey: ["vault-credentials", "all", vaults.data?.map((vault) => vault.id).join(",")],
+    enabled: !!vaults.data,
+    queryFn: async ({ signal }) =>
+      (
+        await Promise.all(
+          vaults.data!.map(async (vault) =>
+            (await readHistory((options) => api.listVaultCredentials(vault.id, options), signal)).map(
+              (credential) => ({ vault, credential }),
+            ),
+          ),
+        )
+      ).flat(),
+  });
+};
+
 export function Credentials() {
+  return (
+    <>
+      <Secrets />
+      <VaultCredentials />
+    </>
+  );
+}
+
+// Values capabilities read as variables. A value is write-only: it is never
+// shown again, and saving without one keeps it.
+function Secrets() {
+  const usage = useUsage();
+  const secrets = useSecrets();
+  const cache = useQueryClient();
+  const [editing, setEditing] = useState<Secret | null>(null);
+  const remove = useMutation({
+    mutationFn: (id: string) => product(`secrets/${id}`, "DELETE"),
+    onSuccess: () => cache.invalidateQueries({ queryKey: ["secrets"] }),
+  });
+  return (
+    <>
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 pt-6 pb-1 sm:px-10">
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("密钥")}</h2>
+        <Button onClick={() => setEditing({ id: randomUuid(), name: "", revision: 0 })}>
+          <Plus />
+          {tr("添加密钥")}
+        </Button>
+      </div>
+      <ErrorNotice page error={secrets.error || remove.error} />
+      <Ledger columns="16px minmax(160px,1fr) 160px 130px">
+        <LedgerHeader>
+          <span />
+          <span>{tr("名称")}</span>
+          <span>{tr("使用情况")}</span>
+          <span />
+        </LedgerHeader>
+        {secrets.data?.map((row) => (
+          <LedgerRow key={row.id}>
+            <KeyRound className="h-3.5 w-3.5 text-fg-muted" />
+            <span>{row.name}</span>
+            <span className="text-fg-muted">{usage.secret(row.id) || tr("未使用")}</span>
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setEditing(row)}>
+                {tr("更换")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={tr("删除密钥 {{value0}}", { value0: row.name })}
+                title={usage.secret(row.id) ? tr("仍在使用中，不能移除") : undefined}
+                disabled={!!usage.secret(row.id) || remove.isPending}
+                onClick={() => {
+                  if (confirm(tr("删除密钥 {{value0}}？", { value0: row.name }))) remove.mutate(row.id);
+                }}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          </LedgerRow>
+        ))}
+      </Ledger>
+      {editing && <SecretEditor value={editing} close={() => setEditing(null)} />}
+    </>
+  );
+}
+
+export function SecretEditor({
+  value,
+  close,
+  onSaved,
+}: {
+  value: Secret;
+  close: () => void;
+  onSaved?: (id: string) => void;
+}) {
+  const cache = useQueryClient();
+  const [name, setName] = useState(value.name);
+  const [secret, setSecret] = useState("");
+  const save = useMutation({
+    mutationFn: () =>
+      product(`secrets/${value.id}`, "PUT", {
+        revision: value.revision,
+        name,
+        ...(secret ? { value: secret } : {}),
+      }),
+    onSuccess: () => {
+      void cache.invalidateQueries({ queryKey: ["secrets"] });
+      onSaved?.(value.id);
+      close();
+    },
+  });
+  return (
+    <Dialog open onOpenChange={(open) => !open && !save.isPending && close()}>
+      <DialogContent aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{value.revision ? tr("更换密钥") : tr("添加密钥")}</DialogTitle>
+        </DialogHeader>
+        <form
+          id="secret-form"
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            save.mutate();
+          }}
+        >
+          <Field label={tr("名称")} id="secret-name">
+            <Input id="secret-name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={tr("值")} id="secret-value">
+            <Input
+              id="secret-value"
+              type="password"
+              autoComplete="new-password"
+              required={!value.revision}
+              placeholder={value.revision ? tr("留空保留已保存的值") : undefined}
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+            />
+          </Field>
+          <ErrorNotice error={save.error} />
+        </form>
+        <DialogFooter>
+          <Button type="submit" form="secret-form" disabled={save.isPending}>
+            {tr("保存")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Bearer and OAuth credentials for HTTP MCP servers, kept in Core Vaults.
+function VaultCredentials() {
   const usage = useUsage();
   const vaults = useVaults(),
     cache = useQueryClient(),
@@ -81,7 +235,7 @@ export function Credentials() {
     <>
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 pt-6 pb-1 sm:px-10">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("凭据")}</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("MCP 凭据")}</h2>
           <Select
             aria-label={tr("凭据库")}
             value={selected}

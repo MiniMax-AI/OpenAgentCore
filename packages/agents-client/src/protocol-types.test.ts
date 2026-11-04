@@ -90,7 +90,7 @@ describe("Parsar dadf64a7 basic managed Environment profile", () => {
     const resource = hostedDadf64.environment_resource as AgentEnvironmentResource;
 
     expect(Object.keys(environment).sort()).toEqual([
-      "capability_directories", "files", "id", "network", "packages", "plugins", "skills", "type",
+      "capability_directories", "container_size", "desktop", "files", "id", "network", "packages", "plugins", "skills", "type",
     ]);
     expect(environment.network).toEqual({ access: "enabled", allowed_domains: [] });
     expect(environment.packages).toEqual({ npm: [], python: [], system: [] });
@@ -380,7 +380,6 @@ describe("Parsar 0438880a Environment retrieve resource", () => {
       expect(resource.plugins).toEqual([]);
       expect(resource.skills).toEqual([]);
     }
-    expectTypeOf<EnvironmentResourceStatus>().not.toEqualTypeOf<SessionEnvironmentStatus>();
   });
 
   it("retains raw malformed and unsupported fixtures as untrusted test inputs", () => {

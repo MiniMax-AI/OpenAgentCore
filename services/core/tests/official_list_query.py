@@ -26,7 +26,6 @@ LIMITS = {
     "clamp": {"0": 1, "101": None, "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
     "strict": {"0": ("invalid_request_error", None, "limit must be between 1 and 100"), "101": ("invalid_request_error", None, "limit must be between 1 and 100"),
                "-1": ("invalid_request_error", None, BETA_DIGIT), "abc": ("invalid_request_error", None, BETA_DIGIT)},
-    "vault": {"0": 1, "-1": 1, "101": None, "abc": ("invalid_request_error", None, BETA_DIGIT)},
     "skills": {"0": 0, "101": ("integer_above_max_value", "limit", "Invalid 'limit': integer above maximum value. Expected a value <= 100, but got 101 instead."),
                "-1": ("integer_below_min_value", "limit", "Invalid 'limit': integer below minimum value. Expected a value >= 0, but got -1 instead.")},
     "files": {"0": (None, None, "limit must be between 1 and 10000."), "10001": (None, None, "limit must be between 1 and 10000.")},
@@ -375,7 +374,7 @@ def main():
             ("skills", "/skills", client.skills.list, False, False),
         ]
         policies = {"agents": "clamp", "templates": "clamp", "sessions": "clamp", "items": "clamp", "turns": "strict",
-                    "vaults": "vault", "credentials": "vault", "files": "files", "skills": "skills"}
+                    "vaults": "clamp", "credentials": "clamp", "files": "files", "skills": "skills"}
         tolerated = 0
         state_before = {name: [value.to_dict() for value in listing(order="asc", limit=1)] for name, _, listing, _, _ in families}
         rejected = 0
@@ -403,17 +402,12 @@ def main():
                 assert body["type"] == "invalid_request_error" and body["code"] == expected_code and body["param"] == expected_param, (name, body)
                 assert isinstance(body["message"], str) and body["message"], name
                 assert secret not in response.text and all(value not in response.text for value in owned[name]), name
-                if order:
-                    try:
-                        listing(order=order)
-                    except APIStatusError as error:
-                        assert error.status_code == 400 and error.body == body, (name, error.body)
-                    else:
-                        raise AssertionError(f"SDK accepted invalid {name} order")
+                try:
+                    listing(order=order)
+                except APIStatusError as error:
+                    assert error.status_code == 400 and error.body == body, (name, error.body)
                 else:
-                    # Fixed 3.13 drops empty query values in _qs.stringify_items.
-                    # Only the raw request above exercises an explicit order=.
-                    assert [value.id for value in listing(order="", limit=1)] == owned[name][::-1], name
+                    raise AssertionError(f"SDK accepted invalid {name} order")
                 foreign_error = raw.get(url, headers={**headers, "Authorization": "Bearer " + foreign}, params={"order": order})
                 assert foreign_error.status_code == 400 and foreign_error.json() == response.json(), name
                 unauthorized = raw.get(url, headers={k: v for k, v in headers.items() if k != "Authorization"}, params={"order": order})

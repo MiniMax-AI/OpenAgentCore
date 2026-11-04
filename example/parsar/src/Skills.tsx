@@ -1,10 +1,11 @@
-import { product } from "./lib/product";
+import { product, useSkillCredentials } from "./lib/product";
+import { CredentialNames } from "./Capabilities";
 import { Select, SelectOption } from "./components/ui/select";
 import { unzipSync, strFromU8 } from "fflate";
 import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Plus, Upload, Trash2 } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
 import type { Skill } from "@oac/agents-client";
 import { api, readHistory } from "./lib/api";
 import { Button } from "./components/ui/button";
@@ -18,111 +19,12 @@ import {
   DialogFooter,
 } from "./components/ui/dialog";
 import { ErrorNotice, Field } from "./components/shared";
-import { EmptyState } from "./components/ui/empty-state";
 export const useSkills = () =>
   useQuery({
     queryKey: ["skills"],
     queryFn: ({ signal }) =>
       readHistory((options) => api.listSkills(options), signal),
   });
-export function Skills() {
-  const query = useSkills();
-  const cache = useQueryClient();
-  const [selected, setSelected] = useState<Skill | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [directory, setDirectory] = useState(false);
-  const [search, setSearch] = useState("");
-  const upload = useMutation({
-    mutationFn: (file: File) =>
-      api.uploadSkill({ kind: "zip", file, filename: file.name }),
-    onSuccess: () => cache.invalidateQueries({ queryKey: ["skills"] }),
-  });
-  return (
-    <>
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-2 sm:px-10">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-4">
-          <h2 className="text-lg font-semibold tracking-tight text-fg">Skills</h2>
-          <Input
-            aria-label={tr("搜索 Skills")}
-            placeholder={tr("搜索技能")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-xs"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setDirectory(true)}>
-            {tr("浏览目录")}
-          </Button>
-          <Button variant="outline" asChild>
-            <label className="cursor-pointer">
-              <Upload />
-              {upload.isPending ? tr("上传中\u2026") : tr("上传 ZIP")}
-              <input
-                aria-label={tr("上传 Skill ZIP")}
-                type="file"
-                accept=".zip"
-                className="sr-only"
-                disabled={upload.isPending}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) upload.mutate(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </Button>
-          <Button onClick={() => setCreating(true)}>
-            <Plus />
-            {tr("创建 Skill")}
-          </Button>
-        </div>
-      </div>
-      <ErrorNotice page error={query.error || upload.error} />
-      <div className="mx-auto w-full max-w-6xl px-6 py-4 sm:px-10">
-        {query.data && query.data.length > 0 ? (
-          <div className="flex flex-col divide-y divide-line-muted overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card">
-            {query.data
-              .filter((skill) =>
-                `${skill.name} ${skill.description}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((skill) => (
-                <button
-                  key={skill.id}
-                  onClick={() => setSelected(skill)}
-                  className="flex min-h-13 items-center gap-6 px-5 py-3 text-left transition-colors hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-accent"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <BookOpen className="h-4 w-4 shrink-0 text-fg-muted" />
-                    <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
-                      {skill.name}
-                    </h2>
-                    <span className="rounded-md bg-surface-subtle px-2 py-0.5 font-mono text-sm text-fg-muted ring-1 ring-line">
-                      v{skill.default_version}
-                    </span>
-                  </div>
-                  <p className="w-1/2 truncate text-sm text-fg-muted">
-                    {skill.description}
-                  </p>
-                </button>
-              ))}
-          </div>
-        ) : (
-          !query.isPending && (
-            <EmptyState title={tr("把常用方法保存为 Skill")} />
-          )
-        )}
-      </div>
-      {directory && <SkillsDirectory close={() => setDirectory(false)} />}
-      {creating && <SkillCreate close={() => setCreating(false)} />}
-      {selected && (
-        <SkillDetail skill={selected} close={() => setSelected(null)} />
-      )}
-    </>
-  );
-}
 export function SkillCreate({
   close,
   onSaved,
@@ -289,6 +191,7 @@ export function SkillDetail({
           <DialogTitle>{current.data.name}</DialogTitle>
         </DialogHeader>
         <p className="text-base leading-relaxed">{current.data.description}</p>
+        <SkillCredentials id={skill.id} />
         <h3 className="font-semibold">{tr("版本")}</h3>
         <ErrorNotice
           error={
@@ -433,7 +336,7 @@ interface RegistryPreview {
   files: string[];
   instructions: string;
 }
-function SkillsDirectory({ close }: { close: () => void }) {
+export function SkillsDirectory({ close }: { close: () => void }) {
   const [search, setSearch] = useState(""),
     [source, setSource] = useState(""),
     [slug, setSlug] = useState(""),
@@ -603,5 +506,30 @@ function SkillsDirectory({ close }: { close: () => void }) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// The variables this Skill needs; Parsar keeps them beside the Core Skill.
+function SkillCredentials({ id }: { id: string }) {
+  const cache = useQueryClient();
+  const saved = useSkillCredentials().data?.find((row) => row.id === id)?.credentials || [];
+  const [names, setNames] = useState<string[] | undefined>();
+  const save = useMutation({
+    mutationFn: () => product(`skills/${id}/credentials`, "PUT", { credentials: names }),
+    onSuccess: () => {
+      setNames(undefined);
+      void cache.invalidateQueries({ queryKey: ["skill-credentials"] });
+    },
+  });
+  return (
+    <div className="space-y-2">
+      <CredentialNames value={names ?? saved} change={setNames} />
+      {names !== undefined && (
+        <Button variant="outline" disabled={save.isPending} onClick={() => save.mutate()}>
+          {tr("保存凭据需求")}
+        </Button>
+      )}
+      <ErrorNotice error={save.error} />
+    </div>
   );
 }

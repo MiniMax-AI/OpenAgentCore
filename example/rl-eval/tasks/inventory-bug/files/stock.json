@@ -1,0 +1,422 @@
+[
+ {
+  "sku": "INV-001",
+  "name": "bearing L",
+  "qty": 184,
+  "unit_price_cents": 8783,
+  "clearance": true
+ },
+ {
+  "sku": "INV-002",
+  "name": "clamp M",
+  "qty": 0,
+  "unit_price_cents": 1953,
+  "clearance": false
+ },
+ {
+  "sku": "INV-003",
+  "name": "switch M",
+  "qty": 0,
+  "unit_price_cents": 9502,
+  "clearance": true
+ },
+ {
+  "sku": "INV-004",
+  "name": "relay M",
+  "qty": 0,
+  "unit_price_cents": 6479,
+  "clearance": true
+ },
+ {
+  "sku": "INV-005",
+  "name": "fuse S",
+  "qty": 317,
+  "unit_price_cents": 7387,
+  "clearance": true
+ },
+ {
+  "sku": "INV-006",
+  "name": "bolt S",
+  "qty": 0,
+  "unit_price_cents": 2816,
+  "clearance": false
+ },
+ {
+  "sku": "INV-007",
+  "name": "hinge L",
+  "qty": 277,
+  "unit_price_cents": 3454,
+  "clearance": true
+ },
+ {
+  "sku": "INV-008",
+  "name": "relay M",
+  "qty": 0,
+  "unit_price_cents": 6016,
+  "clearance": false
+ },
+ {
+  "sku": "INV-009",
+  "name": "cable M",
+  "qty": 136,
+  "unit_price_cents": 5036,
+  "clearance": false
+ },
+ {
+  "sku": "INV-010",
+  "name": "bearing S",
+  "qty": 348,
+  "unit_price_cents": 5635,
+  "clearance": true
+ },
+ {
+  "sku": "INV-011",
+  "name": "valve L",
+  "qty": 247,
+  "unit_price_cents": 3126,
+  "clearance": false
+ },
+ {
+  "sku": "INV-012",
+  "name": "relay M",
+  "qty": 0,
+  "unit_price_cents": 5958,
+  "clearance": false
+ },
+ {
+  "sku": "INV-013",
+  "name": "bolt XL",
+  "qty": 193,
+  "unit_price_cents": 247,
+  "clearance": false
+ },
+ {
+  "sku": "INV-014",
+  "name": "relay M",
+  "qty": 0,
+  "unit_price_cents": 4130,
+  "clearance": false
+ },
+ {
+  "sku": "INV-015",
+  "name": "clamp L",
+  "qty": 182,
+  "unit_price_cents": 4209,
+  "clearance": false
+ },
+ {
+  "sku": "INV-016",
+  "name": "nut L",
+  "qty": 152,
+  "unit_price_cents": 1592,
+  "clearance": true
+ },
+ {
+  "sku": "INV-017",
+  "name": "spring L",
+  "qty": 76,
+  "unit_price_cents": 9030,
+  "clearance": true
+ },
+ {
+  "sku": "INV-018",
+  "name": "sensor L",
+  "qty": 0,
+  "unit_price_cents": 2538,
+  "clearance": false
+ },
+ {
+  "sku": "INV-019",
+  "name": "hinge XL",
+  "qty": 0,
+  "unit_price_cents": 1425,
+  "clearance": false
+ },
+ {
+  "sku": "INV-020",
+  "name": "spring XL",
+  "qty": 122,
+  "unit_price_cents": 9830,
+  "clearance": true
+ },
+ {
+  "sku": "INV-021",
+  "name": "hinge XL",
+  "qty": 0,
+  "unit_price_cents": 1011,
+  "clearance": false
+ },
+ {
+  "sku": "INV-022",
+  "name": "sensor S",
+  "qty": 0,
+  "unit_price_cents": 2238,
+  "clearance": false
+ },
+ {
+  "sku": "INV-023",
+  "name": "bearing M",
+  "qty": 0,
+  "unit_price_cents": 2864,
+  "clearance": false
+ },
+ {
+  "sku": "INV-024",
+  "name": "washer S",
+  "qty": 0,
+  "unit_price_cents": 7523,
+  "clearance": false
+ },
+ {
+  "sku": "INV-025",
+  "name": "bearing M",
+  "qty": 268,
+  "unit_price_cents": 5304,
+  "clearance": false
+ },
+ {
+  "sku": "INV-026",
+  "name": "hinge XL",
+  "qty": 0,
+  "unit_price_cents": 6275,
+  "clearance": false
+ },
+ {
+  "sku": "INV-027",
+  "name": "spring M",
+  "qty": 322,
+  "unit_price_cents": 3050,
+  "clearance": true
+ },
+ {
+  "sku": "INV-028",
+  "name": "hinge L",
+  "qty": 33,
+  "unit_price_cents": 9724,
+  "clearance": false
+ },
+ {
+  "sku": "INV-029",
+  "name": "fuse L",
+  "qty": 287,
+  "unit_price_cents": 4700,
+  "clearance": false
+ },
+ {
+  "sku": "INV-030",
+  "name": "hinge L",
+  "qty": 0,
+  "unit_price_cents": 9612,
+  "clearance": false
+ },
+ {
+  "sku": "INV-031",
+  "name": "clamp L",
+  "qty": 167,
+  "unit_price_cents": 7683,
+  "clearance": true
+ },
+ {
+  "sku": "INV-032",
+  "name": "spring L",
+  "qty": 141,
+  "unit_price_cents": 5761,
+  "clearance": false
+ },
+ {
+  "sku": "INV-033",
+  "name": "switch XL",
+  "qty": 89,
+  "unit_price_cents": 7468,
+  "clearance": false
+ },
+ {
+  "sku": "INV-034",
+  "name": "valve M",
+  "qty": 0,
+  "unit_price_cents": 6030,
+  "clearance": false
+ },
+ {
+  "sku": "INV-035",
+  "name": "clamp L",
+  "qty": 41,
+  "unit_price_cents": 6925,
+  "clearance": true
+ },
+ {
+  "sku": "INV-036",
+  "name": "fuse XL",
+  "qty": 320,
+  "unit_price_cents": 4534,
+  "clearance": false
+ },
+ {
+  "sku": "INV-037",
+  "name": "bolt M",
+  "qty": 82,
+  "unit_price_cents": 3060,
+  "clearance": true
+ },
+ {
+  "sku": "INV-038",
+  "name": "sensor M",
+  "qty": 0,
+  "unit_price_cents": 7825,
+  "clearance": false
+ },
+ {
+  "sku": "INV-039",
+  "name": "washer S",
+  "qty": 69,
+  "unit_price_cents": 3073,
+  "clearance": false
+ },
+ {
+  "sku": "INV-040",
+  "name": "spring S",
+  "qty": 213,
+  "unit_price_cents": 6329,
+  "clearance": false
+ },
+ {
+  "sku": "INV-041",
+  "name": "nut M",
+  "qty": 122,
+  "unit_price_cents": 109,
+  "clearance": false
+ },
+ {
+  "sku": "INV-042",
+  "name": "hinge XL",
+  "qty": 353,
+  "unit_price_cents": 6224,
+  "clearance": false
+ },
+ {
+  "sku": "INV-043",
+  "name": "spring L",
+  "qty": 152,
+  "unit_price_cents": 8498,
+  "clearance": true
+ },
+ {
+  "sku": "INV-044",
+  "name": "bearing L",
+  "qty": 181,
+  "unit_price_cents": 6804,
+  "clearance": false
+ },
+ {
+  "sku": "INV-045",
+  "name": "sensor L",
+  "qty": 0,
+  "unit_price_cents": 9862,
+  "clearance": false
+ },
+ {
+  "sku": "INV-046",
+  "name": "clamp M",
+  "qty": 0,
+  "unit_price_cents": 5851,
+  "clearance": false
+ },
+ {
+  "sku": "INV-047",
+  "name": "sensor S",
+  "qty": 196,
+  "unit_price_cents": 9369,
+  "clearance": false
+ },
+ {
+  "sku": "INV-048",
+  "name": "spring M",
+  "qty": 323,
+  "unit_price_cents": 6256,
+  "clearance": false
+ },
+ {
+  "sku": "INV-049",
+  "name": "bracket XL",
+  "qty": 246,
+  "unit_price_cents": 6321,
+  "clearance": false
+ },
+ {
+  "sku": "INV-050",
+  "name": "switch M",
+  "qty": 306,
+  "unit_price_cents": 5027,
+  "clearance": false
+ },
+ {
+  "sku": "INV-051",
+  "name": "gasket S",
+  "qty": 164,
+  "unit_price_cents": 4791,
+  "clearance": true
+ },
+ {
+  "sku": "INV-052",
+  "name": "bolt S",
+  "qty": 338,
+  "unit_price_cents": 4121,
+  "clearance": true
+ },
+ {
+  "sku": "INV-053",
+  "name": "fuse M",
+  "qty": 201,
+  "unit_price_cents": 8824,
+  "clearance": false
+ },
+ {
+  "sku": "INV-054",
+  "name": "bracket XL",
+  "qty": 19,
+  "unit_price_cents": 4484,
+  "clearance": false
+ },
+ {
+  "sku": "INV-055",
+  "name": "relay L",
+  "qty": 253,
+  "unit_price_cents": 7875,
+  "clearance": false
+ },
+ {
+  "sku": "INV-056",
+  "name": "switch S",
+  "qty": 0,
+  "unit_price_cents": 5025,
+  "clearance": true
+ },
+ {
+  "sku": "INV-057",
+  "name": "relay L",
+  "qty": 152,
+  "unit_price_cents": 8780,
+  "clearance": true
+ },
+ {
+  "sku": "INV-058",
+  "name": "valve L",
+  "qty": 382,
+  "unit_price_cents": 2269,
+  "clearance": true
+ },
+ {
+  "sku": "INV-059",
+  "name": "hinge XL",
+  "qty": 56,
+  "unit_price_cents": 9037,
+  "clearance": true
+ },
+ {
+  "sku": "INV-060",
+  "name": "gasket XL",
+  "qty": 295,
+  "unit_price_cents": 7994,
+  "clearance": false
+ }
+]

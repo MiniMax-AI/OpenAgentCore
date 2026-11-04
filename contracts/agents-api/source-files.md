@@ -4,7 +4,7 @@ title: "Files and Skills"
 
 Files (`/v1/files`) and Skills (`/v1/skills`) are Project resources with their own lifecycle, independent of Sessions. A File holds uploaded bytes that Environments copy by ID. A Skill holds immutable, versioned bundles that Templates and Sessions reference. Every API key of a Project shares them.
 
-These routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json): the [Files resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py), [create parameters](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py), [FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) and the [Skills resource](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills). They need a Project API key and no `OpenAI-Beta` header. A missing ID and another Project's ID return the same 404.
+These routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json): the [Files resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/files.py), [create parameters](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/file_create_params.py), [FileObject](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/file_object.py) and the [Skills resource](https://github.com/openai/openai-python/tree/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/skills). They need a Project API key and no `OpenAI-Beta` header. A missing ID and another Project's ID return the same 404.
 
 ## Files
 
@@ -75,7 +75,7 @@ A copy into a workspace reads a consistent snapshot of the File and can finish a
 
 ### Upload a bundle
 
-Send one ZIP as a `files` part, or a directory as repeated `files[]` parts whose filenames are relative paths such as `report/SKILL.md`. SDK 3.13.0 sends no part when `files` is a single file rather than a list, so upload a single ZIP with plain HTTP:
+Send one ZIP as a `files` part, or a directory as repeated `files[]` parts whose filenames are relative paths such as `report/SKILL.md`. With plain HTTP:
 
 ```sh
 curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@report.zip

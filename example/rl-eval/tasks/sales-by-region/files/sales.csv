@@ -1,0 +1,501 @@
+order_id,date,region,product,quantity,unit_price
+S0001,2025-01-02,Central,Widget,6,12.25
+S0002,2025-01-06,South,"Adapter, USB-C",10,15.99
+S0003,2025-01-06,West,"Adapter, USB-C",17,15.74
+S0004,2025-01-07,Central,"Adapter, USB-C",9,15.99
+S0005,2025-01-07,East,Sensor,17,24.75
+S0006,2025-01-08,Central,Sensor,16,24.75
+S0007,2025-01-10,East,Cable,14,3.99
+S0008,2025-01-11,South,Widget,6,12.50
+S0009,2025-01-11,West,Bracket,18,8.50
+S0010,2025-01-13,East,"Gadget, Large",9,49.99
+S0011,2025-01-16,North,"Gadget, Large",7,49.99
+S0012,2025-01-18,North,Sensor,6,25.25
+S0013,2025-01-19,West,"Gadget, Large",8,49.99
+S0014,2025-01-20,East,Cable,-4,3.99
+S0015,2025-01-20,Central,Sensor,1,24.75
+S0016,2025-01-21,South,Sensor,5,24.75
+S0017,2025-01-22,South,"Gadget, Large",3,49.99
+S0018,2025-01-24,South,Cable,2,3.99
+S0019,2025-01-25,Central,"Adapter, USB-C",12,15.74
+S0020,2025-01-26,North,Widget,20,12.50
+S0021,2025-01-26,East,"Adapter, USB-C",4,15.74
+S0022,2025-01-27,North,"Gadget, Large",10,49.99
+S0023,2025-01-30,East,Sensor,13,24.75
+S0024,2025-01-30,West,Bracket,5,9.25
+S0025,2025-01-30,West,Bracket,8,9.25
+S0026,2025-01-30,East,Sensor,15,24.75
+S0027,2025-02-03,East,"Gadget, Large",4,49.99
+S0028,2025-02-07,North,Cable,3,4.49
+S0029,2025-02-08,South,Widget,14,12.25
+S0030,2025-02-10,Central,Widget,12,12.50
+S0031,2025-02-11,West,Widget,19,12.50
+S0032,2025-02-11,Central,Widget,10,12.50
+S0033,2025-02-14,South,"Adapter, USB-C",8,15.99
+S0034,2025-02-16,East,"Adapter, USB-C",18,15.99
+S0035,2025-02-16,West,Bracket,5,8.75
+S0036,2025-02-16,Central,Bracket,18,8.75
+S0037,2025-02-18,North,Bracket,-1,8.75
+S0038,2025-02-20,East,Bracket,19,8.50
+S0039,2025-02-21,East,Sensor,13,25.25
+S0040,2025-02-22,North,Sensor,16,24.75
+S0041,2025-02-23,South,Widget,16,12.50
+S0042,2025-02-24,East,"Adapter, USB-C",8,15.99
+S0043,2025-02-25,Central,"Adapter, USB-C",9,15.99
+S0044,2025-02-25,West,Sensor,4,24.75
+S0045,2025-02-26,East,Bracket,19,9.25
+S0046,2025-02-26,North,Widget,1,13.00
+S0047,2025-03-02,North,Bracket,10,9.25
+S0048,2025-03-03,East,Widget,5,12.50
+S0049,2025-03-05,South,Widget,3,12.25
+S0050,2025-03-05,South,Cable,11,4.49
+S0051,2025-03-07,East,Cable,16,3.99
+S0052,2025-03-11,North,Sensor,19,24.75
+S0053,2025-03-14,North,Sensor,3,24.75
+S0054,2025-03-15,South,Cable,18,3.74
+S0055,2025-03-18,Central,"Gadget, Large",18,49.74
+S0056,2025-03-18,West,Widget,11,13.00
+S0057,2025-03-20,Central,"Adapter, USB-C",7,15.99
+S0058,2025-03-20,South,Widget,10,13.00
+S0059,2025-03-20,East,Cable,16,3.99
+S0060,2025-03-23,South,Cable,-4,3.99
+S0061,2025-03-23,South,"Adapter, USB-C",18,15.99
+S0062,2025-03-24,South,Cable,17,4.49
+S0063,2025-03-24,East,"Gadget, Large",19,49.74
+S0064,2025-03-25,South,Cable,20,3.99
+S0065,2025-03-25,West,Bracket,15,8.50
+S0066,2025-03-25,North,Sensor,20,24.75
+S0067,2025-03-29,South,"Adapter, USB-C",3,15.74
+S0068,2025-03-31,East,Widget,8,12.25
+S0069,2025-03-31,West,Bracket,4,8.75
+S0070,2025-04-01,East,Sensor,17,24.75
+S0071,2025-04-03,Central,"Gadget, Large",19,50.49
+S0072,2025-04-04,North,Cable,6,3.99
+S0073,2025-04-05,South,"Adapter, USB-C",15,15.74
+S0074,2025-04-09,West,Sensor,6,24.75
+S0075,2025-04-10,Central,Sensor,20,24.75
+S0076,2025-04-11,North,"Adapter, USB-C",11,15.99
+S0077,2025-04-12,South,Widget,11,13.00
+S0078,2025-04-14,East,"Adapter, USB-C",15,15.99
+S0079,2025-04-15,East,"Adapter, USB-C",7,16.49
+S0080,2025-04-16,East,"Gadget, Large",11,49.99
+S0081,2025-04-18,Central,Bracket,14,8.75
+S0082,2025-04-19,West,"Adapter, USB-C",3,15.99
+S0083,2025-04-19,West,"Gadget, Large",20,49.74
+S0084,2025-04-19,North,Widget,18,13.00
+S0085,2025-04-24,South,Sensor,12,25.25
+S0086,2025-04-26,West,"Gadget, Large",12,50.49
+S0087,2025-04-28,North,"Gadget, Large",11,50.49
+S0088,2025-05-02,West,"Gadget, Large",11,49.74
+S0089,2025-05-06,North,Widget,2,13.00
+S0090,2025-05-07,South,"Adapter, USB-C",14,15.99
+S0091,2025-05-08,Central,Bracket,5,8.50
+S0092,2025-05-10,Central,Widget,3,12.50
+S0093,2025-05-12,Central,"Adapter, USB-C",14,16.49
+S0094,2025-05-18,North,Cable,11,3.74
+S0095,2025-05-18,South,"Adapter, USB-C",9,15.99
+S0096,2025-05-26,South,"Gadget, Large",18,49.74
+S0097,2025-05-26,Central,"Adapter, USB-C",3,15.99
+S0098,2025-05-27,Central,Cable,19,3.99
+S0099,2025-05-28,North,Bracket,8,8.75
+S0100,2025-05-29,South,Sensor,12,24.75
+S0101,2025-05-29,West,Bracket,7,8.75
+S0102,2025-05-30,Central,Widget,18,13.00
+S0103,2025-05-31,East,Cable,-3,3.74
+S0104,2025-06-02,West,Widget,1,12.50
+S0105,2025-06-06,North,Cable,18,3.99
+S0106,2025-06-08,South,Widget,5,12.50
+S0107,2025-06-10,East,Cable,18,3.99
+S0108,2025-06-10,West,Cable,19,3.99
+S0109,2025-06-13,South,"Adapter, USB-C",20,15.99
+S0110,2025-06-14,North,"Gadget, Large",3,49.74
+S0111,2025-06-17,Central,Bracket,13,8.50
+S0112,2025-06-18,East,Widget,12,12.50
+S0113,2025-06-18,East,Bracket,1,9.25
+S0114,2025-06-19,North,"Gadget, Large",8,49.74
+S0115,2025-06-21,Central,Cable,19,3.99
+S0116,2025-06-23,South,"Gadget, Large",9,50.49
+S0117,2025-06-24,West,"Adapter, USB-C",16,15.99
+S0118,2025-06-25,North,"Adapter, USB-C",10,15.74
+S0119,2025-06-28,South,Cable,6,3.99
+S0120,2025-06-28,Central,Sensor,8,25.25
+S0121,2025-06-28,North,Cable,12,3.74
+S0122,2025-06-30,East,"Adapter, USB-C",1,15.74
+S0123,2025-07-01,South,"Gadget, Large",18,49.99
+S0124,2025-07-01,East,"Gadget, Large",-5,49.99
+S0125,2025-07-04,South,Cable,2,3.99
+S0126,2025-07-05,South,Widget,14,12.50
+S0127,2025-07-06,West,Cable,19,3.99
+S0128,2025-07-09,East,Bracket,14,8.75
+S0129,2025-07-10,South,Sensor,8,24.50
+S0130,2025-07-11,South,Cable,18,3.99
+S0131,2025-07-12,Central,Bracket,10,8.50
+S0132,2025-07-13,Central,Widget,3,13.00
+S0133,2025-07-14,Central,Bracket,14,8.75
+S0134,2025-07-16,North,Cable,5,3.74
+S0135,2025-07-18,West,Sensor,-4,25.25
+S0136,2025-07-20,Central,Bracket,13,8.75
+S0137,2025-07-22,South,Widget,4,13.00
+S0138,2025-07-22,South,Widget,11,12.50
+S0139,2025-07-22,West,Sensor,15,24.75
+S0140,2025-07-22,North,"Gadget, Large",12,49.99
+S0141,2025-07-27,North,"Gadget, Large",17,49.99
+S0142,2025-07-30,East,"Gadget, Large",14,49.99
+S0143,2025-08-02,Central,Bracket,16,9.25
+S0144,2025-08-02,Central,"Adapter, USB-C",12,15.99
+S0145,2025-08-06,South,Sensor,12,24.50
+S0146,2025-08-06,West,Sensor,1,24.75
+S0147,2025-08-09,East,Cable,15,3.99
+S0148,2025-08-09,West,Cable,12,3.74
+S0149,2025-08-11,South,Sensor,16,24.75
+S0150,2025-08-11,Central,Cable,10,3.99
+S0151,2025-08-11,West,Widget,7,12.50
+S0152,2025-08-14,North,Sensor,11,24.75
+S0153,2025-08-14,South,Bracket,9,8.75
+S0154,2025-08-17,Central,Bracket,1,8.75
+S0155,2025-08-18,East,Widget,10,13.00
+S0156,2025-08-23,East,"Adapter, USB-C",8,16.49
+S0157,2025-08-25,South,"Adapter, USB-C",10,15.99
+S0158,2025-08-27,Central,"Adapter, USB-C",-3,15.74
+S0159,2025-08-28,East,"Gadget, Large",2,49.74
+S0160,2025-08-31,East,Cable,20,3.99
+S0161,2025-09-02,Central,Cable,19,3.99
+S0162,2025-09-04,Central,Cable,3,3.99
+S0163,2025-09-07,East,Widget,9,12.25
+S0164,2025-09-07,South,Widget,10,12.50
+S0165,2025-09-07,North,Sensor,9,24.50
+S0166,2025-09-08,Central,Cable,1,3.74
+S0167,2025-09-09,Central,"Gadget, Large",9,49.99
+S0168,2025-09-12,West,"Gadget, Large",7,49.99
+S0169,2025-09-12,Central,"Adapter, USB-C",15,16.49
+S0170,2025-09-13,East,Sensor,7,24.75
+S0171,2025-09-15,North,Cable,14,3.99
+S0172,2025-09-15,Central,Bracket,6,8.75
+S0173,2025-09-16,North,"Gadget, Large",9,49.74
+S0174,2025-09-17,Central,"Adapter, USB-C",13,16.49
+S0175,2025-09-18,North,"Adapter, USB-C",18,15.99
+S0176,2025-09-19,North,"Adapter, USB-C",9,15.99
+S0177,2025-09-19,North,Bracket,6,9.25
+S0178,2025-09-21,Central,Bracket,19,8.75
+S0179,2025-09-22,South,Sensor,6,24.75
+S0180,2025-09-22,Central,Widget,8,12.50
+S0181,2025-09-24,North,Cable,13,4.49
+S0182,2025-09-24,East,"Adapter, USB-C",5,15.99
+S0183,2025-09-25,West,Sensor,12,25.25
+S0184,2025-09-26,South,"Gadget, Large",16,49.99
+S0185,2025-09-26,South,Bracket,19,8.50
+S0186,2025-09-26,South,Bracket,11,8.75
+S0187,2025-09-28,South,Cable,17,3.99
+S0188,2025-09-28,North,Widget,16,12.50
+S0189,2025-09-29,South,Sensor,18,24.75
+S0190,2025-10-01,East,Sensor,20,24.50
+S0191,2025-10-05,Central,"Adapter, USB-C",20,15.99
+S0192,2025-10-06,West,Bracket,17,8.50
+S0193,2025-10-06,East,Sensor,4,24.75
+S0194,2025-10-07,South,"Adapter, USB-C",14,15.74
+S0195,2025-10-10,South,Bracket,17,9.25
+S0196,2025-10-10,North,Bracket,13,8.50
+S0197,2025-10-13,North,Bracket,9,9.25
+S0198,2025-10-14,West,Sensor,12,25.25
+S0199,2025-10-16,East,Bracket,13,8.75
+S0200,2025-10-17,South,Cable,12,3.99
+S0201,2025-10-18,West,Sensor,6,24.75
+S0202,2025-10-24,West,Widget,6,12.50
+S0203,2025-10-25,East,Sensor,15,24.75
+S0204,2025-10-27,North,"Gadget, Large",15,50.49
+S0205,2025-10-28,South,"Gadget, Large",20,49.74
+S0206,2025-10-29,South,Sensor,15,24.75
+S0207,2025-11-01,South,Cable,5,3.99
+S0208,2025-11-01,Central,Bracket,9,8.75
+S0209,2025-11-02,West,Sensor,13,25.25
+S0210,2025-11-02,East,"Adapter, USB-C",-3,15.99
+S0211,2025-11-05,West,Widget,20,12.25
+S0212,2025-11-05,South,Sensor,7,25.25
+S0213,2025-11-07,South,Widget,15,12.25
+S0214,2025-11-07,West,Cable,12,4.49
+S0215,2025-11-09,South,"Gadget, Large",11,50.49
+S0216,2025-11-10,Central,Bracket,15,8.75
+S0217,2025-11-12,East,"Adapter, USB-C",2,15.99
+S0218,2025-11-13,North,"Adapter, USB-C",10,15.99
+S0219,2025-11-13,North,Widget,8,12.50
+S0220,2025-11-14,East,"Gadget, Large",19,49.99
+S0221,2025-11-14,North,Cable,7,3.99
+S0222,2025-11-19,South,Widget,15,12.50
+S0223,2025-11-20,West,Sensor,-5,24.75
+S0224,2025-11-22,West,Sensor,13,24.50
+S0225,2025-11-23,North,Sensor,18,25.25
+S0226,2025-11-24,South,Cable,8,3.99
+S0227,2025-11-25,North,Cable,5,3.99
+S0228,2025-11-28,South,Bracket,12,8.75
+S0229,2025-11-30,South,"Adapter, USB-C",3,16.49
+S0230,2025-12-01,Central,Bracket,11,8.75
+S0231,2025-12-02,North,Bracket,4,8.75
+S0232,2025-12-02,East,"Adapter, USB-C",11,15.99
+S0233,2025-12-02,North,Widget,2,13.00
+S0234,2025-12-03,North,"Gadget, Large",13,49.99
+S0235,2025-12-04,Central,"Adapter, USB-C",3,15.99
+S0236,2025-12-05,West,Bracket,3,8.75
+S0237,2025-12-09,North,Bracket,20,8.75
+S0238,2025-12-10,East,"Adapter, USB-C",6,15.99
+S0239,2025-12-12,East,Cable,5,3.74
+S0240,2025-12-12,West,"Adapter, USB-C",5,16.49
+S0241,2025-12-13,West,"Gadget, Large",6,49.74
+S0242,2025-12-13,West,Bracket,20,9.25
+S0243,2025-12-14,South,"Adapter, USB-C",15,15.74
+S0244,2025-12-14,Central,Widget,15,13.00
+S0245,2025-12-15,East,"Gadget, Large",7,49.74
+S0246,2025-12-15,Central,"Gadget, Large",3,49.99
+S0247,2025-12-15,South,Cable,7,3.74
+S0248,2025-12-16,East,Bracket,4,8.50
+S0249,2025-12-17,East,"Gadget, Large",14,49.74
+S0250,2025-12-18,North,"Adapter, USB-C",14,15.99
+S0251,2025-12-19,North,Sensor,5,24.75
+S0252,2025-12-22,Central,Sensor,3,24.50
+S0253,2025-12-24,West,Sensor,14,24.75
+S0254,2025-12-24,North,"Gadget, Large",20,50.49
+S0255,2025-12-30,East,Cable,15,3.99
+S0256,2025-12-31,West,Widget,-5,12.50
+S0257,2026-01-01,Central,Widget,13,12.25
+S0258,2026-01-01,West,"Gadget, Large",1,49.99
+S0259,2026-01-03,South,Sensor,17,25.25
+S0260,2026-01-03,East,Sensor,6,24.75
+S0261,2026-01-04,North,Cable,4,3.74
+S0262,2026-01-04,North,"Adapter, USB-C",18,15.74
+S0263,2026-01-04,Central,"Adapter, USB-C",14,15.99
+S0264,2026-01-04,East,Cable,3,3.99
+S0265,2026-01-05,West,Bracket,5,9.25
+S0266,2026-01-06,South,"Adapter, USB-C",7,16.49
+S0267,2026-01-08,Central,"Gadget, Large",17,49.99
+S0268,2026-01-08,South,"Adapter, USB-C",6,15.99
+S0269,2026-01-13,Central,"Adapter, USB-C",4,16.49
+S0270,2026-01-13,West,"Adapter, USB-C",-2,15.99
+S0271,2026-01-16,South,"Adapter, USB-C",17,15.99
+S0272,2026-01-16,South,Widget,14,12.50
+S0273,2026-01-20,East,Bracket,19,8.75
+S0274,2026-01-21,Central,Bracket,18,8.50
+S0275,2026-01-24,East,"Gadget, Large",5,49.99
+S0276,2026-01-26,West,Cable,14,4.49
+S0277,2026-01-26,Central,Widget,12,12.50
+S0278,2026-01-27,Central,Cable,10,3.99
+S0279,2026-01-27,East,Cable,6,3.99
+S0280,2026-01-27,South,"Adapter, USB-C",14,15.74
+S0281,2026-01-30,East,"Gadget, Large",12,49.99
+S0282,2026-01-31,North,Cable,15,3.99
+S0283,2026-01-31,North,Sensor,15,24.75
+S0284,2026-02-02,South,Widget,6,12.50
+S0285,2026-02-02,North,Cable,8,4.49
+S0286,2026-02-03,Central,Sensor,4,24.75
+S0287,2026-02-04,Central,"Gadget, Large",3,49.99
+S0288,2026-02-05,North,Sensor,2,24.50
+S0289,2026-02-06,South,Cable,2,4.49
+S0290,2026-02-09,North,Cable,12,3.99
+S0291,2026-02-09,East,Bracket,20,8.50
+S0292,2026-02-10,North,"Adapter, USB-C",12,15.99
+S0293,2026-02-11,South,"Adapter, USB-C",8,15.74
+S0294,2026-02-13,North,Cable,5,3.74
+S0295,2026-02-13,East,Bracket,6,8.50
+S0296,2026-02-18,North,"Adapter, USB-C",15,15.99
+S0297,2026-02-19,Central,Widget,20,12.25
+S0298,2026-02-19,South,Sensor,18,24.75
+S0299,2026-02-21,East,Sensor,6,25.25
+S0300,2026-02-22,South,Sensor,7,24.75
+S0301,2026-02-23,West,"Gadget, Large",6,49.99
+S0302,2026-02-26,South,Sensor,19,25.25
+S0303,2026-02-27,East,Bracket,11,8.50
+S0304,2026-02-27,North,Sensor,12,25.25
+S0305,2026-02-28,South,"Adapter, USB-C",11,16.49
+S0306,2026-03-02,North,Bracket,-4,8.75
+S0307,2026-03-02,North,Sensor,19,24.75
+S0308,2026-03-05,South,Bracket,17,8.75
+S0309,2026-03-05,Central,"Adapter, USB-C",3,15.99
+S0310,2026-03-06,West,Cable,3,3.99
+S0311,2026-03-07,West,Sensor,16,24.75
+S0312,2026-03-07,East,Bracket,5,9.25
+S0313,2026-03-10,South,"Adapter, USB-C",9,15.99
+S0314,2026-03-10,West,Widget,6,12.25
+S0315,2026-03-10,East,"Gadget, Large",8,50.49
+S0316,2026-03-11,Central,Sensor,4,24.75
+S0317,2026-03-18,East,Cable,12,3.74
+S0318,2026-03-19,Central,Widget,2,12.50
+S0319,2026-03-20,East,"Gadget, Large",10,50.49
+S0320,2026-03-23,West,Bracket,14,8.75
+S0321,2026-03-23,Central,Widget,10,12.25
+S0322,2026-03-29,South,Widget,14,12.25
+S0323,2026-03-30,East,Bracket,7,8.50
+S0324,2026-03-31,Central,Cable,10,3.99
+S0325,2026-04-04,South,"Adapter, USB-C",5,15.99
+S0326,2026-04-05,Central,"Gadget, Large",6,49.99
+S0327,2026-04-06,Central,"Gadget, Large",-4,49.99
+S0328,2026-04-10,North,Cable,8,4.49
+S0329,2026-04-12,East,"Adapter, USB-C",9,15.74
+S0330,2026-04-13,Central,Cable,16,4.49
+S0331,2026-04-14,Central,"Adapter, USB-C",7,15.99
+S0332,2026-04-24,Central,Widget,20,12.50
+S0333,2026-04-26,East,Widget,5,13.00
+S0334,2026-04-26,West,"Adapter, USB-C",1,15.99
+S0335,2026-04-29,Central,"Gadget, Large",-5,49.99
+S0336,2026-04-30,South,"Adapter, USB-C",4,16.49
+S0337,2026-05-01,West,"Adapter, USB-C",20,16.49
+S0338,2026-05-04,South,Cable,20,3.99
+S0339,2026-05-05,Central,Widget,2,13.00
+S0340,2026-05-05,North,Bracket,16,8.75
+S0341,2026-05-06,Central,Cable,12,3.74
+S0342,2026-05-06,Central,Cable,-3,3.99
+S0343,2026-05-09,East,Widget,8,12.50
+S0344,2026-05-10,Central,Widget,19,13.00
+S0345,2026-05-11,North,Cable,5,3.99
+S0346,2026-05-11,South,Widget,2,12.25
+S0347,2026-05-16,East,Widget,18,12.50
+S0348,2026-05-16,South,"Gadget, Large",20,49.99
+S0349,2026-05-18,West,"Gadget, Large",2,49.99
+S0350,2026-05-20,South,Cable,18,3.74
+S0351,2026-05-21,West,Cable,9,3.74
+S0352,2026-05-21,North,Sensor,16,24.75
+S0353,2026-05-23,East,"Gadget, Large",12,50.49
+S0354,2026-05-24,South,Sensor,1,24.75
+S0355,2026-05-27,East,Widget,10,13.00
+S0356,2026-05-29,West,Widget,13,12.50
+S0357,2026-05-29,East,Sensor,4,25.25
+S0358,2026-05-30,East,Cable,8,4.49
+S0359,2026-06-01,South,"Adapter, USB-C",1,15.99
+S0360,2026-06-06,South,Widget,12,13.00
+S0361,2026-06-08,East,"Gadget, Large",6,50.49
+S0362,2026-06-08,West,Widget,13,12.25
+S0363,2026-06-14,North,"Adapter, USB-C",16,16.49
+S0364,2026-06-16,North,Widget,9,12.50
+S0365,2026-06-19,West,Sensor,7,25.25
+S0366,2026-06-19,Central,"Adapter, USB-C",7,15.74
+S0367,2026-06-22,Central,"Gadget, Large",15,49.99
+S0368,2026-06-23,South,Bracket,14,8.75
+S0369,2026-06-23,North,"Gadget, Large",5,49.99
+S0370,2026-06-25,West,Sensor,20,24.75
+S0371,2026-06-26,North,Bracket,-1,9.25
+S0372,2026-06-28,East,Cable,18,4.49
+S0373,2026-06-28,Central,"Adapter, USB-C",1,16.49
+S0374,2026-06-30,Central,Sensor,8,24.75
+S0375,2026-07-03,East,Sensor,1,24.75
+S0376,2026-07-03,North,Sensor,11,25.25
+S0377,2026-07-03,West,"Adapter, USB-C",1,15.99
+S0378,2026-07-03,South,Cable,2,3.74
+S0379,2026-07-03,South,Sensor,20,24.75
+S0380,2026-07-05,South,Widget,7,12.50
+S0381,2026-07-06,West,"Gadget, Large",15,49.99
+S0382,2026-07-07,South,Sensor,8,24.75
+S0383,2026-07-10,North,Widget,14,12.50
+S0384,2026-07-13,North,Widget,11,12.50
+S0385,2026-07-13,Central,Widget,15,12.25
+S0386,2026-07-17,North,Bracket,3,8.75
+S0387,2026-07-17,North,"Gadget, Large",20,49.74
+S0388,2026-07-17,Central,"Adapter, USB-C",19,15.99
+S0389,2026-07-19,North,Bracket,1,8.75
+S0390,2026-07-20,West,Widget,5,12.50
+S0391,2026-07-20,Central,"Adapter, USB-C",6,16.49
+S0392,2026-07-20,West,Sensor,9,25.25
+S0393,2026-07-20,Central,Bracket,4,8.75
+S0394,2026-07-24,East,Cable,8,3.99
+S0395,2026-07-25,West,"Adapter, USB-C",2,15.99
+S0396,2026-07-26,South,Bracket,1,8.75
+S0397,2026-07-26,South,"Adapter, USB-C",5,15.99
+S0398,2026-07-28,North,"Adapter, USB-C",15,16.49
+S0399,2026-07-29,East,Widget,14,12.25
+S0400,2026-07-31,South,"Adapter, USB-C",18,15.99
+S0401,2026-08-01,South,"Adapter, USB-C",2,16.49
+S0402,2026-08-04,East,Sensor,9,24.50
+S0403,2026-08-07,West,Cable,10,3.74
+S0404,2026-08-08,West,"Adapter, USB-C",10,16.49
+S0405,2026-08-09,South,Bracket,18,8.75
+S0406,2026-08-11,Central,"Gadget, Large",10,49.99
+S0407,2026-08-11,West,"Adapter, USB-C",10,15.99
+S0408,2026-08-14,East,Sensor,2,24.50
+S0409,2026-08-14,East,Widget,13,12.50
+S0410,2026-08-15,South,"Gadget, Large",14,49.99
+S0411,2026-08-15,Central,Cable,9,4.49
+S0412,2026-08-16,North,Sensor,9,24.75
+S0413,2026-08-16,West,"Adapter, USB-C",12,15.99
+S0414,2026-08-17,East,"Gadget, Large",17,49.99
+S0415,2026-08-18,Central,Sensor,3,24.75
+S0416,2026-08-19,West,Sensor,7,24.75
+S0417,2026-08-20,South,Cable,10,4.49
+S0418,2026-08-20,North,"Adapter, USB-C",4,15.99
+S0419,2026-08-21,West,Sensor,8,24.75
+S0420,2026-08-21,South,"Adapter, USB-C",2,16.49
+S0421,2026-08-24,Central,"Adapter, USB-C",7,15.99
+S0422,2026-08-24,West,"Adapter, USB-C",13,15.99
+S0423,2026-09-08,Central,"Adapter, USB-C",-2,15.99
+S0424,2026-09-14,South,Widget,6,13.00
+S0425,2026-09-15,West,Cable,4,3.99
+S0426,2026-09-18,East,Bracket,6,8.75
+S0427,2026-09-19,South,Sensor,17,24.75
+S0428,2026-09-19,Central,Widget,16,12.50
+S0429,2026-09-20,North,Bracket,17,9.25
+S0430,2026-09-21,East,"Gadget, Large",12,49.74
+S0431,2026-09-21,South,Bracket,9,8.75
+S0432,2026-09-22,Central,"Adapter, USB-C",11,15.99
+S0433,2026-09-22,South,Sensor,14,24.50
+S0434,2026-09-23,East,Sensor,-4,24.75
+S0435,2026-09-24,Central,Bracket,8,8.75
+S0436,2026-09-25,Central,Cable,6,3.99
+S0437,2026-09-26,South,Widget,6,12.50
+S0438,2026-09-29,Central,"Gadget, Large",4,49.74
+S0439,2026-09-30,North,Sensor,8,24.75
+S0440,2026-09-30,West,"Gadget, Large",-3,49.99
+S0441,2026-10-01,South,Widget,4,12.50
+S0442,2026-10-02,West,"Adapter, USB-C",3,15.99
+S0443,2026-10-04,Central,Cable,3,3.74
+S0444,2026-10-06,East,"Gadget, Large",8,50.49
+S0445,2026-10-07,Central,Cable,11,3.99
+S0446,2026-10-08,Central,Sensor,16,25.25
+S0447,2026-10-09,West,"Adapter, USB-C",16,15.74
+S0448,2026-10-15,North,Bracket,6,8.75
+S0449,2026-10-15,West,"Adapter, USB-C",2,15.99
+S0450,2026-10-17,East,Widget,3,12.25
+S0451,2026-10-19,North,Widget,1,12.25
+S0452,2026-10-20,East,Sensor,16,24.75
+S0453,2026-10-20,North,"Gadget, Large",17,49.74
+S0454,2026-10-21,South,"Gadget, Large",13,49.99
+S0455,2026-10-22,North,Sensor,19,24.75
+S0456,2026-10-27,East,Widget,2,12.50
+S0457,2026-10-29,South,Bracket,6,9.25
+S0458,2026-10-29,West,"Adapter, USB-C",2,15.74
+S0459,2026-11-03,East,Sensor,11,24.75
+S0460,2026-11-04,East,Cable,14,3.99
+S0461,2026-11-06,West,"Adapter, USB-C",7,15.99
+S0462,2026-11-09,North,"Adapter, USB-C",2,15.99
+S0463,2026-11-09,South,Widget,15,12.25
+S0464,2026-11-09,North,"Gadget, Large",11,49.99
+S0465,2026-11-11,East,"Gadget, Large",5,49.99
+S0466,2026-11-12,Central,"Gadget, Large",14,49.99
+S0467,2026-11-14,North,Cable,4,3.99
+S0468,2026-11-14,East,Widget,-4,12.25
+S0469,2026-11-14,North,Widget,15,12.50
+S0470,2026-11-14,South,"Adapter, USB-C",15,15.99
+S0471,2026-11-16,North,Cable,7,4.49
+S0472,2026-11-16,North,Bracket,4,8.75
+S0473,2026-11-17,North,Cable,3,3.99
+S0474,2026-11-17,West,"Gadget, Large",12,49.99
+S0475,2026-11-17,Central,Cable,6,4.49
+S0476,2026-11-21,Central,Sensor,3,24.75
+S0477,2026-11-21,South,Widget,2,12.50
+S0478,2026-11-21,West,Bracket,8,8.75
+S0479,2026-11-22,North,Cable,3,4.49
+S0480,2026-11-22,North,"Adapter, USB-C",7,15.99
+S0481,2026-11-23,West,Widget,-4,13.00
+S0482,2026-11-24,Central,Cable,3,3.99
+S0483,2026-11-27,Central,"Gadget, Large",13,49.99
+S0484,2026-11-29,North,Bracket,19,8.75
+S0485,2026-12-03,West,"Adapter, USB-C",4,15.99
+S0486,2026-12-04,Central,Bracket,20,9.25
+S0487,2026-12-08,West,Widget,12,12.50
+S0488,2026-12-08,North,Widget,16,13.00
+S0489,2026-12-09,North,"Adapter, USB-C",6,15.74
+S0490,2026-12-10,West,Widget,12,12.25
+S0491,2026-12-12,South,"Gadget, Large",13,49.99
+S0492,2026-12-15,West,Bracket,7,9.25
+S0493,2026-12-17,East,"Gadget, Large",20,49.99
+S0494,2026-12-19,North,"Adapter, USB-C",9,15.99
+S0495,2026-12-23,West,Widget,18,12.50
+S0496,2026-12-23,South,Bracket,12,8.75
+S0497,2026-12-26,West,Widget,8,12.50
+S0498,2026-12-29,North,Sensor,17,24.75
+S0499,2026-12-30,North,Sensor,12,24.50
+S0500,2026-12-31,South,Cable,18,3.99

@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: b0587966b17ac30e6626b3ba094005de114fc04c0190a7adc96830f92acb11c3
+source_hash: 029df42249e47ea130d35b2883572e3f89f10bf2fbd756060f2e53cd63559e11
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -10,7 +10,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 - [Environment files](environment-files.md)：实时工作区上的 Files API。
 - [执行器凭据](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
-- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B 或 microsandbox）。
+- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（microsandbox、E2B 或 OpenSandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
 - [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
 
@@ -20,13 +20,14 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 | 资源 | 操作 | 规则 |
 | --- | --- | --- |
-| [Environment](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | 通过 Session 配置创建。返回 `id`、`type`、`status`，以及 Session 创建时记录的 `files`、`plugins` 和 `skills`。 |
-| [模板](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [模板](#templates)。 |
-| [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`、`GET /agents/environments/{id}/files` | 请参阅 [Environment files](environment-files.md)。 |
+| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | 通过 Session 配置创建。返回 `id`、`type`、`status`，以及 Session 创建时记录的 `files`、`plugins` 和 `skills`。 |
+| Environment 集合 | `POST`、`GET /agents/environments` | 不支持：404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。Environment 只能通过 Session 配置创建。 |
+| [模板](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [模板](#templates)。 |
+| [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`、`GET /agents/environments/{id}/files` | 请参阅 [Environment files](environment-files.md)。 |
 
 读取 Environment 时，Core 会在调用方的项目范围内与其实时所属的 Session 联查，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
 
-[Session environment input](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment_param.py) 与 [output](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment.py) 的结构不同：
+[Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) 与 [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) 的结构不同：
 
 - `none` 不选择任何 Environment。
 - `self_hosted` 输入要求提供 `workspace_directory`；可空的 `capability_directories` 默认为空列表。输出会增加 Environment ID 和仅输出字段 `remote_url`。输出中 `/workspace` 的默认值不会使输入字段变为可选。
@@ -34,10 +35,10 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 | 投影 | 状态 |
 | --- | --- |
-| [Environment resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environment_info.py) | `pending`、`connected`、`disconnected`、`expired`、`failed` |
-| [Session environment event](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agent_session_environment_state.py) | `pending`、`ready`、`connected`、`disconnected`、`failed`，并带可为 null 的 error |
+| [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`ready`、`connected`、`disconnected`、`suspended`、`expired`、`failed` |
+| [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | 相同的七种状态，并带可为 null 的 error |
 
-这两套词汇彼此独立；绝不要将其中一套转换为另一套。资源状态按下图变化，失败或过期的 Environment 不再改变：
+Core 只在事件中发出 `ready`。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
 
 ```mermaid
 stateDiagram-v2
@@ -73,7 +74,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的沙箱提供商（E2B 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的沙箱提供商（microsandbox、E2B 或 OpenSandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行提供商的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
@@ -315,6 +316,7 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 
 - 上限按名称或 `*.` 条目列出的模型提供商主机与所列域名一样可达，不限于其端口。
 - 在 E2B 上，受限域名只能通过 80 和 443 端口访问；模型提供商使用其他端口时，其公网地址的所有端口均可达。
+- 在 OpenSandbox 上，Core 主机、允许的域名和模型提供商主机在其公网地址的每个端口上都可达。
 
 部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。
 

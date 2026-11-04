@@ -21,7 +21,7 @@ import httpx2
 from official_schema import ResponseValidator
 from official_items import verify_items
 from official_agents import verify_agents
-from official_vaults import verify_vaults, verify_vault_recovery
+from official_vaults import verify_vaults, verify_vault_recovery, verify_vault_update
 from official_vault_list import verify_vault_list, verify_vault_list_recovery
 from official_credentials import verify_credentials, verify_credential_recovery, create_old_key_credential, verify_old_key_credential
 from official_credential_list import verify_credential_list, verify_credential_list_recovery
@@ -155,6 +155,7 @@ def main():
                         listed_files = verify_source_file_list(a, b, invalid, peer, expect_error)
                     saved_agents = verify_agents(a, b, invalid, expect_error)
                     listed_agents = verify_agent_list(a, b, invalid, saved_agents, expect_error)
+                    verify_vault_update(a, b, expect_error)
                     verify_http_routing(base, tokens[0])
                     sessions = a.beta.agents.sessions
                     spec = {"input": "Verify client fixture admission.", "agent": {"model": "requested-test-model", "instructions": "Keep the configuration."}, "environment": {"type": "none"}}

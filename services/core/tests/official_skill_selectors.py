@@ -15,7 +15,7 @@ from official_skills import bundle
 
 
 def main():
-    assert openai.__version__ == "3.13.0", openai.__version__
+    assert openai.__version__ == "3.45.0", openai.__version__
     settings = json.load(sys.stdin)
     options = dict(max_retries=0, _strict_response_validation=True)
     client = OpenAI(base_url=settings["base"] + "/v1", api_key=settings["token"], http_client=DefaultHttpxClient(trust_env=False), **options)
@@ -39,7 +39,7 @@ def main():
         assert response.status_code == status, response.text
         safe(response.http_response)
         body = response.http_response.json()
-        assert set(body) == {"id", "object", "created_at", "updated_at", "name", "network", "packages", "capability_directories", "files", "plugins", "skills"}
+        assert set(body) == {"id", "object", "created_at", "updated_at", "name", "network", "packages", "capability_directories", "desktop", "files", "plugins", "skills"}
         assert body["skills"] == [{"type": "skill_reference", "skill_id": skill_id, "version": selector}], body["skills"]
         parsed = response.parse()
         assert parsed.skills[0].version == selector

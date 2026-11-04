@@ -1,7 +1,7 @@
 ---
 title: "概念"
 source: docs/concepts.md
-source_hash: 20e710ce0826e741123fcdcb5d04df5d92b39706d82c89bc6591dae958c3f3bb
+source_hash: 2b9bc8e73650b5f1a298ec55acda7868e014023935f6d074a109ab81b1d6923f
 ---
 
 项目是 OpenAgentCore 的执行租户。应用使用其 API 密钥；运维人员使用独立的 Core 密钥管理安装实例。[API 命名空间和凭据](api/index.md)将每类调用方映射到对应命名空间和凭据。
@@ -28,7 +28,7 @@ source_hash: 20e710ce0826e741123fcdcb5d04df5d92b39706d82c89bc6591dae958c3f3bb
 
 Runtime daemon 在 Linux、macOS 和 Windows 上运行。原生平台行为由 Runtime 及其 Harness adapter 负责；托管沙箱提供商运行 Linux 环境。
 
-工具以启动 daemon 的账户权限运行。daemon 不增加文件系统、权限或网络隔离。应使用外层 Environment 提供隔离：托管 E2B 或 microsandbox 环境，或在自托管机器的 Runtime 外使用容器或虚拟机。认证、私有存储、锁和进程清理保护连接与生命周期，但以同一用户运行的工具可以访问 Runtime 数据。
+工具以启动 daemon 的账户权限运行。daemon 不增加文件系统、权限或网络隔离。应使用外层 Environment 提供隔离：托管 microsandbox、E2B 或 OpenSandbox 环境，或在自托管机器的 Runtime 外使用容器或虚拟机。认证、私有存储、锁和进程清理保护连接与生命周期，但以同一用户运行的工具可以访问 Runtime 数据。
 
 ## 秘密与审计 {#secrets-and-audit}
 

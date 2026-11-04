@@ -1,18 +1,15 @@
 import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Package, BookOpen, FileText } from "lucide-react";
 import { product } from "./lib/product";
 import { Models } from "./Models";
 import { Credentials } from "./Credentials";
-import { Skills } from "./Skills";
-import { MCPs } from "./Resources";
+import { Library } from "./Library";
 import { PageHeader, ErrorNotice, Field } from "./components/shared";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Select, SelectOption } from "./components/ui/select";
-import { Ledger, LedgerHeader, LedgerRow } from "./components/ui/ledger";
 import {
   Dialog,
   DialogContent,
@@ -20,13 +17,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { EmptyState } from "./components/ui/empty-state";
-import { randomUuid } from "@oac/agents-client";
 export interface Capability {
   id: string;
   name: string;
   description: string;
   kind: "prompt" | "knowledge" | "plugin";
+  // Variables a Plugin's programs need; each Agent supplies them from a secret.
+  credentials?: string[];
   revision: number;
   deprecated: boolean;
   default_version: string;
@@ -44,23 +41,16 @@ export const useCapabilities = () =>
     queryFn: () => product<Capability[]>("capabilities"),
   });
 export function Capabilities({
-  initialTab = "models",
+  initialTab = "capabilities",
 }: {
   initialTab?: string;
 }) {
-  const [tab, setTab] = useState(initialTab);
-  // Building blocks are grouped by what uses them: Agent engines, Agent
-  // capabilities, and MCP authentication.
-  const groups: [string, string][][] = [
-    [["models", tr("模型")]],
-    [
-      ["skills", "Skills"],
-      ["mcps", "MCP"],
-      ["plugin", "Plugins"],
-      ["knowledge", tr("知识")],
-      ["prompt", tr("指令片段")],
-    ],
-    [["credentials", tr("凭据")]],
+  // Each tab is a route, so reloading or going back keeps it.
+  const tab = initialTab;
+  const tabs: [string, string][] = [
+    ["capabilities", tr("能力")],
+    ["models", tr("模型")],
+    ["credentials", tr("凭据")],
   ];
   return (
     <>
@@ -69,107 +59,26 @@ export function Capabilities({
         <div
           className="flex items-center gap-6 overflow-x-auto border-b border-line"
           role="tablist"
-          aria-label={tr("能力类型")}
+          aria-label={tr("资源库")}
         >
-          {groups.map((group, index) => (
-            <div key={group[0]![0]} className="flex shrink-0 items-center gap-6">
-              {index > 0 && <span aria-hidden className="h-4 w-px bg-line" />}
-              {group.map(([key, label]) => (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={tab === key}
-                  className={
-                    tab === key
-                      ? "-mb-px h-10 shrink-0 border-b-2 border-fg text-sm font-medium text-fg"
-                      : "-mb-px h-10 shrink-0 border-b-2 border-transparent text-sm text-fg-muted hover:text-fg"
-                  }
-                  onClick={() => setTab(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              className={
+                tab === key
+                  ? "-mb-px h-10 shrink-0 border-b-2 border-fg text-sm font-medium text-fg"
+                  : "-mb-px h-10 shrink-0 border-b-2 border-transparent text-sm text-fg-muted hover:text-fg"
+              }
+              onClick={() => (location.hash = `#/${key}`)}
+            >
+              {label}
+            </button>
           ))}
         </div>
       </div>
-      {tab === "models" ? (
-        <Models />
-      ) : tab === "credentials" ? (
-        <Credentials />
-      ) : tab === "skills" ? (
-        <Skills />
-      ) : tab === "mcps" ? (
-        <MCPs />
-      ) : (
-        <CapabilityList key={tab} kind={tab as Capability["kind"]} />
-      )}
-    </>
-  );
-}
-const labels = {
-  prompt: tr("指令片段"),
-  knowledge: tr("知识"),
-  plugin: "Plugins",
-};
-function CapabilityList({ kind }: { kind: Capability["kind"] }) {
-  const query = useCapabilities();
-  const [editing, setEditing] = useState<Capability | null>(null);
-  const rows = query.data?.filter((row) => row.kind === kind);
-  const Icon =
-    kind === "plugin" ? Package : kind === "knowledge" ? BookOpen : FileText;
-  return (
-    <>
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-1 sm:px-10">
-        <h2 className="text-lg font-semibold tracking-tight text-fg">{labels[kind]}</h2>
-        <Button
-          onClick={() =>
-            setEditing({
-              id: randomUuid(),
-              name: "",
-              description: "",
-              kind,
-              revision: 0,
-              deprecated: false,
-              default_version: "",
-              versions: [],
-            })
-          }
-        >
-          <Plus />
-          {tr("添加能力")}
-        </Button>
-      </div>
-      <ErrorNotice page error={query.error} />
-      <Ledger columns="18px minmax(160px,2fr) minmax(180px,2fr) 90px 90px">
-        <LedgerHeader>
-          <span />
-          <span>{tr("名称")}</span>
-          <span>{tr("说明")}</span>
-          <span>{tr("默认版本")}</span>
-          <span>{tr("状态")}</span>
-        </LedgerHeader>
-        {rows?.map((row) => (
-          <LedgerRow key={row.id}>
-            <Icon className="h-4 w-4 text-fg-muted" />
-            <button
-              className="truncate text-left font-medium hover:text-accent"
-              onClick={() => setEditing(row)}
-            >
-              {row.name}
-            </button>
-            <span className="text-fg-muted">{row.description || "—"}</span>
-            <span className="font-mono text-fg-muted">
-              v{row.default_version}
-            </span>
-            <span>{row.deprecated ? tr("已停用") : tr("可用")}</span>
-          </LedgerRow>
-        ))}
-        {!rows?.length && <EmptyState title={tr("暂无能力")} />}
-      </Ledger>
-      {editing && (
-        <CapabilityEditor value={editing} close={() => setEditing(null)} />
-      )}
+      {tab === "models" ? <Models /> : tab === "credentials" ? <Credentials /> : <Library />}
     </>
   );
 }
@@ -307,6 +216,10 @@ export function CapabilityEditor({
                   {selected.files.join("\n")}
                 </pre>
               )}
+              <CredentialNames
+                value={form.credentials || []}
+                change={(credentials) => setForm({ ...form, credentials })}
+              />
             </>
           ) : (
             <Field label={tr("内容（修改后保存为新版本）")} id="cap-content">
@@ -353,5 +266,30 @@ export function CapabilityEditor({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// The variables a capability needs, one per line. Each Agent that binds it
+// chooses which secret supplies each.
+export function CredentialNames({
+  value,
+  change,
+}: {
+  value: string[];
+  change: (names: string[]) => void;
+}) {
+  return (
+    <Field label={tr("需要的密钥（环境变量名，每行一个）")} id="capability-credentials">
+      <Textarea
+        id="capability-credentials"
+        rows={3}
+        className="font-mono"
+        placeholder="GITHUB_TOKEN"
+        value={value.join("\n")}
+        onChange={(event) =>
+          change(event.target.value.split("\n").map((line) => line.trim()).filter(Boolean))
+        }
+      />
+    </Field>
   );
 }

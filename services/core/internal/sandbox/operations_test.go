@@ -7,6 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/opensandbox"
 	"reflect"
 	"testing"
 )
@@ -58,7 +59,7 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 // Unsupported methods must be callable safely even without native clients or
 // configuration: any attempt at native I/O would panic on these zero providers.
 func TestEveryUnsupportedNativeOperationRejectsWithoutSideEffects(t *testing.T) {
-	for _, provider := range []sandbox.SandboxProvider{&microsandbox.Provider{}, &e2b.Provider{}, &microsandbox.Provider{}} {
+	for _, provider := range []sandbox.SandboxProvider{&microsandbox.Provider{}, &e2b.Provider{}, &opensandbox.Provider{}} {
 		if err := sandbox.ValidateProvider(provider); err != nil {
 			t.Fatal(err)
 		}

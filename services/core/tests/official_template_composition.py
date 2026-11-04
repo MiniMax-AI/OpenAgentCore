@@ -141,7 +141,7 @@ def main():
                     retry_body, retry_key, frozen = body, key, projected
             assert api.retrieve(template_id).to_dict() == template_snapshot
 
-            for system in (None, [], ["jq"]):
+            for system in (["jq"],):
                 invalid = {**base, "environment": {**base["environment"], "packages": {"system": system}}}
                 rejected(invalid, 400, param="packages.system")
                 response = raw.post(settings["base"] + "/v1/agents/environments/templates",

@@ -54,6 +54,25 @@ export type ModelProviderProtocol = (typeof modelProviderProtocols)[number];
 """
 
 
+def render_parsar(harnesses):
+    """The Parsar example's copy of each Harness's model protocols and execution options."""
+    entries = {
+        h["kind"]: {
+            "label": h["label"],
+            "protocols": h["protocols"],
+            "reasoning_effort": h["execution"]["reasoning_efforts"],
+            "reasoning_summary": h["execution"]["reasoning_summaries"],
+            "web_search": h["execution"]["web_search_modes"],
+            "verbosity": h["execution"]["text_verbosities"],
+            "service_tier": h["execution"]["service_tiers"],
+            "message_images": h["message_images"],
+            "mcp_http_required": h["mcp_http_required"],
+        }
+        for h in harnesses
+    }
+    return HEADER + "\n// What each built-in Harness declares in internal/harnessconfig/<package>/declaration.go.\nexport const harnessCatalog = " + json.dumps(entries, indent=2, ensure_ascii=False) + ";\n"
+
+
 def render_registrations(names):
     """Go projections that need only the package names."""
     imports = "\n".join(f'\t"{MODULE}/internal/harnessconfig/{name}"' for name in names)
@@ -201,6 +220,7 @@ def main():
     if native:
         raise SystemExit("Native pins differ from the declarations; edit these files to match:\n" + "\n".join(native))
     projection(Path("packages/agents-client/src/harness-catalog.ts"), render_client(harnesses, declared["protocols"]))
+    projection(Path("example/parsar/shared/harness-catalog.mjs"), render_parsar(harnesses))
     if stale:
         raise SystemExit("Stale Harness catalog projections; run make generate-harness-catalog:\n" + "\n".join(stale))
 

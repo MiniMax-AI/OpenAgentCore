@@ -142,21 +142,23 @@ SELECT i.id, i.created_at,
          THEN jsonb_set(i.payload, '{status}', '"incomplete"') ELSE i.payload END)::jsonb AS payload
 FROM session_items i JOIN turns t ON t.id = i.turn_id
 WHERE i.session_id = $1
-  AND ($2::timestamptz IS NULL
-       OR ($3::boolean AND (i.created_at, i.position, i.id) > ($2::timestamptz, $4::integer, $5::uuid))
-       OR (NOT $3::boolean AND (i.created_at, i.position, i.id) < ($2::timestamptz, $4::integer, $5::uuid)))
+  AND ($2::uuid IS NULL OR i.turn_id = $2)
+  AND ($3::timestamptz IS NULL
+       OR ($4::boolean AND (i.created_at, i.position, i.id) > ($3::timestamptz, $5::integer, $6::uuid))
+       OR (NOT $4::boolean AND (i.created_at, i.position, i.id) < ($3::timestamptz, $5::integer, $6::uuid)))
 ORDER BY
-    CASE WHEN $3::boolean THEN i.created_at END ASC,
-    CASE WHEN $3::boolean THEN i.position END ASC,
-    CASE WHEN $3::boolean THEN i.id END ASC,
-    CASE WHEN NOT $3::boolean THEN i.created_at END DESC,
-    CASE WHEN NOT $3::boolean THEN i.position END DESC,
-    CASE WHEN NOT $3::boolean THEN i.id END DESC
-LIMIT $6
+    CASE WHEN $4::boolean THEN i.created_at END ASC,
+    CASE WHEN $4::boolean THEN i.position END ASC,
+    CASE WHEN $4::boolean THEN i.id END ASC,
+    CASE WHEN NOT $4::boolean THEN i.created_at END DESC,
+    CASE WHEN NOT $4::boolean THEN i.position END DESC,
+    CASE WHEN NOT $4::boolean THEN i.id END DESC
+LIMIT $7
 `
 
 type ListSessionItemsParams struct {
 	SessionID     pgtype.UUID        `json:"session_id"`
+	TurnID        pgtype.UUID        `json:"turn_id"`
 	AfterCreated  pgtype.Timestamptz `json:"after_created"`
 	Ascending     bool               `json:"ascending"`
 	AfterPosition int32              `json:"after_position"`
@@ -173,6 +175,7 @@ type ListSessionItemsRow struct {
 func (q *Queries) ListSessionItems(ctx context.Context, arg ListSessionItemsParams) ([]ListSessionItemsRow, error) {
 	rows, err := q.db.Query(ctx, listSessionItems,
 		arg.SessionID,
+		arg.TurnID,
 		arg.AfterCreated,
 		arg.Ascending,
 		arg.AfterPosition,

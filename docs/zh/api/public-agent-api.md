@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: bc22d7ef93e4284b122c25f39b15acb53eec314005b5273f9c9456638e727c67
+source_hash: 8c09bb8ae2cc51057298e4f6524e2145d897fcaaa7155a15c233a5267fe2768b
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -18,7 +18,7 @@ read -rs OPENAI_API_KEY && export OPENAI_API_KEY
 **SDK。** 使用固定版本：
 
 ```sh
-pip install openai==3.13.0
+pip install openai==3.45.0
 ```
 
 ```python
@@ -259,7 +259,7 @@ agents "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 
 | `environment.type` | 运行位置 | 备注 |
 | --- | --- | --- |
-| `openai_hosted` | Core 在某个节点或 E2B 上创建的沙箱；容量由管理员提供 | 可选 `network`、`packages`、`files`、`skills`、`plugins`、`env`、`capability_directories`、`setup_commands`，也可指定模板 |
+| `openai_hosted` | Core 在某个节点、E2B 或 OpenSandbox 上创建的沙箱；容量由管理员提供 | 可选 `network`、`packages`、`files`、`skills`、`plugins`、`env`、`capability_directories`、`setup_commands`，也可指定模板 |
 | `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [运行自托管 Session](../getting-started/self-hosted.md)。Session 会自带自己的 `model_provider` |
 | `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填。模型来自安装的默认配置；如果未配置默认模型，则来自设备 |
 
@@ -534,7 +534,6 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 :::
 
 - 不需要 Beta 请求头。每个 Environment 最多可选择 50 个 Skills；每个归档压缩后最大为 5 MiB，展开后最大为 20 MiB。
-- SDK 3.13.0 会上传内容中丢弃唯一的 ZIP 文件；上传 ZIP 时请使用 HTTP。
 - 可通过 Session 的 `environment.skills` 或[模板](#environment-templates)为其附加 Skills。
 
 详细信息请参阅 [文件与 Skill](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。

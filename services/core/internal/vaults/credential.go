@@ -13,6 +13,7 @@ const (
 type Credential struct {
 	ID, VaultID, Name, AuthType, MCPServerURL string
 	CreatedAt, UpdatedAt                      time.Time
+	Metadata                                  map[string]string
 	// OAuth is set for mcp_oauth Credentials only.
 	OAuth *OAuthMetadata
 }

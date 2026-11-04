@@ -52,6 +52,7 @@
   "CredentialAuth": {
     "sources": ["#/components/schemas/VaultCredentialAuthResource"],
     "fields": {
+      "mcp_server_url": {"type": "string", "omit": false},
       "expires_at": {"omit": false},
       "refresh": {"type": "*OAuthCredentialRefresh", "omit": false}
     }
@@ -181,7 +182,7 @@
     }
   },
   "InputTokenDetails": {
-    "sources": ["#/components/schemas/InputTokensDetailsResource"]
+    "sources": ["#/components/schemas/InputTokensDetailsResource-2"]
   },
   "Item": {
     "sources": ["#/components/schemas/SessionTurnItemResource"],
@@ -275,7 +276,7 @@
     "sources": ["#/components/schemas/RotateMcpOauthTokenEndpointAuthParam"]
   },
   "OutputTokenDetails": {
-    "sources": ["#/components/schemas/OutputTokensDetailsResource"]
+    "sources": ["#/components/schemas/OutputTokensDetailsResource-2"]
   },
   "Reasoning": {
     "sources": ["#/components/schemas/ReasoningParam"]
@@ -297,7 +298,7 @@
   },
   "SavedAgent": {
     "sources": ["#/components/schemas/AgentResource"],
-    "embed": {"SavedAgentConfiguration": ["x_agents_core", "model", "name", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"]},
+    "embed": {"SavedAgentConfiguration": ["x_agents_core", "model", "name", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "compaction", "experimental"]},
     "order": ["id", "object", "metadata", "created_at", "updated_at"]
   },
   "SavedAgentConfiguration": {
@@ -352,7 +353,8 @@
       "workspace_directory": {"type": "string"},
       "files": {"type": "*[]json.RawMessage"},
       "plugins": {"type": "*[]json.RawMessage"},
-      "skills": {"type": "*[]json.RawMessage"}
+      "skills": {"type": "*[]json.RawMessage"},
+      "container_size": {"type": "json.RawMessage"}
     },
     "order": ["type", "id", "capability_directories", "remote_url", "workspace_directory", "network", "packages", "files", "plugins", "skills"]
   },

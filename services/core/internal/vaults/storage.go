@@ -24,6 +24,8 @@ type Storage interface {
 
 	// CreateVault stores a new Vault and allocates its ID.
 	CreateVault(ctx context.Context, vault NewVault) (Vault, error)
+	// UpdateVault replaces the Vault's name and metadata the update sets.
+	UpdateVault(ctx context.Context, update VaultUpdate) (Vault, error)
 	// DeleteVault deletes a Vault with all of its Credentials and returns its ID.
 	DeleteVault(ctx context.Context, tenantID, vaultID string) (string, error)
 	// CreateCredential seals the Credential's secret and stores it in a Vault
@@ -32,6 +34,8 @@ type Storage interface {
 	// ReplaceStaticToken seals and replaces a static_bearer Credential's
 	// token.
 	ReplaceStaticToken(ctx context.Context, replacement StaticTokenReplacement) (Credential, error)
+	// ReplaceCredentialMetadata replaces a Credential's metadata only.
+	ReplaceCredentialMetadata(ctx context.Context, key CredentialKey, metadata []byte) (Credential, error)
 	// DeleteCredential deletes a Credential and its sealed secret and returns its ID.
 	DeleteCredential(ctx context.Context, key CredentialKey) (string, error)
 
@@ -63,8 +67,8 @@ type OAuthTx interface {
 	// audit row.
 	ApplyOAuthRefresh(ctx context.Context, grant OAuthGrant) error
 	// ApplyOAuthReplacement seals and stores a caller's replacement for the
-	// loaded Credential and audits it.
-	ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant) (Credential, error)
+	// loaded Credential, with new metadata unless it is nil, and audits it.
+	ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant, metadata []byte) (Credential, error)
 }
 
 // CredentialKey names one Credential of one Vault of one tenant.
@@ -79,22 +83,35 @@ type NewVault struct {
 	Metadata []byte
 }
 
+// VaultUpdate replaces the name when NameSet, which clears it for a nil Name,
+// and the encoded metadata unless it is nil.
+type VaultUpdate struct {
+	TenantID, VaultID string
+	Name              *string
+	NameSet           bool
+	Metadata          []byte
+}
+
 // NewCredential is a Credential with its new ID, ready to store. Storage
 // seals its secret to the tenant, the Vault, that ID, the authentication type
-// and the destination: Token for static_bearer, OAuth for mcp_oauth.
+// and the destination: Token for static_bearer, OAuth for mcp_oauth. Metadata
+// is its encoded JSON object.
 type NewCredential struct {
 	CredentialKey
 	Name, AuthType, MCPServerURL string
+	Metadata                     []byte
 	Token                        string
 	OAuth                        OAuthGrant
 }
 
-// StaticTokenReplacement is a new static_bearer token. The write matches the
-// destination the token is sealed to.
+// StaticTokenReplacement is a new static_bearer token, with new encoded
+// metadata unless it is nil. The write matches the destination the token is
+// sealed to.
 type StaticTokenReplacement struct {
 	CredentialKey
 	MCPServerURL string
 	Token        string
+	Metadata     []byte
 }
 
 // MCPCredentialQuery selects a named Credential by ID alone, so its

@@ -1,10 +1,8 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"slices"
-	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
@@ -23,13 +21,10 @@ func readVaultPage(w http.ResponseWriter, r *http.Request) (vaults.PageQuery, bo
 			return vaults.PageQuery{}, false
 		}
 	}
-	// Vault and Credential limits also clamp negative and overflowing integers;
-	// other values reach the shared Beta parser.
-	if raw := q["limit"]; len(raw) == 1 {
-		if requested, err := strconv.ParseInt(raw[0], 10, 64); err == nil || errors.Is(err, strconv.ErrRange) {
-			q.Set("limit", strconv.FormatInt(max(1, min(requested, 100)), 10))
-		}
-	}
 	options, ok := readPageQuery(w, r, q, true)
-	return vaults.PageQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, Statuses: statuses}, ok
+	if !ok {
+		return vaults.PageQuery{}, false
+	}
+	filter, ok := readMetadataFilter(w, r)
+	return vaults.PageQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, Statuses: statuses, Metadata: filter}, ok
 }

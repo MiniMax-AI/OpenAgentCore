@@ -3,6 +3,7 @@ module github.com/MiniMax-AI/OpenAgentCore
 go 1.26.8
 
 require (
+	github.com/alibaba/OpenSandbox/sdks/sandbox/go v1.2.0
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3

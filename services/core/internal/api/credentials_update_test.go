@@ -36,7 +36,7 @@ func TestCredentialUpdatePreservesOpaqueInputAndSafeProjection(t *testing.T) {
 		}
 		want := map[string]any{"id": f.credential.ID, "vault_id": f.credential.VaultID, "name": f.credential.Name,
 			"object": "vault.credential", "created_at": float64(f.credential.CreatedAt.Unix()), "updated_at": float64(f.credential.UpdatedAt.Unix()),
-			"auth": map[string]any{"type": "static_bearer", "mcp_server_url": f.credential.MCPServerURL}}
+			"metadata": map[string]any{}, "auth": map[string]any{"type": "static_bearer", "mcp_server_url": f.credential.MCPServerURL}}
 		if !reflect.DeepEqual(got, want) || f.tenant != tenant || f.vault != f.credential.VaultID || f.id != f.credential.ID || f.replacement.Token != token || f.calls != 1 || strings.Contains(w.Body.String(), "credential-canary") {
 			t.Fatal("update changed scope, secret bytes or safe resource shape")
 		}

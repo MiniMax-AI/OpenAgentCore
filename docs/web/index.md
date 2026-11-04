@@ -35,7 +35,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 | Task | Where |
 | --- | --- |
-| Choose the sandbox backend (microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| Choose the sandbox backend (microsandbox, E2B or OpenSandbox), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see [Add and manage nodes](../getting-started/nodes.md) |
 | Set the default model of a Harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |

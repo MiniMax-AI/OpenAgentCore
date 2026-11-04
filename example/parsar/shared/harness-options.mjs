@@ -1,35 +1,11 @@
-// Execution options each Harness admits, mirroring Core's Harness declarations
-// (contracts/agents-api/harness-capabilities.md). An empty value means the
-// Harness default and is never sent.
-export const harnessOptions = {
-  codex: {
-    label: "Codex",
-    protocol: "responses",
-    reasoning_effort: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
-    reasoning_summary: ["concise", "detailed", "auto"],
-    web_search: ["disabled", "cached", "live"],
-    verbosity: ["low", "medium", "high"],
-    service_tier: ["default", "flex", "priority"],
-  },
-  claude_sdk: {
-    label: "Claude Code",
-    protocol: "anthropic",
-    reasoning_effort: ["low", "medium", "high", "xhigh", "max"],
-    reasoning_summary: [],
-    web_search: ["disabled", "live"],
-    verbosity: ["medium"],
-    service_tier: [],
-  },
-  mcode: {
-    label: "MiniMax Code",
-    protocol: "anthropic",
-    reasoning_effort: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
-    reasoning_summary: [],
-    web_search: ["disabled"],
-    verbosity: ["medium"],
-    service_tier: [],
-  },
-};
+import { harnessCatalog } from "./harness-catalog.mjs";
+
+// Execution options each Harness admits, as Core's Harness declarations state
+// them. An empty value means the Harness default and is never sent. Parsar
+// connects a Provider with the Harness's first declared protocol.
+export const harnessOptions = Object.fromEntries(
+  Object.entries(harnessCatalog).map(([kind, declared]) => [kind, { ...declared, protocol: declared.protocols[0] }]),
+);
 
 export const executionOptionFields = [
   "reasoning_effort",

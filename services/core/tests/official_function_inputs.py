@@ -37,9 +37,9 @@ def submit(api, events, key, expected=202, error=None, target=session):
         assert response.content == b""
     except APIStatusError as failure:
         assert failure.status_code == expected, (failure.status_code, expected, failure.message)
-        kind, code, message = error
+        kind, code, message, *param = error
         body = failure.body
-        assert (body["type"], body["code"], body["param"]) == (kind, code, None), body
+        assert (body["type"], body["code"], body["param"]) == (kind, code, param[0] if param else None), body
         assert message is None or body["message"] == message, body
 
 
@@ -52,7 +52,7 @@ with OpenAI(api_key=token, base_url=base+"/v1", max_retries=0,
     submit(api, [result("a", str(uuid.uuid4()), success=True)], "other-turn", 400, OTHER_TURN)
     submit(api, [message, result("rollback", "turn_malformed", success=True)], "malformed-turn", 400, OTHER_TURN)
     submit(api, [result("a", success=True)], "other-session", 400, unknown_call("a"), other)
-    submit(api, [message, result("rollback", success=None)], "malformed", 400, INVALID)
+    submit(api, [message, result("rollback", success=None)], "malformed", 400, ("invalid_request_error", "invalid_request_error", "Invalid type for 'events[1].success': expected a boolean, but got null instead.", "events[1].success"))
     stranger = api.with_options(api_key=foreign)
     submit(stranger, [result("a", success=True)], "foreign", 404, MISSING)
     submit(stranger, [result("missing", "turn_malformed", success=True)], "foreign-malformed", 404, MISSING)

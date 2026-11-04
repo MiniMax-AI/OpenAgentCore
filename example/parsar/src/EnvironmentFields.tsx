@@ -1,9 +1,10 @@
-import { botFields } from "../shared/bot-bindings.mjs";
-import { Select, SelectOption } from "./components/ui/select";
+import { botVariables } from "../shared/bot-bindings.mjs";
+import { CredentialNames } from "./Capabilities";
 import { useState } from "react";
 import { tr } from "./lib/i18n";
 import type { RuntimeProfile } from "./lib/product";
 import { Input } from "./components/ui/input";
+import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import { Field, Toggle } from "./components/shared";
@@ -218,83 +219,10 @@ export function EnvironmentFields({
           </div>
         ))}
       </Group>
-      <Group
-        title={tr("飞书机器人变量")}
-        action={
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              let name = "FEISHU_APP_ID";
-              while (name in (value.bot_env || {}) || name in (value.env || {}))
-                name += "_";
-              onChange({
-                ...value,
-                bot_env: { ...value.bot_env, [name]: "app_id" },
-              });
-            }}
-          >
-            {tr("添加机器人变量")}
-          </Button>
-        }
-      >
-        {Object.entries(value.bot_env || {}).map(
-          ([name, source], index, rows) => (
-            <div key={index} className="flex gap-2">
-              <Input
-                aria-label={tr("机器人变量名称")}
-                value={name}
-                onChange={(event) => {
-                  if (
-                    event.target.value !== name &&
-                    event.target.value in (value.bot_env || {})
-                  ) {
-                    event.target.setCustomValidity(tr("变量名称不能重复"));
-                    return;
-                  }
-                  event.target.setCustomValidity("");
-                  const updated = [...rows];
-                  updated[index] = [event.target.value, source];
-                  onChange({
-                    ...value,
-                    bot_env: Object.fromEntries(updated),
-                  });
-                }}
-              />
-              <Select
-                aria-label={tr("机器人字段")}
-                value={source}
-                onValueChange={(field) =>
-                  onChange({
-                    ...value,
-                    bot_env: { ...value.bot_env, [name]: field },
-                  })
-                }
-              >
-                {Object.entries(botFields).map(([field, label]) => (
-                  <SelectOption key={field} value={field}>
-                    {tr(label)}
-                  </SelectOption>
-                ))}
-              </Select>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    bot_env: Object.fromEntries(
-                      rows.filter((_, i) => i !== index),
-                    ),
-                  })
-                }
-              >
-                {tr("移除")}
-              </Button>
-            </div>
-          ),
-        )}
-      </Group>
+      <CredentialNames
+        value={value.credentials || []}
+        change={(credentials) => onChange({ ...value, credentials })}
+      />
       <Group
         title={tr("初始文件")}
         action={
@@ -370,7 +298,7 @@ export function environmentSummary(value: RuntimeProfile) {
       value.network ? tr("限制联网") : "",
       Object.keys(value.env || {}).length ? tr("环境变量") : "",
       value.files?.length ? tr("初始文件") : "",
-      Object.keys(value.bot_env || {}).length ? tr("飞书机器人身份") : "",
+      value.credentials?.some((name) => name in botVariables) ? tr("飞书机器人身份") : "",
     ]
       .filter(Boolean)
       .join(" · ") || tr("空白工作环境")

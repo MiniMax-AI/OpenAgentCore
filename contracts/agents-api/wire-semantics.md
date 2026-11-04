@@ -18,7 +18,12 @@ The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/Open
 | `HEAD` on the event stream, on File, Skill, Skill version and Artifact content, and on the Environment files list | 405, so `HEAD` never holds a stream open or reads content. |
 | Unsupported method, including unknown methods such as `FOO` | 405, code `unsupported_operation`, message "This API method is not supported.", and an `Allow` header listing the route's methods in the order `GET,HEAD,POST,DELETE`. |
 | Unknown sub-route under `/v1`, including a trailing slash | 404, code `unsupported_operation`, after the Beta and authentication checks. |
+| A pinned route Core does not run | See [unsupported operations](#unsupported-operations). |
 | `OPTIONS` and CORS | No CORS handling. |
+
+### Unsupported operations
+
+The Automations routes (all 10), `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no Automations or trace store.
 
 Creating an Agent, Vault, Credential, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
 
@@ -108,7 +113,9 @@ Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an 
 | Repeated supported key, including a scalar `status` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: duplicate field `<key>`" | 400 `unsupported_parameter` | 400 `duplicate_parameter`, param `<key>`, the official message |
 | `order` other than `asc` or `desc`, including an explicit empty `order=` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: order: unknown variant `<value>`, expected `asc` or `desc`" | 400, null code, "order must be asc or desc." | 400 `invalid_value`, param `order`, `"Invalid value: '<value>'. Supported values are: 'asc' and 'desc'."` |
 
-The pinned Python SDK drops empty query values, so `list(order="")` sends no `order` and uses the default. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
+The Sessions, Vaults and Credentials lists accept `metadata[key]=value` pairs and keep the resources whose metadata holds every pair. A key is nonempty, and at most 16 pairs, 64-character keys and 512-character values apply.
+
+An empty `order` returns the invalid `order` error, like any value other than `asc` and `desc`. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
 
 Vault and Credential lists accept `status` as a scalar, as `status[]` entries, or both, and filter by their union. Both statuses are listed by default. Another value returns 400 `invalid_request_error` with a null param and "Failed to deserialize query string: status: data did not match any variant of untagged enum VaultStatusFilterParam".
 
@@ -116,13 +123,12 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 
 | Lists | Default | Accepted | Other values |
 | --- | --- | --- | --- |
-| Agents, Sessions, Items, Environment Templates, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
-| Vaults, Credentials | 20 | 1–100 | 0, negative and larger integers, including overflowing ones, are clamped into 1–100 |
+| Agents, Sessions, Items, Turn Items, Environment Templates, Vaults, Credentials, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
 | Turns, Subagents, Subagent Turns, Artifacts | 20 | 1–100 | 400 `invalid_request_error`, "limit must be between 1 and 100" |
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |
 
-A `limit` that is not a decimal integer, including an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists; outside Vault and Credential lists, a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". A leading `+` is accepted when encoded as `%2B`; a leading `-` returns the invalid-digit error on Beta lists except Vaults and Credentials. Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
+A `limit` that is not a decimal integer, including an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists, and a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". A leading `+` is accepted when encoded as `%2B`; a leading `-` returns the invalid-digit error on Beta lists. Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
 
 ### Cursors
 
@@ -131,7 +137,7 @@ A `limit` that is not a decimal integer, including an empty value, returns 400 `
 | Lists | Response |
 | --- | --- |
 | Agents, Sessions, Turns, Environment Templates, Vaults, Credentials | 404, type and code `not_found_error`, "Resource not found." |
-| Session Items, Subagent Items, Subagent Turn Items | 400 `invalid_request_error`, null param, "Invalid session item ID in `after`" |
+| Session Items, Turn Items, Subagent Items, Subagent Turn Items | 400 `invalid_request_error`, null param, "Invalid session item ID in `after`" |
 | Subagents, Subagent Turns | 400 `invalid_request_error`, null param, "Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`, null param, "after is not a valid artifact ID" |
 | Skill versions | A value that does not begin with `skillver`: 400 `invalid_value`, param `after`, `"Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'."` A version of another Skill: the same fields, "Skill version cursor does not match this skill." A malformed `skillver` suffix or a missing, deleted or foreign version: 404 with a null code and param |
@@ -155,6 +161,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | `multi_agent` | Disabled. When enabled without `max_concurrent_subagents`, 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
+| `compaction`, `experimental` | Core saves `compaction` only with an explicit `async` and otherwise omits it: an omitted, null or empty `compaction`, or a null `async`, is the official default of background compaction, and the Harness runs its native blocking compaction instead. A null `compaction` on update clears the saved value. `experimental` always reads `{"time_awareness": false}` unless set, an `experimental` object without members keeps the saved value, and an update or Session override changes only the members it sends |
 | `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
 | HTTP MCP transport | Saved with `headers: {}`; nonempty headers are stored as given and an `Authorization` header is rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
@@ -182,13 +189,29 @@ Within one object Core reports a union's `type` first, then unknown members, the
 
 Core saves values the pinned shapes allow even when the selected Harness cannot run them: function names of any length and the reasoning, service tier, web search and programmatic tool calling values a Harness does not declare.
 
+### Unsupported fields
+
+These official fields have no Core meaning. A request that sets one returns 400 `invalid_request_error` with the field as `param` and no write:
+
+| Field | Param |
+| --- | --- |
+| Session update `agent` with any member; `{}` changes nothing | `agent` |
+| Session `review: auto_review` on create or update; `none` is accepted and responses omit `review` | `review` |
+| `environment.environment_id` | `environment_id` |
+| `environment.container_size`; responses carry `container_size: null` | `container_size` |
+| `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
+| A nonempty `network.blocked_domains` | `network.blocked_domains` |
+| Credential `auth.type` `environment_variable` | `auth.type` |
+| The Session input `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
+
 ### Session admission
 
 A Session's effective configuration must also pass execution admission, which applies to saved and inline configuration alike. Admission reports protocol errors from the table above first, including duplicate tools and schema roots in saved Agents, then these, all 400 `unsupported_or_invalid_configuration` before any write:
 
 | Configuration | Message |
 | --- | --- |
-| A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
+| A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
+| `compaction.async: true`, `experimental.time_awareness: true`, or an `automations` or `computer_use` tool, on every Harness, since none runs them natively | A message naming the field, such as `compaction.async=true is not supported.` |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
 | A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -228,9 +251,9 @@ Keys are scoped to the Project; any key of the Project, including one issued aft
 
 ### Update and list
 
-`POST /agents/sessions/{session_id}` accepts only `metadata`, which is required: null or `{}` clears it and an object replaces all pairs. Execution state and the creation retry identity are unchanged.
+`POST /agents/sessions/{session_id}` changes only `metadata`: null or `{}` clears it and an object replaces all pairs. A body with only `review` or an empty `agent` changes nothing and returns the Session; a body with none of `metadata`, `agent` or `review` returns 400. An `agent` with members is rejected ([unsupported fields](#unsupported-fields)). Execution state and the creation retry identity are unchanged.
 
-`GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission.
+`GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission. The [`metadata` filter](#query-parameters) applies too.
 
 ### Delete
 

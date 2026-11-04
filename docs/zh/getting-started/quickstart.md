@@ -1,7 +1,7 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 8795e92d7eb61f7f946e96bcd3966b16e2eb800a8f36ee1b1de524df106c868f
+source_hash: 463bfed6afcc95bc85284a7063f2303690816d7d1e6fd1c7495e5084615254a0
 ---
 
 使用官方 OpenAI Python SDK 通过 Core 运行 Agent：用项目 API 密钥连接，启动一个会写入文件的 Session，并读取结果。你需要管理员提供的密钥和 API 基础 URL。
@@ -9,7 +9,7 @@ source_hash: 8795e92d7eb61f7f946e96bcd3966b16e2eb800a8f36ee1b1de524df106c868f
 开始之前，请准备：
 
 - 项目 API 密钥和 API 基础 URL（[签发项目 API 密钥](install.md#issue-a-project-api-key)）；
-- 已就绪的节点或 E2B 沙箱提供商，让 Core 能运行 Agent（[添加和管理节点](nodes.md)）；
+- 已就绪的节点，或 E2B、OpenSandbox 沙箱提供商，让 Core 能运行 Agent（[添加和管理节点](nodes.md)）；
 - Python 3.9 或更高版本；
 - 一个模型：安装的默认模型，或你自己的提供商的模型 ID、基础 URL 和 API 密钥。[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明 Session 使用哪个模型，以及每个 Harness 支持哪些协议。
 
@@ -27,7 +27,7 @@ Core 提供 OpenAI Agents API，因此无需修改官方 OpenAI SDK。SDK 读取
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-pip install openai==3.13.0
+pip install openai==3.45.0
 export OPENAI_BASE_URL=https://core.example/v1
 read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the key; it is not echoed
 ```
@@ -54,7 +54,7 @@ curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
 
 ## 2. 启动 Session {#_2-start-a-session}
 
-Session 是拥有独立工作区的一次 Agent 对话。使用 `openai_hosted` 时，Core 在节点或 E2B 上创建沙箱，并在其中启动 Harness。
+Session 是拥有独立工作区的一次 Agent 对话。使用 `openai_hosted` 时，Core 在节点、E2B 或 OpenSandbox 上创建沙箱，并在其中启动 Harness。
 
 要使用自己的提供商而不是安装的默认模型，请先导出其设置，然后运行第二个标签页的代码：
 
@@ -98,7 +98,7 @@ print(session.id)
 这会发起真实模型请求，可能产生费用。
 
 - `x_agents_core` 包含 Core 对 OpenAI API 的扩展；参阅 [Core 扩展](../api/public-agent-api.md#core-extensions)。
-- 将整个 `agent` 对象放入 `extra_body`。SDK 3.13.0 使用 `extra_body` 中的同名字段替换请求体字段，而非合并。
+- 将整个 `agent` 对象放入 `extra_body`。SDK 3.45.0 使用 `extra_body` 中的同名字段替换请求体字段，而非合并。
 
 ## 3. 等待结果 {#_3-wait-for-the-result}
 

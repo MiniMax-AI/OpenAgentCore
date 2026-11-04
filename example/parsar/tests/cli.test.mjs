@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createParsarClient } from "../cli.mjs";
 import { createHandler } from "../server.mjs";
 import { openStore } from "../server/store.mjs";
+import { savedResourcesFetch } from "./core-double.mjs";
 
 const cli = fileURLToPath(new URL('../cli.mjs', import.meta.url));
 const configure = fileURLToPath(new URL('../examples/manager/configure.mjs', import.meta.url));
@@ -15,7 +16,7 @@ async function fixture(t, fetchImpl = async () => { throw new Error('Unexpected 
   const modelId = randomUUID();
   store.put('models', { id: modelId, name: 'Test model', enabled: true });
   const config = { host: '127.0.0.1', port: 0, target: 'https://core.example', key: 'server-only-core-key' };
-  const server = createServer(createHandler(config, { store, fetchImpl }));
+  const server = createServer(createHandler(config, { store, fetchImpl: savedResourcesFetch(fetchImpl) }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = server.address().port;
   t.after(() => { server.closeAllConnections(); server.close(); store.close(); });

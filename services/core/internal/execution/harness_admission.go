@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -48,6 +49,9 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 		if err := declaration.ValidateConfiguration(admissionOf(snapshot)); err != nil {
 			return admissionError(err)
 		}
+	}
+	if err := rejectUnsupportedAgentOptions(snapshot.Agent); err != nil {
+		return err
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
@@ -104,6 +108,35 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 			if err := declaration.ValidateFunctionResult(result); err != nil {
 				return admissionError(err)
 			}
+		}
+	}
+	return nil
+}
+
+// rejectUnsupportedAgentOptions refuses the official settings no Harness has a native home for.
+// A Harness gains one by declaring it together with its pass-through to the native side.
+func rejectUnsupportedAgentOptions(agent v1.Agent) error {
+	var compaction struct {
+		Async bool `json:"async"`
+	}
+	var experimental struct {
+		TimeAwareness bool `json:"time_awareness"`
+	}
+	_ = json.Unmarshal(agent.Compaction, &compaction)
+	_ = json.Unmarshal(agent.Experimental, &experimental)
+	if compaction.Async {
+		return errors.New("compaction.async=true is not supported.")
+	}
+	if experimental.TimeAwareness {
+		return errors.New("experimental.time_awareness=true is not supported.")
+	}
+	for _, raw := range agent.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(raw, &tool)
+		if tool.Type == "automations" || tool.Type == "computer_use" {
+			return fmt.Errorf("The %s tool is not supported.", tool.Type)
 		}
 	}
 	return nil

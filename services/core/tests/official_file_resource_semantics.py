@@ -184,7 +184,7 @@ def main():
     settings = json.load(sys.stdin)
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
-    assert distribution.version == pin["sdk_version"] == "3.13.0"
+    assert distribution.version == pin["sdk_version"] == "3.45.0"
     assert json.loads(distribution.read_text("direct_url.json"))["vcs_info"]["commit_id"] == pin["commit"]
     with ExitStack() as cleanup:
         raw = cleanup.enter_context(httpx2.Client(trust_env=False, timeout=20))

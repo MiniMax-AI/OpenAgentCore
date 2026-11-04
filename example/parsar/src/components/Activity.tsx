@@ -1,3 +1,4 @@
+import { withoutFeishuSource } from "../../shared/feishu-source.mjs";
 import { MediaImage, ArtifactAttachment } from "./Media";
 import { artifactContentPath, qrImagePattern } from "../../shared/media.mjs";
 import { tr } from "../lib/i18n";
@@ -127,7 +128,7 @@ export function Activity({ item, sessionId = "", artifacts = [] }: { item: Sessi
       return (
         <div className="flex justify-end py-3">
           <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-3xl bg-surface-muted px-5 py-3 text-base leading-relaxed">
-            {text}
+            {withoutFeishuSource(text)}
             {item.content?.filter((part) => part.type === "input_image").map((part, index) =>
               typeof part.image_url === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(part.image_url)
                 ? <img key={index} src={part.image_url} alt={tr("图片")} className="mt-2 max-h-80 max-w-full rounded-lg object-contain" /> : null)}

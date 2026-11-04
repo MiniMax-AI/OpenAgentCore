@@ -49,7 +49,6 @@ export function ArtifactAttachment({ sessionId, file, preview = true }: {
     <div className="my-3 max-w-full rounded-xl border border-line p-3">
       {preview && /\.(png|jpe?g|gif|webp)$/i.test(name) && <MediaImage src={src} alt={name} />}
       <button type="button" onClick={() => download.mutate()} disabled={download.isPending} className="cursor-pointer break-all text-left text-sm underline underline-offset-4" aria-label={tr("下载 {{value0}}", { value0: name })}>{name}</button>
-      <span className="ml-2 text-xs text-fg-muted">{Math.ceil(file.size_bytes / 1024)} KiB</span>
       <ErrorNotice error={download.error} />
     </div>
   );

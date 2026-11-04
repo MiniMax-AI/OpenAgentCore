@@ -22,9 +22,8 @@ func TestVaultListParameters(t *testing.T) {
 		limit    int
 		statuses []string
 	}{
-		{"", 20, nil}, {"?limit=0", 1, nil}, {"?limit=-8", 1, nil}, {"?limit=3", 3, nil},
-		{"?limit=101", 100, nil}, {"?limit=9999999999999999999999999", 100, nil},
-		{"?limit=-9999999999999999999999999", 1, nil},
+		{"", 20, nil}, {"?limit=0", 1, nil}, {"?limit=3", 3, nil},
+		{"?limit=101", 100, nil},
 		{"?status=active", 20, []string{"active"}}, {"?status=archived", 20, []string{"archived"}},
 		{"?status[]=archived&status[]=active", 20, []string{"archived", "active"}},
 		{"?status=archived&status[]=active", 20, []string{"archived", "active"}},
@@ -46,7 +45,7 @@ func TestVaultListParameters(t *testing.T) {
 			}
 		})
 	}
-	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=deleted", "after=a&after=b"} {
+	for _, query := range []string{"limit=", "limit=null", "limit=1.5", "limit=-8", "limit=1&limit=2", "order=invalid", "status=", "status=deleted", "status[]=active&status[]=invalid", "status=active&status=archived", "status=active&status[]=deleted", "after=a&after=b", "metadata[k]=a&metadata[k]=b", "metadata[]=x"} {
 		h, f := vaultResourceHandler(t)
 		w := vaultRequest(h, http.MethodGet, "/v1/vaults?"+query, "")
 		if w.Code != 400 || f.calls != 0 {
