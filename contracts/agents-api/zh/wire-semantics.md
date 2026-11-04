@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: c594b287b943c2ea7e22a35d769a1ebb7a598990f85836632087743354f657c8
+source_hash: a2147426bef35dc881c87949204b77a2744dee78e7acebf806e4e5aec24016ba
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -130,7 +130,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
 | Files | 10000 | 1–10000 | 400，code 为 null，"limit must be between 1 and 10000." |
 
-`limit` 不是十进制整数时（包括空值），Beta 列表返回 400 `invalid_request_error` 和 "Failed to deserialize query string: limit: invalid digit found in string"；在 Vault 和 Credential 列表之外，超出有符号 64 位范围的值会返回 "Failed to deserialize query string: limit: number too large to fit in target type"。编码为 `%2B` 的前导 `+` 会被接受；前导 `-` 在 Beta 列表上会返回无效数字错误，但 Vaults 和 Credentials 除外。Skills 返回 `invalid_request` 和 "limit must be an integer between 0 and 100."；Files 返回 `invalid_request` 以及 Files 范围消息。
+`limit` 不是十进制整数时（包括空值），Beta 列表返回 400 `invalid_request_error` 和 "Failed to deserialize query string: limit: invalid digit found in string"，超出有符号 64 位范围的值会返回 "Failed to deserialize query string: limit: number too large to fit in target type"。编码为 `%2B` 的前导 `+` 会被接受；前导 `-` 在 Beta 列表上会返回无效数字错误。Skills 返回 `invalid_request` 和 "limit must be an integer between 0 and 100."；Files 返回 `invalid_request` 以及 Files 范围消息。
 
 ### 游标 {#cursors}
 

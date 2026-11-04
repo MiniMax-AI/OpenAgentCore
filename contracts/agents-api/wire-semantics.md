@@ -128,7 +128,7 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |
 
-A `limit` that is not a decimal integer, including an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists; outside Vault and Credential lists, a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". A leading `+` is accepted when encoded as `%2B`; a leading `-` returns the invalid-digit error on Beta lists except Vaults and Credentials. Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
+A `limit` that is not a decimal integer, including an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists, and a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". A leading `+` is accepted when encoded as `%2B`; a leading `-` returns the invalid-digit error on Beta lists. Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
 
 ### Cursors
 
