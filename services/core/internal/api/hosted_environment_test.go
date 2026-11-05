@@ -57,7 +57,7 @@ func TestSessionCreationRejectsInvalidEnvironmentReference(t *testing.T) {
 		"unknown member":  {`{"type":"openai_hosted","environment_id":"` + id + `","foo":1}`, "", "environment.foo"},
 		"workspace dir":   {`{"type":"openai_hosted","environment_id":"` + id + `","workspace_directory":"/w"}`, "", "environment.workspace_directory"},
 		"short":           {`{"type":"openai_hosted","environment_id":"short"}`, "", "environment.environment_id"},
-		"not hosted":      {`{"type":"self_hosted","environment_id":"` + id + `"}`, "", ""},
+		"not hosted":      {`{"type":"self_hosted","environment_id":"` + id + `","workspace_directory":"/w"}`, "", "environment.environment_id"},
 		"preparation":     {`{"type":"openai_hosted","environment_id":"` + id + `"}`, `"x_agents_core":{"environment":{"env":{"A":"b"}}},`, "x_agents_core.environment"},
 		"not a string id": {`{"type":"openai_hosted","environment_id":7}`, "", "environment.environment_id"},
 	} {
@@ -81,6 +81,7 @@ func TestStandaloneEnvironmentRequestValidation(t *testing.T) {
 		"vault ids":        {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"vault_ids":["v"]}`, "vault_ids"},
 		"self hosted":      {"/v1/agents/environments", `{"environment":{"type":"self_hosted","workspace_directory":"/w"}}`, ""},
 		"attach on create": {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}}`, "environment.environment_id"},
+		"container size":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","container_size":null}}`, "environment.container_size"},
 		"unknown member":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"extra":1}`, ""},
 	} {
 		w := bodyGateRequest(h, test.path, "application/json", []byte(test.body))

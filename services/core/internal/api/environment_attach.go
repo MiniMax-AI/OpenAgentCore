@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // attachExclusive lists, in the pinned schema's order, the members the schema's
@@ -22,6 +21,12 @@ func attachedEnvironment(fields map[string]json.RawMessage, extension *v1.Sessio
 	value, supplied := fields["environment_id"]
 	if !supplied {
 		return "", nil
+	}
+	// Only the openai_hosted schema has environment_id; any other type rejects it.
+	var kind string
+	_ = json.Unmarshal(fields["type"], &kind)
+	if kind != "openai_hosted" {
+		return "", &fieldError{param: "environment.environment_id", message: "Unknown parameter: 'environment.environment_id'."}
 	}
 	for _, name := range attachExclusive {
 		if _, present := fields[name]; present {
@@ -49,12 +54,8 @@ func attachedEnvironment(fields map[string]json.RawMessage, extension *v1.Sessio
 	if err := checkValue("environment.environment_id", value, environmentIDShape); err != nil {
 		return "", err
 	}
-	var kind, id string
-	_ = json.Unmarshal(fields["type"], &kind)
+	var id string
 	_ = json.Unmarshal(value, &id)
-	if kind != "openai_hosted" {
-		return "", sessions.ErrInvalidInput
-	}
 	if n := utf8.RuneCountInString(id); n < 9 || n > 256 {
 		return "", &fieldError{param: "environment.environment_id", message: fmt.Sprintf("Invalid 'environment.environment_id': string length must be between 9 and 256 characters, but got a string with length %d instead.", n)}
 	}

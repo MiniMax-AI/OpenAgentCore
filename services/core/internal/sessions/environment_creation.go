@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -154,7 +153,7 @@ func (s *Service) environmentIdentity(key string, creator identity.Subject, requ
 	if err := creator.Validate(); err != nil {
 		return EnvironmentIdentity{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	if strings.TrimSpace(key) == "" || len(key) > 256 {
+	if key == "" || len(key) > 256 {
 		return EnvironmentIdentity{}, ErrInvalidInput
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)

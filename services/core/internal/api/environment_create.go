@@ -38,9 +38,13 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var members map[string]json.RawMessage
-	if _ = json.Unmarshal(body.Environment, &members); members["environment_id"] != nil {
-		writeFieldError(w, &fieldError{param: "environment.environment_id", message: "Unknown parameter: 'environment.environment_id'."})
-		return
+	_ = json.Unmarshal(body.Environment, &members)
+	// The create schema has neither member; they belong to the Environment resource.
+	for _, name := range []string{"environment_id", "container_size"} {
+		if members[name] != nil {
+			writeFieldError(w, &fieldError{param: "environment." + name, message: "Unknown parameter: 'environment." + name + "'."})
+			return
+		}
 	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
