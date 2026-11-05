@@ -1,7 +1,7 @@
 ---
 title: "选择沙箱提供商"
 source: docs/getting-started/sandbox-backends.md
-source_hash: 6ff014aa67c43fc73e2ed049d8ec5ceb65f771511af0ba2ec0d692d6d529191a
+source_hash: cbebd45c8d4600aaa102954be4057f0f74f6eed62551a1c7158c629a87695f1c
 ---
 
 比较 microsandbox、E2B 和 OpenSandbox，然后在 Web 中选择一个。本指南面向已完成[安装 Core 和 Web](./install.md)、需要为 Core 托管的 Session 提供计算资源的运维人员。
@@ -16,7 +16,7 @@ source_hash: 6ff014aa67c43fc73e2ed049d8ec5ceb65f771511af0ba2ec0d692d6d529191a
 | 需要添加节点 | 是 | 否 | 否 |
 | 你需要提供 | 带 systemd 和 `/dev/kvm` 的 Linux amd64 主机 | E2B API 密钥和模板；Core 的公共 HTTPS URL | 服务器的 URL 和 API 密钥，以及为其构建的 Runtime 镜像；其沙箱可访问的 Core 地址 |
 | 隔离 | 每个沙箱有独立内核 | 由 E2B 提供 | 由 OpenSandbox 的 runtime 提供：容器，或安全容器 runtime |
-| 空闲沙箱可挂起和恢复 | 是，通过检查点 | 是，由 E2B 原地暂停 | 否；继续运行 |
+| 空闲沙箱可挂起和恢复 | 是，通过检查点 | 是，由 E2B 原地暂停 | 否；有 Session 的沙箱继续运行 |
 | 工作区存储 | 必需，使用 NFS | 自有磁盘 | 自有磁盘 |
 | 磁盘限制 | 根磁盘和工作区配额 | 由模板设置 | 由 OpenSandbox 的 runtime 设置 |
 

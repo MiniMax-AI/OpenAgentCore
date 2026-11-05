@@ -537,7 +537,7 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 - No Beta header. Select up to 50 Skills per Environment; each archive is at most 5 MiB compressed and 20 MiB expanded.
 - Attach Skills to a Session through its `environment.skills` or a [template](#environment-templates).
 
-Details: [Files and Skills](../../contracts/agents-api/source-files.md). A Session installs its Skills, Plugins and packages once, when it is prepared; editing the source later doesn't change a running Session. Preparation errors fail the Session before any work runs: fix the cause instead of retrying in a new Session.
+Details: [Files and Skills](../../contracts/agents-api/source-files.md). A Session installs its Skills, Plugins and packages once, during initialization; editing the source later doesn't change a running Session. Preparation errors fail the Session before any work runs: fix the cause instead of retrying in a new Session.
 
 ## Environment Templates
 
@@ -562,7 +562,7 @@ A Session freezes the template when it starts. Details: [Environment Templates](
 
 ## Prewarm an Environment
 
-Create an Environment before its Session so the workspace is prepared when the Session starts. It takes the `environment` of a Session and the same Template. Attach a Session with `environment_id`; when the Session is deleted, the next one can attach:
+Create an Environment before its Session so the workspace is initialized when the Session starts. It takes the `environment` of a Session and the same Template. Attach a Session with `environment_id`; when the Session is deleted, the next one can attach:
 
 ::: code-group
 
@@ -583,7 +583,7 @@ agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
 
 :::
 
-A prepared Environment with no Session reads `ready`. `environment_id` accepts no other `environment` member. Files stay unavailable until a Session is attached. An idle Environment expires, so prewarm shortly before use. Details: [Standalone Environments](../../contracts/agents-api/environments.md#standalone-environments).
+An Environment with no Session and complete initialization reads `ready`. `environment_id` accepts no other `environment` member. Files stay unavailable until a Session is attached. An idle Environment expires, so prewarm shortly before use. Details: [Standalone Environments](../../contracts/agents-api/environments.md#standalone-environments).
 
 ## Automations
 

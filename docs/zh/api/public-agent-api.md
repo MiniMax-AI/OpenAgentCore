@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 1483155688bff477c72fdea76deed27513e346a6bb245d521e891542f8fd1e87
+source_hash: 32ae503b0901fb4f102eb2be757682bd680647c220f904f1615eced4bf428ade
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -539,7 +539,7 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 - 不需要 Beta 请求头。每个 Environment 最多可选择 50 个 Skills；每个归档压缩后最大为 5 MiB，展开后最大为 20 MiB。
 - 可通过 Session 的 `environment.skills` 或[模板](#environment-templates)为其附加 Skills。
 
-详细信息请参阅 [文件与 Skill](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。
+详细信息请参阅 [文件与 Skill](../../../contracts/agents-api/zh/source-files.md)。Session 会在初始化期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。
 
 ## Environment 模板 {#environment-templates}
 
@@ -564,7 +564,7 @@ Session 启动时会冻结模板。详细信息请参阅 [Environment 模板](..
 
 ## 预热 Environment {#prewarm-an-environment}
 
-在创建 Session 之前先创建 Environment，使工作区在 Session 启动时已准备就绪。它接受 Session 的 `environment` 和同样的模板。用 `environment_id` 挂载 Session；该 Session 被删除后，下一个 Session 即可挂载：
+在创建 Session 之前先创建 Environment，使工作区在 Session 启动时已初始化。它接受 Session 的 `environment` 和同样的模板。用 `environment_id` 挂载 Session；该 Session 被删除后，下一个 Session 即可挂载：
 
 ::: code-group
 
@@ -585,7 +585,7 @@ agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
 
 :::
 
-没有 Session 的已准备 Environment 读作 `ready`。`environment_id` 不接受 `environment` 的其他成员。挂载 Session 之前文件不可用。空闲的 Environment 会过期，因此应在使用前不久预热。详细信息请参阅[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
+没有 Session 且初始化已完成的 Environment 读作 `ready`。`environment_id` 不接受 `environment` 的其他成员。挂载 Session 之前文件不可用。空闲的 Environment 会过期，因此应在使用前不久预热。详细信息请参阅[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
 
 ## Automations {#automations}
 
