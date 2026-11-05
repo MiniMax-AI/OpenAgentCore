@@ -287,7 +287,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	}
 	started := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
-		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
+		Reference: runtimeReference(owner), DeviceID: owner.DeviceID,
 		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token,
 		SuspendControl: sandbox.SupportsCheckpoint(provider.ProviderOperations()),
 		Egress:         egress,

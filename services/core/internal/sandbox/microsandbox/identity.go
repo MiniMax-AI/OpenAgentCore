@@ -78,7 +78,7 @@ func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
 	return nil
 }
 func ValidateBootstrap(b sandbox.Bootstrap) error {
-	if !ValidReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
+	if !ValidReference(b.Reference) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
 		return sandbox.ErrInvalid
 	}
 	return nil

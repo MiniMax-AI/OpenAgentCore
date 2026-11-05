@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 8d1fe4e681774523fb1544201f2ef950ac29ed2a8d055c5bf0b63855e30a24c7
+source_hash: 9884514f37032ccc7c97fe0a0a0ddced652e55dfe59d98a55a72ff4e0b75a810
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
@@ -197,7 +197,7 @@ stateDiagram-v2
 
 Provider 声明 `DeploymentPolicy.Network`：`Restrict` 表示能拒绝公开地址并允许具名公开域名，Core 仅在此时准入 `disabled` 和 `restricted` Environment；`PrivateDomains` 表示能允许具名主机解析出的私有地址。保存选择时，Core 会依据该声明校验部署的[网络上限](../../contracts/agents-api/zh/sandbox-deployment.md#network)，绝不替换为其他行为。
 
-Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Session 冻结的 Environment `network` 策略和冻结的模型提供商推导而来。`disabled` 只留下 `Endpoints`；`restricted` 清除 `Public`，上限列出的域名放入 `PrivateDomains`，其余放入 `Domains`（[策略](../../contracts/agents-api/zh/environments.md#restricted-network)）：
+Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Environment 冻结的 `network` 策略，以及（对 Session 拥有的 Environment）其 Session 的模型提供商推导而来。`disabled` 只留下 `Endpoints`；`restricted` 清除 `Public`，上限列出的域名放入 `PrivateDomains`，其余放入 `Domains`（[策略](../../contracts/agents-api/zh/environments.md#restricted-network)）：
 
 - `Public`：允许公开地址。
 - `PrivateDomains`：精确主机名，或 `*.example.com`（覆盖其子域名，不含 `example.com` 本身），其解析出的地址（包括私有地址）都被允许。

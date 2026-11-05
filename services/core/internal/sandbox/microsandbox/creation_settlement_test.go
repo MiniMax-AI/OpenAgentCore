@@ -10,7 +10,7 @@ import (
 
 func TestCreateConfigurationRejectionSettlement(t *testing.T) {
 	config, ref := testConfig(), testRef()
-	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID,
+	bootstrap := sandbox.Bootstrap{Reference: ref, DeviceID: ref.EnvironmentID,
 		CoreURL: "https://core.example/api/v1", Credential: "fixture", Workspace: workspaceBinding()}
 	for _, test := range []struct {
 		name    string

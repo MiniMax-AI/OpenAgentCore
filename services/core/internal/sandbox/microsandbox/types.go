@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 9
+const ProtocolVersion = 10
 const SDKVersion = "v0.7.11"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024

@@ -25,16 +25,16 @@ PENDING_PAUSE_SETTLE_SECONDS = 600  # a pause request settles in seconds; one st
 
 # Exits 78 unless the template carries the startup script and a contract for this Runtime bootstrap version.
 TEMPLATE_CHECK = """import importlib.util, os, sys
-root, version = sys.argv[1], int(sys.argv[2])
+root, versions = sys.argv[1], [int(v) for v in sys.argv[2:]]
 script = os.path.join(root, 'managed_init.py')
 try:
     spec = importlib.util.spec_from_file_location('template_contract', os.path.join(root, 'helper_contract_generated.py'))
     contract = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(contract)
-    current = getattr(contract, 'RUNTIME_BOOTSTRAP_VERSION', None)
+    current = [getattr(contract, 'PROTOCOL_VERSION', None), getattr(contract, 'RUNTIME_BOOTSTRAP_VERSION', None)]
 except Exception:
     current = None
-sys.exit(78 if not os.path.isfile(script) or not os.access(script, os.R_OK) or current != version else 0)
+sys.exit(78 if not os.path.isfile(script) or not os.access(script, os.R_OK) or current != versions else 0)
 """
 COMPUTE_OPERATIONS = ('compute', 'renew_compute', 'resume_compute', 'suspend', 'resume', 'kill_compute', 'delete_snapshot', 'command_compute')
 
@@ -276,7 +276,7 @@ class Provider:
         if any(bootstrap.get(field) != value for field, value in self.reference.items()):
             raise Failure('invalid')
         identity = dict(self.reference, InstallationID=self.config['InstallationID'],
-                        SessionID=bootstrap['SessionID'], DeviceID=bootstrap['DeviceID'])
+                        DeviceID=bootstrap['DeviceID'])
         self.receipt.save(status='create_pending', bootstrap_identity=identity)
         try:
             cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
@@ -299,7 +299,7 @@ class Provider:
             self.receipt.save(status='configuration_rejected', settled=True)
             raise
         # Validate the current template entry point before writing any credential.
-        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', TEMPLATE_CHECK, '/opt/oac-e2b', str(RUNTIME_BOOTSTRAP_VERSION)]},
+        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', TEMPLATE_CHECK, '/opt/oac-e2b', str(PROTOCOL_VERSION), str(RUNTIME_BOOTSTRAP_VERSION)]},
                     self.remaining, user='root')
         if check['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
