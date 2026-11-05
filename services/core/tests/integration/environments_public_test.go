@@ -149,11 +149,13 @@ func TestAttachWaitsForTheEnvironmentBeforeTheDeploymentPostgres(t *testing.T) {
 		code, _ := request("POST", "/agents/sessions", "", `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted","environment_id":"`+environment+`"}}`)
 		done <- code
 	}()
-	for waiting := 0; waiting == 0; {
+	for deadline, waiting := time.Now().Add(10*time.Second), 0; waiting == 0; time.Sleep(10 * time.Millisecond) {
 		if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'").Scan(&waiting); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(10 * time.Millisecond)
+		if waiting == 0 && time.Now().After(deadline) {
+			t.Fatal("the attach never waited for the Environment lock")
+		}
 	}
 	other, err := s.pool.Begin(t.Context())
 	if err != nil {

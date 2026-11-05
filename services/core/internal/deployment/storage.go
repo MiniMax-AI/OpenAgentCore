@@ -232,12 +232,12 @@ type Reader interface {
 	NodeHistory(ctx context.Context, nodeID string, window coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
 	// ReadNodes runs apply in one read-only snapshot.
 	ReadNodes(ctx context.Context, apply func(NodeReads) error) error
-	// ResetSessions returns up to 32 hosted Sessions after the given ID, in ID
-	// order, that still hold or await deployment resources, followed
-	// by unattached standalone Environments after the same ID while the page has
-	// room. Without force it skips Sessions with a running Turn or a pending
-	// file write, and Environments with a pending file write. An
-	// empty after starts at the beginning; a malformed one is ErrInvalidInput.
+	// ResetSessions returns up to 32 hosted Environments after the given
+	// Environment ID, in ID order, that still hold or await deployment
+	// resources: each with its live Session, or unattached and standalone.
+	// Without force it skips those with a running Turn or a pending file
+	// write. An empty after starts at the beginning; a malformed one is
+	// ErrInvalidInput.
 	ResetSessions(ctx context.Context, after string, force bool) ([]ResetSession, error)
 	// AddressBindings counts what is bound to an installation address, read
 	// in one snapshot. publicURL is the address nodes are compared against.

@@ -44,11 +44,11 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	}
 	// Detaching starts the idle clock of a standalone Environment's compute, and
 	// ends an Environment whose compute was released while the Session held it.
-	if err := t.q.RecordStandaloneDetach(ctx, t.session); err != nil {
-		return err
-	}
 	environment, err := t.q.GetSessionEnvironmentID(ctx, t.session)
 	if err != nil {
+		return err
+	}
+	if err := t.q.RecordStandaloneActivity(ctx, environment); err != nil {
 		return err
 	}
 	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {

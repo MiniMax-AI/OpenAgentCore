@@ -38,10 +38,10 @@ FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE a.id = $1;
 
--- name: RecordStandaloneDetach :exec
+-- name: RecordStandaloneActivity :exec
 UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
-FROM sessions s JOIN environments e ON e.id = s.environment_id
-WHERE s.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released';
+FROM environments e
+WHERE e.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released';
 
 -- name: ExpireUncomputedStandaloneEnvironment :exec
 -- An unattached standalone Environment whose compute is all released has nothing to resume, so it ends.

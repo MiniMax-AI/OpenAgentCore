@@ -36,12 +36,16 @@ SELECT (
         WHERE s.id = sqlc.arg(session_id) AND f.state = 'pending')
 )::boolean;
 
--- name: ListSandboxResetSessions :many
-SELECT s.id, s.tenant_id
-FROM sessions s JOIN environments e ON e.id = s.environment_id
-WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
+-- name: ListSandboxResetCandidates :many
+-- Each hosted Environment that holds reset resources, with its live Session:
+-- the reset archives the Session, or expires an unattached standalone one.
+SELECT e.id, e.tenant_id, s.id AS session_id
+FROM environments e
+LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.configuration->>'type' = 'openai_hosted'
     AND e.status NOT IN ('failed', 'expired')
-    AND s.id > sqlc.arg(after_id)::uuid
+    AND (s.id IS NOT NULL OR NOT e.session_owned)
+    AND e.id > sqlc.arg(after_id)::uuid
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
         OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
         OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
@@ -51,20 +55,6 @@ WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
         OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = s.id AND t.status IN ('in_progress', 'waiting'))
         OR EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending')
     ))
-ORDER BY s.id LIMIT 32;
-
--- name: ListSandboxResetEnvironments :many
-SELECT e.tenant_id, e.id
-FROM environments e
-WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
-    AND e.status NOT IN ('failed', 'expired')
-    AND e.id > sqlc.arg(after_id)::uuid
-    AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
-    AND (sqlc.arg(force)::boolean OR NOT EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))
-    AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
-        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
-        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
-        OR EXISTS (SELECT 1 FROM runtime_reset_retained_environments r WHERE r.environment_id = e.id))
 ORDER BY e.id LIMIT 32;
 
 -- name: GetSandboxResetProject :one

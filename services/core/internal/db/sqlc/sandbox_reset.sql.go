@@ -165,57 +165,14 @@ func (q *Queries) GetSandboxResetProject(ctx context.Context, tenantID pgtype.UU
 	return id, err
 }
 
-const listSandboxResetEnvironments = `-- name: ListSandboxResetEnvironments :many
-SELECT e.tenant_id, e.id
+const listSandboxResetCandidates = `-- name: ListSandboxResetCandidates :many
+SELECT e.id, e.tenant_id, s.id AS session_id
 FROM environments e
-WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
+LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.configuration->>'type' = 'openai_hosted'
     AND e.status NOT IN ('failed', 'expired')
+    AND (s.id IS NOT NULL OR NOT e.session_owned)
     AND e.id > $1::uuid
-    AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
-    AND ($2::boolean OR NOT EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))
-    AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
-        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
-        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
-        OR EXISTS (SELECT 1 FROM runtime_reset_retained_environments r WHERE r.environment_id = e.id))
-ORDER BY e.id LIMIT 32
-`
-
-type ListSandboxResetEnvironmentsParams struct {
-	AfterID pgtype.UUID `json:"after_id"`
-	Force   bool        `json:"force"`
-}
-
-type ListSandboxResetEnvironmentsRow struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) ListSandboxResetEnvironments(ctx context.Context, arg ListSandboxResetEnvironmentsParams) ([]ListSandboxResetEnvironmentsRow, error) {
-	rows, err := q.db.Query(ctx, listSandboxResetEnvironments, arg.AfterID, arg.Force)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListSandboxResetEnvironmentsRow{}
-	for rows.Next() {
-		var i ListSandboxResetEnvironmentsRow
-		if err := rows.Scan(&i.TenantID, &i.ID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSandboxResetSessions = `-- name: ListSandboxResetSessions :many
-SELECT s.id, s.tenant_id
-FROM sessions s JOIN environments e ON e.id = s.environment_id
-WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
-    AND e.status NOT IN ('failed', 'expired')
-    AND s.id > $1::uuid
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
         OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
         OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
@@ -225,29 +182,32 @@ WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
         OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = s.id AND t.status IN ('in_progress', 'waiting'))
         OR EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending')
     ))
-ORDER BY s.id LIMIT 32
+ORDER BY e.id LIMIT 32
 `
 
-type ListSandboxResetSessionsParams struct {
+type ListSandboxResetCandidatesParams struct {
 	AfterID pgtype.UUID `json:"after_id"`
 	Force   bool        `json:"force"`
 }
 
-type ListSandboxResetSessionsRow struct {
-	ID       pgtype.UUID `json:"id"`
-	TenantID pgtype.UUID `json:"tenant_id"`
+type ListSandboxResetCandidatesRow struct {
+	ID        pgtype.UUID `json:"id"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	SessionID pgtype.UUID `json:"session_id"`
 }
 
-func (q *Queries) ListSandboxResetSessions(ctx context.Context, arg ListSandboxResetSessionsParams) ([]ListSandboxResetSessionsRow, error) {
-	rows, err := q.db.Query(ctx, listSandboxResetSessions, arg.AfterID, arg.Force)
+// Each hosted Environment that holds reset resources, with its live Session:
+// the reset archives the Session, or expires an unattached standalone one.
+func (q *Queries) ListSandboxResetCandidates(ctx context.Context, arg ListSandboxResetCandidatesParams) ([]ListSandboxResetCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listSandboxResetCandidates, arg.AfterID, arg.Force)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListSandboxResetSessionsRow{}
+	items := []ListSandboxResetCandidatesRow{}
 	for rows.Next() {
-		var i ListSandboxResetSessionsRow
-		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
+		var i ListSandboxResetCandidatesRow
+		if err := rows.Scan(&i.ID, &i.TenantID, &i.SessionID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

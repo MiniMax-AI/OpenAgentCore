@@ -169,14 +169,17 @@ func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allo
 	return e.cleanup(ctx, owner, computeLost)
 }
 
-// ExpireIdleUnattached ends a standalone Environment's compute at the
-// deployment idle timeout when its Provider cannot checkpoint: no Session is
-// attached, nothing is pending and its initialization is complete, or the
-// Environment already failed or expired and its compute is released at once.
+// ExpireIdleUnattached ends a standalone Environment's compute while no
+// Session is attached: at once when the Environment failed or expired, and,
+// when idle is set because its Provider cannot checkpoint, at the deployment
+// idle timeout once nothing is pending and its initialization is complete.
 // It revokes the device and expires the Environment in one commit; the allocation then
 // awaits ordinary cleanup. Any other state is ErrNotIdle.
-func (e *ExecutionOperations) ExpireIdleUnattached(ctx context.Context, owner Allocation) (Allocation, error) {
-	return e.cleanup(ctx, owner, idleExpiry)
+func (e *ExecutionOperations) ExpireIdleUnattached(ctx context.Context, owner Allocation, idle bool) (Allocation, error) {
+	if idle {
+		return e.cleanup(ctx, owner, idleExpiry)
+	}
+	return e.cleanup(ctx, owner, endedRelease)
 }
 
 // cleanupEvidence is the provider proof a cleanup commit consumes.
@@ -187,6 +190,7 @@ const (
 	creationAbsent
 	computeLost
 	idleExpiry
+	endedRelease
 )
 
 func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
@@ -195,14 +199,15 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		return Allocation{}, err
 	}
 	lost := evidence == computeLost
+	unattached := evidence == idleExpiry || evidence == endedRelease
 	var result Allocation
 	err = e.storage.WithAllocationCleanup(ctx, key, func(tx AllocationCleanupTx) error {
 		current, err := checkAllocation(tx, owner, lost)
 		if err != nil {
 			return err
 		}
-		if evidence == idleExpiry {
-			if err := checkIdleUnattached(ctx, tx, current); err != nil {
+		if unattached {
+			if err := checkIdleUnattached(ctx, tx, current, evidence == idleExpiry); err != nil {
 				return err
 			}
 		}
@@ -241,14 +246,14 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 				return ErrAllocationConflict
 			}
 			if !retain {
-				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost || evidence == idleExpiry, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost || unattached, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
 		if err != nil {
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || evidence == cleanupRequested || evidence == idleExpiry {
+		if err != nil || evidence == cleanupRequested || unattached {
 			result = pending
 			return err
 		}
@@ -265,7 +270,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 	return result, nil
 }
 
-func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation) error {
+func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation, idle bool) error {
 	if current.State != "running" || current.ComputePhase != "disabled" || current.AttachedSessionID != "" || current.Reclaimed {
 		return ErrNotIdle
 	}
@@ -277,8 +282,9 @@ func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Al
 		// Nothing can use this compute again: release it without waiting.
 		return nil
 	}
-	if environment.Initialization != "complete" {
-		// The initialization budget fails it, which ends its compute here.
+	if !idle || environment.Initialization != "complete" {
+		// With checkpoints an idle Environment suspends instead. The
+		// initialization budget fails an unfinished one, which ends it here.
 		return ErrNotIdle
 	}
 	activity, err := tx.LoadActivity(current)

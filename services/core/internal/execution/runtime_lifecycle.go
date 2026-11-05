@@ -410,9 +410,10 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if owner.ComputePhase != "disabled" {
 		return r.observeCompute(ctx, owner)
 	}
-	if owner.AttachedSessionID == "" && owner.State == "running" && owner.CreateSettled && r.config.Suspension == nil && !owner.Reclaimed && !owner.Expired {
-		// Without checkpoints an idle standalone Environment ends at the idle timeout.
-		expired, err := r.deployment.ExpireIdleUnattached(ctx, owner)
+	if owner.AttachedSessionID == "" && owner.State == "running" && owner.CreateSettled && !owner.Reclaimed && !owner.Expired {
+		// A failed or expired standalone Environment releases its compute;
+		// without checkpoints an idle one also ends at the idle timeout.
+		expired, err := r.deployment.ExpireIdleUnattached(ctx, owner, r.config.Suspension == nil)
 		if err == nil {
 			return r.observe(ctx, expired)
 		}

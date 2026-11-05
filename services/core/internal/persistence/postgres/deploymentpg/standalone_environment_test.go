@@ -70,13 +70,13 @@ func TestUnattachedEnvironmentExpiresAtTheIdleTimeout(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp(), compute_phase_changed_at=clock_timestamp(), created_at=clock_timestamp() WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := changes.ExpireIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired before the idle timeout", err)
 	}
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp() - interval '1 day', compute_phase_changed_at=clock_timestamp() - interval '1 day', created_at=clock_timestamp() - interval '1 day' WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	expired, err := changes.ExpireIdleUnattached(t.Context(), owner)
+	expired, err := changes.ExpireIdleUnattached(t.Context(), owner, true)
 	if err != nil || expired.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "expired" {
 		t.Fatal("idle Environment did not expire", expired, err)
 	}
@@ -144,7 +144,7 @@ func TestDetachStartsTheIdleClock(t *testing.T) {
 		t.Fatal(err)
 	}
 	deleteSession(t, f, owner.Key(), attachSession(t, f, owner.Key()))
-	if _, err := changes.ExpireIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired right after the detach", err)
 	}
 }
@@ -195,7 +195,7 @@ func TestDetachAfterReleasedComputeExpiresTheEnvironment(t *testing.T) {
 }
 
 // A failed unattached Environment releases its compute without waiting for the
-// idle timeout.
+// idle timeout, also where the Provider suspends idle compute.
 func TestFailedUnattachedEnvironmentReleasesItsCompute(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
@@ -207,8 +207,33 @@ func TestFailedUnattachedEnvironmentReleasesItsCompute(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET status='failed' WHERE id=$1`, owner.Key().EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	released, err := changes.ExpireIdleUnattached(t.Context(), owner)
+	released, err := changes.ExpireIdleUnattached(t.Context(), owner, false)
 	if err != nil || released.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "failed" {
 		t.Fatal("failed Environment kept its compute", released, err)
+	}
+}
+
+// Without checkpoints, the idle clock of an unattached Environment starts when
+// its initialization completes, not when its compute was created.
+func TestInitializationStartsTheIdleClock(t *testing.T) {
+	f := newFixture(t)
+	changes, lease := f.execution(t)
+	installation, _ := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "disabled")
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET created_at=clock_timestamp() - interval '1 day' WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET initialization='running' WHERE id=$1`, owner.Key().EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	key := owner.Key()
+	if err := sessionpg.NewExecution(lease).WithInitialization(t.Context(), key.TenantID, key.EnvironmentID, func(ctx context.Context, tx sessions.InitializationTx, _ sessions.LockedSession) error {
+		_, err := tx.CompleteInitialization(ctx, key.EnvironmentID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
+		t.Fatal("expired as soon as it was ready", err)
 	}
 }

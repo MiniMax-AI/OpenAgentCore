@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: a3c5c4ff320b94acc3dfc00907fce770cd938081367e35e700811c6a0ec6b473
+source_hash: 4a8e24ac9a4068475483f02ced995b498ffa45d6e2ebf0c71ab376b5ef338335
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment，或挂载此前由 `POST /agents/environments` 准备好的 Environment（[独立 Environment](#standalone-environments)）。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -38,7 +38,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`ready`、`connected`、`disconnected`、`suspended`、`expired`、`failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | 相同的七种状态，并带可为 null 的 error |
 
-Core 在事件中发出 `ready`，资源对未挂载 Session 的已准备独立 Environment 读作 `ready`（[投影](#standalone-environments)）。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
+Core 在事件中发出 `ready`，资源对未挂载 Session 的已准备独立 Environment 读作 `ready`，首次挂载前和每次卸载后都是如此（[投影](#standalone-environments)）。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
 
 ```mermaid
 stateDiagram-v2
@@ -88,7 +88,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 **文件。** 没有挂载 Session 时（首次挂载前和卸载后），[Environment files](environment-files.md) 的路由返回 409 `conflict_error`，“Attach a session to this environment before using its files.”
 
-**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于 Provider。支持检查点时，它在空闲超时（`idle_seconds`，默认 300 秒）后挂起，并在 24 小时保留期结束时过期。不支持检查点时它无法挂起，因此在 `idle_seconds` 内没有活动后过期；尚无任何活动时，空闲时间从创建起算。两种情况下，确认计算丢失后它都会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有可重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载，Core 会在它结束后删除其工作区。
+**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于 Provider。支持检查点时，它在空闲超时（`idle_seconds`，默认 300 秒）后挂起，并在 24 小时保留期结束时过期。不支持检查点时它无法挂起，因此在 `idle_seconds` 内没有活动后过期；尚无任何活动时，空闲时间从初始化完成起算。失败的 Environment 会立即释放其计算。两种情况下，确认计算丢失后它都会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有可重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载，Core 会在它结束后删除其工作区。
 
 ## 放置方式 {#placements}
 

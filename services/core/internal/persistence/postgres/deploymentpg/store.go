@@ -282,22 +282,17 @@ func (s *Store) ResetSessions(ctx context.Context, after string, force bool) ([]
 			return nil, err
 		}
 	}
-	rows, err := s.pool.Queries().ListSandboxResetSessions(ctx, sqlc.ListSandboxResetSessionsParams{AfterID: cursor, Force: force})
+	rows, err := s.pool.Queries().ListSandboxResetCandidates(ctx, sqlc.ListSandboxResetCandidatesParams{AfterID: cursor, Force: force})
 	if err != nil {
 		return nil, err
 	}
 	result := make([]deployment.ResetSession, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, deployment.ResetSession{SessionID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
-	}
-	if len(result) < 32 {
-		environments, err := s.pool.Queries().ListSandboxResetEnvironments(ctx, sqlc.ListSandboxResetEnvironmentsParams{AfterID: cursor, Force: force})
-		if err != nil {
-			return nil, err
+		session := ""
+		if row.SessionID.Valid {
+			session = uuidString(row.SessionID)
 		}
-		for _, row := range environments[:min(len(environments), 32-len(result))] {
-			result = append(result, deployment.ResetSession{EnvironmentID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
-		}
+		result = append(result, deployment.ResetSession{SessionID: session, EnvironmentID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
 	}
 	return result, nil
 }
