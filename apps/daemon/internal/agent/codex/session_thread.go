@@ -5,10 +5,13 @@ import (
 	"fmt"
 )
 
-// Harnesses run unattended with the launching user's permissions: Codex never
-// raises a native approval request and applies no inner sandbox.
+// Harnesses run unattended with the launching user's permissions and no inner
+// sandbox. Codex asks for approval only under review auto_review, which sends
+// each request to its native reviewer.
 const (
 	approvalPolicyNever     = "never"
+	approvalPolicyOnRequest = "on-request"
+	approvalsReviewerUser   = "user"
 	sandboxDangerFullAccess = "danger-full-access"
 )
 

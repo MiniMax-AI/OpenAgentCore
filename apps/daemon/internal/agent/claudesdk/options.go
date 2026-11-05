@@ -52,9 +52,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if err := harnessconfiguration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
 		return fail(err.Error())
 	}
-	if err := harnessconfiguration.Declaration.ValidateTurnSettings(req.Turn); err != nil {
-		return fail(err.Error())
-	}
 	start.Model = req.Turn.Model
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig, req.Turn.ReasoningEffort)
 	if err := req.ValidateToolSearch(true); err != nil {

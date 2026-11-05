@@ -368,7 +368,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		}
 	}()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Declaration{})
 	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return native, nil })
 	control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: environment}, signal: make(chan os.Signal, 1)}
 	finished := make(chan error, 1)

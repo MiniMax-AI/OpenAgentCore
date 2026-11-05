@@ -17,13 +17,13 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	configuration := harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "responses"}}}
 	calls := 0
 	expected := errors.New("native entry reached")
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration)
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Declaration{Configuration: configuration})
 	registry.RegisterExecutor("fixture", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls++
 		return nil, expected
 	})
 	configuration.Providers[0].Protocol = "anthropic"
-	executor, _ := registry.ResolveExecutor("fixture")
+	executor, _, _ := registry.ResolveExecutor("fixture")
 	for _, request := range []proto.PromptRequestPayload{
 		{Turn: proto.TurnSettings{Model: " "}},
 		{Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}}},
@@ -46,5 +46,5 @@ func TestRegistryRejectsInvalidConfigurationDeclaration(t *testing.T) {
 			t.Fatal("invalid configuration registered")
 		}
 	}()
-	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}})
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Declaration{Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}}})
 }

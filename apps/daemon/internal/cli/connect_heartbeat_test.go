@@ -14,8 +14,8 @@ func TestHeartbeatNeverAdvertisesUndeclaredExport(t *testing.T) {
 	exporting := local
 	exporting.WorkspaceOutputExport = proto.CapabilitySupported
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "declared", Available: true, Capabilities: prototest.Capabilities(exporting)}, harnessconfig.Configuration{})
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "undeclared", Available: true, Capabilities: prototest.Capabilities(local)}, harnessconfig.Configuration{})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "declared", Available: true, Capabilities: prototest.Capabilities(exporting)}, harnessconfig.Declaration{})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "undeclared", Available: true, Capabilities: prototest.Capabilities(local)}, harnessconfig.Declaration{})
 	for _, canExport := range []bool{false, true} {
 		for _, kind := range advertisedKinds(registry, canExport) {
 			if got, want := kind.Capabilities.WorkspaceOutputExport.IsSupported(), canExport && kind.Kind == "declared"; got != want {

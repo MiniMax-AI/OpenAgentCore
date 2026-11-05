@@ -71,9 +71,6 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 		"high-verbosity":    {Turn: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "high"}},
 		"unknown-verbosity": {Turn: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "invalid"}},
 		"summary":           {Turn: model, ExecutionControls: &proto.ExecutionControls{ReasoningSummary: "concise"}},
-		"no-effort":         {Turn: proto.TurnSettings{Model: "native-model", ReasoningEffort: "none"}},
-		"minimal-effort":    {Turn: proto.TurnSettings{Model: "native-model", ReasoningEffort: "minimal"}},
-		"service-tier":      {Turn: proto.TurnSettings{Model: "native-model", ServiceTier: "priority"}},
 	}
 	for name, request := range cases {
 		t.Run(name, func(t *testing.T) {

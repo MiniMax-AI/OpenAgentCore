@@ -23,6 +23,7 @@ type executorState struct {
 	nativeID                               string
 	ctx                                    context.Context
 	cancel                                 context.CancelFunc
+	turn                                   proto.TurnSettings
 	admission                              *preparationState
 	run                                    *sessionState
 	preparing                              bool
@@ -34,8 +35,10 @@ type executorState struct {
 	idleLease                              uint64
 }
 
+// executorFingerprint covers the configuration a retained Executor fixes. The
+// Turn settings are not part of it: ValidateSessionUpdate decides their change.
 func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
-	req.RunID, req.Input = "", nil
+	req.RunID, req.Input, req.Turn = "", nil, proto.TurnSettings{}
 	req.AgentSessionID = ""
 	req.RequireExistingNativeSession = false
 	data, err := json.Marshal(req)
@@ -51,7 +54,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if !available {
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
-	factory, err := r.registry.ResolveExecutor(req.AgentKind)
+	factory, declaration, err := r.registry.ResolveExecutor(req.AgentKind)
 	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
@@ -60,6 +63,9 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
+		return r.rejectPreparation(env, "unsupported_configuration")
+	}
+	if declaration.ValidateTurnSettings(req.Turn) != nil {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	fingerprint, err := executorFingerprint(req)
@@ -115,7 +121,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if owner != nil {
 		code := ""
 		switch {
-		case owner.environmentID != req.EnvironmentID() || owner.fingerprint != fingerprint:
+		case owner.environmentID != req.EnvironmentID() || owner.fingerprint != fingerprint || declaration.ValidateSessionUpdate(owner.turn, req.Turn) != nil:
 			code = "configuration_conflict"
 		case owner.invalid:
 			code = "executor_cleanup_unconfirmed"
@@ -134,13 +140,14 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 			owner.timer.Stop()
 		}
 		owner.idleLease++
+		owner.turn = req.Turn
 	} else {
 		if len(r.executors) >= executorIdleCapacity+preparationCapacity {
 			r.mu.Unlock()
 			return r.rejectPreparation(env, "executor_capacity")
 		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
+		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, turn: req.Turn, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}

@@ -117,14 +117,17 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
     assert list(sessions.list(metadata={key: value, "absent": "x"})) == []
     assert list(other.beta.agents.sessions.list(metadata={key: value})) == []
     expect_error(BadRequestError, lambda: sessions.list(metadata={"k" * 65: "v"}))
-    # No built-in Harness applies a settings update natively, so a real change is a typed error; a same-value update succeeds.
+    # Codex applies model, effort, tier and review changes from the next root Turn; it cannot reset an effort.
     agent = current.agent
-    same = {"model": agent.model, "reasoning": {"effort": None}, "service_tier": None}
     assert agent.reasoning.effort is None and agent.service_tier == "auto"
-    assert sessions.update(first.id, agent=same, review="none") == current
+    assert sessions.update(first.id, agent={"model": agent.model, "reasoning": {"effort": None}, "service_tier": None}, review="none") == current
     assert sessions.update(first.id, agent={}) == current
-    for fields in [{"review": "auto_review"}, {"agent": {"model": "other"}}, {"agent": {"reasoning": {"effort": "high"}}}, {"agent": {"service_tier": "flex"}}]:
-        expect_error(BadRequestError, lambda: sessions.update(first.id, **fields))
+    changed = sessions.update(first.id, agent={"model": "other", "reasoning": {"effort": "high"}, "service_tier": "flex"}, review="auto_review")
+    assert (changed.agent.model, changed.agent.reasoning.effort, changed.agent.service_tier, changed.review) == ("other", "high", "flex", "auto_review")
+    assert sessions.retrieve(first.id) == changed
+    expect_error(BadRequestError, lambda: sessions.update(first.id, agent={"reasoning": {"effort": None}}))
+    current = sessions.update(first.id, agent={"model": agent.model, "service_tier": None}, review="none")
+    assert (current.agent.model, current.agent.reasoning.effort, current.agent.service_tier, current.review) == (agent.model, "high", "auto", None)
     with httpx2.Client(trust_env=False, timeout=10) as raw:
         for tools in ([], [{"type": "tool_search"}]):
             response = raw.post(url, headers=headers, json={"agent": {"tools": tools}})

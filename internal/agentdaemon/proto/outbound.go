@@ -83,6 +83,8 @@ type TurnSettings struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// ServiceTier is never "auto": auto means unset.
 	ServiceTier string `json:"service_tier,omitempty"`
+	// Review is "auto_review"; empty is none.
+	Review string `json:"review,omitempty"`
 }
 
 // WebSearchControl is the resolved official web_search tool. A nil

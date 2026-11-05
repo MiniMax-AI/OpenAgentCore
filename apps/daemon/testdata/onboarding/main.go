@@ -165,7 +165,7 @@ func run() error {
 	h := &harness{history: map[string]string{}}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		Streaming: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
-	})}, harnessconfig.Configuration{})
+	})}, harnessconfig.Declaration{})
 	registry.RegisterExecutor("fixture_harness", h.prepare)
 	sink := &sender{encoder: json.NewEncoder(os.Stdout)}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sink, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})

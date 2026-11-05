@@ -133,9 +133,9 @@ func (s *Session) registerHandlers() {
 	rpc.OnNotification("thread/tokenUsage/updated", s.onUsageUpdated)
 	rpc.OnNotification("error", s.onErrorNotif)
 
-	// Harnesses run unattended. Approval policy never and the session plan keep
-	// native asks from being raised; any other server request gets the
-	// client's method-not-found reply.
+	// Harnesses run unattended. Approval policy never raises no native ask, and
+	// under auto_review the reviewer answers. Any server request that still
+	// reaches the client gets method-not-found, which Codex turns into a denial.
 	s.onServerRequest("item/tool/call", s.handleFunctionCall)
 }
 

@@ -53,7 +53,8 @@ var Declaration = harnessconfig.Declaration{
 	// model_verbosity and features.code_mode. Native indexed search has no
 	// official value. Official auto service tier means unset, and fast is Codex's
 	// native alias of priority. Codex ignores a value the selected model does not
-	// support.
+	// support. Model, effort, tier and review also go on every turn/start, which
+	// applies them from that Turn on; Codex cannot clear an effort once set.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "cached", "live"},
 		WebSearchSettings:       true,
@@ -62,10 +63,11 @@ var Declaration = harnessconfig.Declaration{
 		ServiceTiers:            []string{"default", "flex", "priority", "fast"},
 		ProgrammaticToolCalling: []bool{true, false},
 		TextVerbosities:         []string{"low", "medium", "high"},
+		Reviews:                 []string{"auto_review"},
 	},
 	Placements:           []string{"none", "self_hosted", "openai_hosted"},
 	MCPOrigins:           []string{"service", "environment"},
-	SessionUpdates:       harnessconfig.SessionUpdates{Model: proto.CapabilityUnsupported, ReasoningEffort: proto.CapabilityUnsupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilityUnsupported},
+	SessionUpdates:       harnessconfig.SessionUpdates{Model: proto.CapabilitySupported, ReasoningEffort: proto.CapabilitySupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilitySupported},
 	WhitespaceOnlyText:   proto.CapabilitySupported,
 	ValidateMessageInput: rejectRemoteImages,
 	ValidateFunctionResult: func(result proto.FunctionResultPayload) error {
