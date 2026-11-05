@@ -165,6 +165,43 @@ func (q *Queries) GetSandboxResetProject(ctx context.Context, tenantID pgtype.UU
 	return id, err
 }
 
+const listSandboxResetEnvironments = `-- name: ListSandboxResetEnvironments :many
+SELECT e.tenant_id, e.id
+FROM environments e
+WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
+    AND e.status NOT IN ('failed', 'expired')
+    AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+    AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
+        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
+        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
+ORDER BY e.id LIMIT 32
+`
+
+type ListSandboxResetEnvironmentsRow struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) ListSandboxResetEnvironments(ctx context.Context) ([]ListSandboxResetEnvironmentsRow, error) {
+	rows, err := q.db.Query(ctx, listSandboxResetEnvironments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSandboxResetEnvironmentsRow{}
+	for rows.Next() {
+		var i ListSandboxResetEnvironmentsRow
+		if err := rows.Scan(&i.TenantID, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSandboxResetSessions = `-- name: ListSandboxResetSessions :many
 SELECT s.id, s.tenant_id
 FROM sessions s JOIN environments e ON e.id = s.environment_id

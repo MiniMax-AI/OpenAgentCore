@@ -467,6 +467,17 @@ func (q *Queries) LockRuntimeNodePresence(ctx context.Context, id pgtype.UUID) (
 	return id, err
 }
 
+const releaseEnvironmentRuntimePlacement = `-- name: ReleaseEnvironmentRuntimePlacement :exec
+UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
+WHERE runtime_placements.environment_id=$1
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
+`
+
+func (q *Queries) ReleaseEnvironmentRuntimePlacement(ctx context.Context, environmentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, releaseEnvironmentRuntimePlacement, environmentID)
+	return err
+}
+
 const releaseFailedRuntimePlacement = `-- name: ReleaseFailedRuntimePlacement :exec
 UPDATE runtime_placements SET released_at = clock_timestamp()
 WHERE runtime_placements.environment_id = $1 AND runtime_placements.node_id = $2 AND runtime_placements.deployment_generation = $3 AND runtime_placements.released_at IS NULL

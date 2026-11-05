@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: c7fa5ae60ef0d658003d584849e3782ac9a322b651ee801a4bf0f50bf4f55ea8
+source_hash: 3fe25ce1e11c7471bfc8fe2cbcae88d961b77075baf8ddf757e2e83df53a8dad
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment，或挂载此前由 `POST /agents/environments` 准备好的 Environment（[独立 Environment](#standalone-environments)）。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -83,7 +83,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 **文件。** 未挂载 Session 时，[Environment files](environment-files.md) 的路由返回 409 `conflict_error`，“Attach a session to this environment before using its files.”
 
-**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化。Provider 支持检查点时，它在空闲超时后挂起，并在保留期结束时过期；不支持检查点时，它在空闲超时后过期。确认计算丢失后它过期；Core 从不在新计算上替换它，因为没有可重放的工作。已过期的 Environment 不能挂载。
+**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于 Provider。支持检查点时，它在空闲超时（`idle_seconds`，默认 300 秒）后挂起，并在 24 小时保留期结束时过期。不支持检查点时它无法挂起，因此在 `idle_seconds` 内没有活动后过期；尚无任何活动时，空闲时间从创建起算。两种情况下，确认计算丢失后它都会过期，因为 Core 从不在新计算上替换它：没有可重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载。
 
 ## 放置方式 {#placements}
 

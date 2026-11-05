@@ -62,6 +62,9 @@ type ExecutionStorage interface {
 	// It commits only when both succeed. A malformed tenant is
 	// ErrInvalidInput; a malformed or missing Session is sessions.ErrNotFound.
 	WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
+	// WithResetEnvironment runs apply in one leased transaction that locks
+	// the Environment and its attached Session, if any.
+	WithResetEnvironment(ctx context.Context, key AllocationKey, apply func(ResetEnvironmentTx) error) error
 	// ClearWake clears the allocation's wake request unless activity newer
 	// than observed arrived. It runs on the lease.
 	ClearWake(ctx context.Context, allocationID string, observed time.Time) error
@@ -230,7 +233,8 @@ type Reader interface {
 	// ReadNodes runs apply in one read-only snapshot.
 	ReadNodes(ctx context.Context, apply func(NodeReads) error) error
 	// ResetSessions returns up to 32 hosted Sessions after the given Session
-	// ID, in ID order, that still hold or await deployment resources. Without
+	// ID, in ID order, that still hold or await deployment resources, followed
+	// by unattached standalone Environments while the page has room. Without
 	// force it skips Sessions with a running Turn or a pending file write. An
 	// empty after starts at the beginning; a malformed one is ErrInvalidInput.
 	ResetSessions(ctx context.Context, after string, force bool) ([]ResetSession, error)

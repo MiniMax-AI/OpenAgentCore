@@ -70,6 +70,11 @@ UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp()
 WHERE environment_id IN(SELECT s.environment_id FROM sessions s WHERE s.id=$1)
 AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released');
 
+-- name: ReleaseEnvironmentRuntimePlacement :exec
+UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
+WHERE runtime_placements.environment_id=$1
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released');
+
 -- name: ListNodeRuntimeAllocations :many
 SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,e.initialization,a.created_at,a.environment_id,s.id AS attached_session_id,e.tenant_id
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id LEFT JOIN sessions s ON s.environment_id=e.id AND s.deleted_at IS NULL

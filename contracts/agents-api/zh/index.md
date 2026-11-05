@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 3f29c2e19d355f59bdb3cb1e40558cfd8612462e4f13ccc670165d9c63eef478
+source_hash: 4277da1f8858fa6605e7f62245a4e8460a3540d8cc40c639a291886c8aa9cf12
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -68,7 +68,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **独立 Environment**（[独立 Environment](environments.md#standalone-environments)）
 
-- `POST /agents/environments` 的 `Idempotency-Key` 为 1–128 字节，与 Session 相同；官方上限为 1–256。重试按发送的正文比较，但会重新解析所指定的模板，因此模板被删除后的重试会失败，而不是返回原 Environment。
 - Core 没有预热 beta 的门控；官方的创建和列出需要该 beta 的访问权限。
 - `vault_ids` 必须为 null 或 `[]`；非空列表返回 400。Credential 只能通过 Session 到达 Environment。
 - 独立 Environment 以自己的网络策略创建，不会为后续 Session 放宽。若该策略无法到达模型提供方，挂载返回 400 `model_provider_unreachable`；官方服务没有此错误。
@@ -164,7 +163,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 - 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- 沙箱重置不归档独立 Environment；未挂载的 Environment 会让重置保持待定，直到它在空闲超时或保留期结束时过期。
 
 **执行和历史**
 

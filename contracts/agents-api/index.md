@@ -65,7 +65,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Standalone Environments** ([standalone Environments](./environments.md#standalone-environments))
 
-- `Idempotency-Key` on `POST /agents/environments` is 1–128 bytes, as for Sessions; the official limit is 1–256. A retry compares the body as sent, but it resolves a named Template again, so a retry after that Template was deleted fails instead of returning the Environment.
 - Core has no prewarming-beta gate; the official create and list require access to it.
 - `vault_ids` must be null or `[]`; a nonempty list returns 400. Credentials reach an Environment only through its Session.
 - A standalone Environment is created with its own network policy and is not widened for a later Session. An attach whose model provider the policy cannot reach returns 400 `model_provider_unreachable`; the official service has no such error.
@@ -161,7 +160,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 - A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- A sandbox reset does not archive a standalone Environment; an unattached one leaves the reset pending until it expires at its idle timeout or the end of its retention.
 
 **Execution and history**
 

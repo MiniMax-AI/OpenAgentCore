@@ -53,6 +53,17 @@ WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
     ))
 ORDER BY s.id LIMIT 32;
 
+-- name: ListSandboxResetEnvironments :many
+SELECT e.tenant_id, e.id
+FROM environments e
+WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
+    AND e.status NOT IN ('failed', 'expired')
+    AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+    AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
+        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
+        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
+ORDER BY e.id LIMIT 32;
+
 -- name: GetSandboxResetProject :one
 SELECT id FROM projects WHERE tenant_id = $1;
 

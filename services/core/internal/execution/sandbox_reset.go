@@ -102,11 +102,16 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		_, err := m.deployment.ArchiveResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
-		m.resetCursor = candidate.SessionID
+		var err error
+		if candidate.SessionID == "" {
+			err = m.deployment.ExpireResetEnvironment(ctx, deployment.AllocationKey{TenantID: candidate.TenantID, EnvironmentID: candidate.EnvironmentID}, current.Generation, current.Reset.RequestedAt)
+		} else {
+			_, err = m.deployment.ArchiveResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
+			m.resetCursor = candidate.SessionID
+		}
 		if err != nil && !errors.Is(err, deployment.ErrSandboxResetSessionBusy) && !errors.Is(err, sessions.ErrNotFound) {
 			// Do not log a provider body, request, credential or stored provenance.
-			log.Warn(ctx, "Sandbox reset archive remains pending", "session_id", candidate.SessionID)
+			log.Warn(ctx, "Sandbox reset archive remains pending", "session_id", candidate.SessionID, "environment_id", candidate.EnvironmentID)
 		}
 	}
 	if len(candidates) < 32 {

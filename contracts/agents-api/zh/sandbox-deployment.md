@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: a0af02df23b941a19ddf4e711e1786cb21dcb78217a3ff9b0bee8ac524ea72b7
+source_hash: c9b1fa302e52e7a40bfcc04bfd7971043cc0d98b49a96da66b992df319a4544a
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -183,7 +183,7 @@ flowchart TD
 {"expected_generation": 7, "clear": "auto", "deadline_seconds": 3600}
 ```
 
-`clear` 必填，可取 `auto` 或 `force`。`deadline_seconds` 适用于 `auto`，默认值为 3600，接受 300 到 86400；`force` 必须省略该字段。在关闭新的托管准入之前，Core 会持久保存绝对截止时间和请求方的审计来源信息；请求结束后以及跨重启时，执行所有者会继续推进清除。在 `auto` 模式下，Core 会归档空闲的托管 Session，包括排队或待处理工作以及已暂停沙箱，并等待正在执行或等待的 root Turn 和 Subagent Turn 以及待处理的文件写入完成，同时在 Session 锁下重新检查。到达持久保存的截止时间时，Core 会持久地将操作升级为 `force`。`force` 会对每个符合条件的托管 Session 使用常规归档取消和清理路径。绝不触碰自托管 Session。重置只归档 Session：未挂载的[独立 Environment](environments.md#standalone-environments) 会让重置保持待定，直到它在空闲超时或保留期结束时过期。
+`clear` 必填，可取 `auto` 或 `force`。`deadline_seconds` 适用于 `auto`，默认值为 3600，接受 300 到 86400；`force` 必须省略该字段。在关闭新的托管准入之前，Core 会持久保存绝对截止时间和请求方的审计来源信息；请求结束后以及跨重启时，执行所有者会继续推进清除。在 `auto` 模式下，Core 会归档空闲的托管 Session，包括排队或待处理工作以及已暂停沙箱，并等待正在执行或等待的 root Turn 和 Subagent Turn 以及待处理的文件写入完成，同时在 Session 锁下重新检查。到达持久保存的截止时间时，Core 会持久地将操作升级为 `force`。`force` 会对每个符合条件的托管 Session 使用常规归档取消和清理路径。绝不触碰自托管 Session。重置还会让每个未挂载的[独立 Environment](environments.md#standalone-environments)过期，并请求清理它。
 
 ```mermaid
 stateDiagram-v2

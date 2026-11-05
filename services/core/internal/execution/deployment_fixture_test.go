@@ -264,6 +264,10 @@ func (s *strictExecutionStorage) WithAllocationCleanup(ctx context.Context, key 
 	return s.withAllocationCleanup(ctx, key, apply)
 }
 
+func (s *strictExecutionStorage) WithResetEnvironment(context.Context, deployment.AllocationKey, func(deployment.ResetEnvironmentTx) error) error {
+	return unexpectedDeploymentCall(s.t, "WithResetEnvironment")
+}
+
 func (s *strictExecutionStorage) WithSessionArchive(context.Context, string, string, func(context.Context, sessions.LockedSession, deployment.SessionArchiveTx) error) error {
 	return unexpectedDeploymentCall(s.t, "WithSessionArchive")
 }

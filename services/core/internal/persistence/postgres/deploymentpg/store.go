@@ -290,6 +290,15 @@ func (s *Store) ResetSessions(ctx context.Context, after string, force bool) ([]
 	for _, row := range rows {
 		result = append(result, deployment.ResetSession{SessionID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
 	}
+	if len(result) < 32 {
+		environments, err := s.pool.Queries().ListSandboxResetEnvironments(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range environments[:min(len(environments), 32-len(result))] {
+			result = append(result, deployment.ResetSession{EnvironmentID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
+		}
+	}
 	return result, nil
 }
 
