@@ -14,7 +14,7 @@ FROM execution_project_scopes p CROSS JOIN issued
 WHERE p.tenant_id = sqlc.arg(tenant_id) AND p.organization_id = sqlc.arg(organization_id)
     AND p.project_id = sqlc.arg(project_id)
     AND (sqlc.narg(environment_id)::uuid IS NULL OR EXISTS (
-        SELECT 1 FROM environments e JOIN sessions s ON s.id = e.session_id
+        SELECT 1 FROM environments e JOIN sessions s ON s.environment_id = e.id
         WHERE e.id = sqlc.narg(environment_id) AND s.tenant_id = p.tenant_id AND s.deleted_at IS NULL
             AND s.creator_kind = sqlc.arg(subject_kind) AND s.creator_id = sqlc.arg(subject_id)
     ))
@@ -46,7 +46,7 @@ SELECT s.tenant_id
 FROM environment_executor_credentials c
 JOIN execution_project_scopes p ON p.tenant_id = c.tenant_id
 JOIN environments e ON e.id = sqlc.arg(environment_id)
-JOIN sessions s ON s.id = e.session_id
+JOIN sessions s ON s.environment_id = e.id
 WHERE c.token_sha256 = sqlc.arg(token_sha256) AND c.revoked_at IS NULL
     AND c.tenant_id = s.tenant_id AND c.subject_kind = s.creator_kind AND c.subject_id = s.creator_id
     AND (c.environment_id IS NULL OR c.environment_id = e.id) AND s.deleted_at IS NULL;
@@ -62,8 +62,8 @@ ORDER BY created_at, key_id;
 SELECT d.id AS device_id, d.executor_key_id, d.created_at AS enrolled_at,
     d.last_seen_at, a.credential_hash, e.status AS environment_status
 FROM environments e
-JOIN sessions s ON s.id = e.session_id
+JOIN sessions s ON s.environment_id = e.id
 LEFT JOIN devices d ON d.environment_id = e.id AND d.tenant_id = s.tenant_id
 LEFT JOIN runtime_device_authority a ON a.id = d.id
 WHERE e.id = sqlc.arg(environment_id) AND s.tenant_id = sqlc.arg(tenant_id)
-    AND s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'self_hosted';
+    AND s.deleted_at IS NULL AND e.configuration->>'type' = 'self_hosted';

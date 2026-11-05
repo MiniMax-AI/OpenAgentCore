@@ -11,28 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachSessionEnvironment = `-- name: AttachSessionEnvironment :exec
+UPDATE sessions SET environment_id = $2 WHERE id = $1
+`
+
+type AttachSessionEnvironmentParams struct {
+	ID            pgtype.UUID `json:"id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+}
+
+func (q *Queries) AttachSessionEnvironment(ctx context.Context, arg AttachSessionEnvironmentParams) error {
+	_, err := q.db.Exec(ctx, attachSessionEnvironment, arg.ID, arg.EnvironmentID)
+	return err
+}
+
 const createEnvironment = `-- name: CreateEnvironment :exec
-INSERT INTO environments (id, session_id, initialization)
-VALUES ($1, $2, CASE WHEN (SELECT configuration->'environment'->>'type' FROM sessions WHERE id = $2) = 'openai_hosted'
- OR EXISTS (SELECT 1 FROM initial_environment_files WHERE session_id = $2)
- OR EXISTS (SELECT 1 FROM environment_setups WHERE session_id = $2) THEN 'pending' ELSE 'complete' END)
+INSERT INTO environments (id, tenant_id, configuration, initialization)
+VALUES ($1, $2, $3, CASE WHEN $4::boolean THEN 'pending' ELSE 'complete' END)
 `
 
 type CreateEnvironmentParams struct {
-	ID        pgtype.UUID `json:"id"`
-	SessionID pgtype.UUID `json:"session_id"`
+	ID            pgtype.UUID `json:"id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	Configuration []byte      `json:"configuration"`
+	Prepared      bool        `json:"prepared"`
 }
 
 func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) error {
-	_, err := q.db.Exec(ctx, createEnvironment, arg.ID, arg.SessionID)
+	_, err := q.db.Exec(ctx, createEnvironment,
+		arg.ID,
+		arg.TenantID,
+		arg.Configuration,
+		arg.Prepared,
+	)
 	return err
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration,
+SELECT e.id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, e.tenant_id, e.configuration, e.session_owned, e.idempotency_key, e.request_hash, e.creator_kind, e.creator_id, s.id AS attached_session_id,
        EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
-FROM environments e JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND e.id = $2 AND s.deleted_at IS NULL
+FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = $1 AND e.id = $2 AND (s.id IS NOT NULL OR NOT e.session_owned)
 `
 
 type GetEnvironmentParams struct {
@@ -42,8 +61,7 @@ type GetEnvironmentParams struct {
 
 type GetEnvironmentRow struct {
 	Environment       Environment `json:"environment"`
-	TenantID          pgtype.UUID `json:"tenant_id"`
-	Configuration     []byte      `json:"configuration"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
 	ExternalWorkspace bool        `json:"external_workspace"`
 }
 
@@ -52,7 +70,6 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 	var i GetEnvironmentRow
 	err := row.Scan(
 		&i.Environment.ID,
-		&i.Environment.SessionID,
 		&i.Environment.Status,
 		&i.Environment.CreatedAt,
 		&i.Environment.FailureReason,
@@ -60,17 +77,46 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 		&i.Environment.FailureDetail,
 		&i.Environment.Initialization,
 		&i.Environment.InitializationSteps,
-		&i.TenantID,
-		&i.Configuration,
+		&i.Environment.TenantID,
+		&i.Environment.Configuration,
+		&i.Environment.SessionOwned,
+		&i.Environment.IdempotencyKey,
+		&i.Environment.RequestHash,
+		&i.Environment.CreatorKind,
+		&i.Environment.CreatorID,
+		&i.AttachedSessionID,
 		&i.ExternalWorkspace,
 	)
 	return i, err
 }
 
+const getEnvironmentAttachment = `-- name: GetEnvironmentAttachment :one
+SELECT e.session_owned, s.id AS attached_session_id
+FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = $1 AND e.id = $2
+`
+
+type GetEnvironmentAttachmentParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type GetEnvironmentAttachmentRow struct {
+	SessionOwned      bool        `json:"session_owned"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
+}
+
+func (q *Queries) GetEnvironmentAttachment(ctx context.Context, arg GetEnvironmentAttachmentParams) (GetEnvironmentAttachmentRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentAttachment, arg.TenantID, arg.ID)
+	var i GetEnvironmentAttachmentRow
+	err := row.Scan(&i.SessionOwned, &i.AttachedSessionID)
+	return i, err
+}
+
 const getSessionEnvironment = `-- name: GetSessionEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration,
+SELECT e.id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, e.tenant_id, e.configuration, e.session_owned, e.idempotency_key, e.request_hash, e.creator_kind, e.creator_id, s.id AS attached_session_id,
        EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
-FROM environments e JOIN sessions s ON s.id = e.session_id
+FROM sessions s JOIN environments e ON e.id = s.environment_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
 `
 
@@ -81,8 +127,7 @@ type GetSessionEnvironmentParams struct {
 
 type GetSessionEnvironmentRow struct {
 	Environment       Environment `json:"environment"`
-	TenantID          pgtype.UUID `json:"tenant_id"`
-	Configuration     []byte      `json:"configuration"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
 	ExternalWorkspace bool        `json:"external_workspace"`
 }
 
@@ -91,7 +136,6 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 	var i GetSessionEnvironmentRow
 	err := row.Scan(
 		&i.Environment.ID,
-		&i.Environment.SessionID,
 		&i.Environment.Status,
 		&i.Environment.CreatedAt,
 		&i.Environment.FailureReason,
@@ -99,9 +143,37 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 		&i.Environment.FailureDetail,
 		&i.Environment.Initialization,
 		&i.Environment.InitializationSteps,
-		&i.TenantID,
-		&i.Configuration,
+		&i.Environment.TenantID,
+		&i.Environment.Configuration,
+		&i.Environment.SessionOwned,
+		&i.Environment.IdempotencyKey,
+		&i.Environment.RequestHash,
+		&i.Environment.CreatorKind,
+		&i.Environment.CreatorID,
+		&i.AttachedSessionID,
 		&i.ExternalWorkspace,
 	)
+	return i, err
+}
+
+const lockEnvironment = `-- name: LockEnvironment :one
+SELECT e.session_owned, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS attached_session_id
+FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE
+`
+
+type LockEnvironmentParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type LockEnvironmentRow struct {
+	SessionOwned      bool        `json:"session_owned"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
+}
+
+func (q *Queries) LockEnvironment(ctx context.Context, arg LockEnvironmentParams) (LockEnvironmentRow, error) {
+	row := q.db.QueryRow(ctx, lockEnvironment, arg.TenantID, arg.ID)
+	var i LockEnvironmentRow
+	err := row.Scan(&i.SessionOwned, &i.AttachedSessionID)
 	return i, err
 }

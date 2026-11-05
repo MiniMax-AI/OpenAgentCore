@@ -30,8 +30,7 @@ SELECT COALESCE(SUM(w.capacity_mib), 0)::bigint AS committed_mib,
        COALESCE(bool_or(w.capacity_mib = 0), false)::boolean AS unbounded
 FROM environment_workspaces w
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND w.state <> 'deleted';
+WHERE e.tenant_id = $1 AND w.state <> 'deleted';
 
 -- name: ClearActiveWorkspaceConfiguration :exec
 UPDATE workspace_fs_configurations SET active = false WHERE active;
@@ -42,20 +41,19 @@ UPDATE workspace_fs_configurations SET active = true WHERE id = $1;
 -- name: GetActiveWorkspaceConfiguration :one
 SELECT * FROM workspace_fs_configurations WHERE active;
 
--- name: LockWorkspaceSession :one
-SELECT s.id FROM sessions s JOIN environments e ON e.session_id = s.id
-WHERE s.tenant_id = $1 AND e.id = $2 FOR UPDATE OF s;
+-- name: LockWorkspaceEnvironment :one
+SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
 
--- name: WorkspaceSessionDeleted :one
-SELECT (deleted_at IS NOT NULL)::boolean AS deleted FROM sessions WHERE id = $1;
+-- name: WorkspaceEnvironmentReclaimed :one
+SELECT (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
+FROM environments e WHERE e.id = $1;
 
 -- name: GetEnvironmentWorkspace :one
-SELECT sqlc.embed(w), sqlc.embed(c), s.tenant_id
+SELECT sqlc.embed(w), sqlc.embed(c), e.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND e.id = $2;
+WHERE e.tenant_id = $1 AND e.id = $2;
 
 -- name: InsertEnvironmentWorkspace :exec
 INSERT INTO environment_workspaces (object_id, environment_id, configuration_id, capacity_mib)
@@ -79,13 +77,12 @@ UPDATE environment_workspaces SET state = 'deleted'
 WHERE object_id = $1 AND state = 'deleting';
 
 -- name: ListWorkspaceDeletionCandidates :many
-SELECT sqlc.embed(w), sqlc.embed(c), s.tenant_id
+SELECT sqlc.embed(w), sqlc.embed(c), e.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
 WHERE w.object_id > $1 AND w.state <> 'deleted'
-  AND (s.deleted_at IS NOT NULL OR w.state = 'deleting')
+  AND ((e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)) OR w.state = 'deleting')
   AND NOT EXISTS (
       SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released'
   )

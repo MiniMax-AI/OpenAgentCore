@@ -47,19 +47,18 @@ func (q *Queries) FailEnvironmentInitialization(ctx context.Context, id pgtype.U
 }
 
 const listEnvironmentInitializations = `-- name: ListEnvironmentInitializations :many
-SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.device_id
-FROM environments e JOIN sessions s ON s.id = e.session_id
-LEFT JOIN session_devices b ON b.session_id = s.id
-WHERE e.id > $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed', 'expired')
+SELECT e.id, e.tenant_id, e.initialization, d.id AS device_id
+FROM environments e
+LEFT JOIN devices d ON d.environment_id = e.id AND d.revoked_at IS NULL
+WHERE e.id > $1 AND (NOT e.session_owned OR EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))
+ AND e.status NOT IN ('failed', 'expired')
  AND e.initialization IN ('pending', 'running')
 ORDER BY e.id LIMIT 32
 `
 
 type ListEnvironmentInitializationsRow struct {
 	ID             pgtype.UUID `json:"id"`
-	SessionID      pgtype.UUID `json:"session_id"`
 	TenantID       pgtype.UUID `json:"tenant_id"`
-	Engine         string      `json:"engine"`
 	Initialization string      `json:"initialization"`
 	DeviceID       pgtype.UUID `json:"device_id"`
 }
@@ -75,9 +74,7 @@ func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.
 		var i ListEnvironmentInitializationsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.SessionID,
 			&i.TenantID,
-			&i.Engine,
 			&i.Initialization,
 			&i.DeviceID,
 		); err != nil {

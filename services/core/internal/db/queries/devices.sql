@@ -23,9 +23,7 @@ WHERE devices.id = $1 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE
 INSERT INTO session_devices (session_id, device_id)
 SELECT s.id, d.id FROM sessions s JOIN devices d ON d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.id = $3 AND d.revoked_at IS NULL
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id)
 ON CONFLICT (session_id) DO UPDATE SET device_id = session_devices.device_id
 WHERE session_devices.device_id = EXCLUDED.device_id
 RETURNING device_id;
@@ -36,9 +34,7 @@ JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-));
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id);
 
 -- name: GetSessionExecutionBinding :one
 SELECT d.id, d.name, b.native_session_id, d.environment_id,
@@ -48,9 +44,12 @@ JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-));
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id);
 
 -- name: RememberNativeSession :execrows
 UPDATE session_devices SET native_session_id = $2 WHERE session_id = $1;
+
+-- name: GetEnvironmentDevice :one
+SELECT d.id, d.name, d.environment_id FROM devices d
+WHERE d.tenant_id = $1 AND d.environment_id = $2 AND d.revoked_at IS NULL
+AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id);

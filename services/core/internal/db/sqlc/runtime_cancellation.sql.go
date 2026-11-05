@@ -16,14 +16,14 @@ SELECT t.id, t.cancel_requested_at
 FROM devices d
 JOIN runtime_allocations a ON a.device_id = d.id
 JOIN environments e ON e.id = a.environment_id AND e.id = d.environment_id
-JOIN sessions s ON s.id = e.session_id AND s.tenant_id = d.tenant_id
+JOIN sessions s ON s.environment_id = e.id AND s.tenant_id = d.tenant_id
 JOIN turns t ON t.session_id = s.id AND t.id = d.archive_cancel_turn_id
 WHERE d.id = $1
   AND d.credential_hash = $2
   AND d.executor_key_id IS NULL AND d.revoked_at IS NOT NULL
   AND a.state = 'cleanup_pending' AND a.released_at IS NULL
   AND e.status = 'expired' AND s.deleted_at IS NULL
-  AND s.configuration->'environment'->>'type' = 'openai_hosted'
+  AND e.configuration->>'type' = 'openai_hosted'
   AND t.status IN ('in_progress', 'waiting')
   AND t.id::text = ANY($3::text[])
   AND t.cancel_requested_at IS NOT NULL

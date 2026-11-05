@@ -100,7 +100,6 @@ type Device struct {
 
 type Environment struct {
 	ID                  pgtype.UUID        `json:"id"`
-	SessionID           pgtype.UUID        `json:"session_id"`
 	Status              string             `json:"status"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	FailureReason       pgtype.Text        `json:"failure_reason"`
@@ -108,6 +107,13 @@ type Environment struct {
 	FailureDetail       []byte             `json:"failure_detail"`
 	Initialization      string             `json:"initialization"`
 	InitializationSteps []byte             `json:"initialization_steps"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	Configuration       []byte             `json:"configuration"`
+	SessionOwned        bool               `json:"session_owned"`
+	IdempotencyKey      pgtype.Text        `json:"idempotency_key"`
+	RequestHash         pgtype.Text        `json:"request_hash"`
+	CreatorKind         pgtype.Text        `json:"creator_kind"`
+	CreatorID           pgtype.Text        `json:"creator_id"`
 }
 
 type EnvironmentConnection struct {
@@ -154,8 +160,8 @@ type EnvironmentInputReservation struct {
 }
 
 type EnvironmentSetup struct {
-	SessionID pgtype.UUID `json:"session_id"`
-	Contents  []byte      `json:"contents"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Contents      []byte      `json:"contents"`
 }
 
 type EnvironmentTemplate struct {
@@ -207,12 +213,12 @@ type FunctionCall struct {
 }
 
 type InitialEnvironmentFile struct {
-	ID        pgtype.UUID `json:"id"`
-	SessionID pgtype.UUID `json:"session_id"`
-	Position  int32       `json:"position"`
-	Path      string      `json:"path"`
-	SizeBytes int64       `json:"size_bytes"`
-	Contents  []byte      `json:"contents"`
+	ID            pgtype.UUID `json:"id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Position      int32       `json:"position"`
+	Path          string      `json:"path"`
+	SizeBytes     int64       `json:"size_bytes"`
+	Contents      []byte      `json:"contents"`
 }
 
 type NodeHostHistorySample struct {
@@ -394,6 +400,7 @@ type Session struct {
 	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
 	CreatorKind         pgtype.Text        `json:"creator_kind"`
 	CreatorID           pgtype.Text        `json:"creator_id"`
+	EnvironmentID       pgtype.UUID        `json:"environment_id"`
 }
 
 type SessionArtifact struct {

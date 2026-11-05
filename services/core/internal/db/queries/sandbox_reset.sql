@@ -32,14 +32,14 @@ WHERE singleton = true;
 SELECT (
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = sqlc.arg(session_id) AND status IN ('in_progress', 'waiting'))
     OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = sqlc.arg(session_id) AND status IN ('in_progress', 'waiting'))
-    OR EXISTS (SELECT 1 FROM environment_file_writes f JOIN environments e ON e.id = f.environment_id
-        WHERE e.session_id = sqlc.arg(session_id) AND f.state = 'pending')
+    OR EXISTS (SELECT 1 FROM environment_file_writes f JOIN sessions s ON s.environment_id = f.environment_id
+        WHERE s.id = sqlc.arg(session_id) AND f.state = 'pending')
 )::boolean;
 
 -- name: ListSandboxResetSessions :many
 SELECT s.id, s.tenant_id
-FROM sessions s JOIN environments e ON e.session_id = s.id
-WHERE s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'openai_hosted'
+FROM sessions s JOIN environments e ON e.id = s.environment_id
+WHERE s.deleted_at IS NULL AND e.configuration->>'type' = 'openai_hosted'
     AND e.status NOT IN ('failed', 'expired')
     AND s.id > sqlc.arg(after_id)::uuid
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
@@ -61,19 +61,19 @@ WITH deployment AS MATERIALIZED (SELECT * FROM runtime_deployment WHERE singleto
 observed AS MATERIALIZED (SELECT clock_timestamp() AS as_of),
 held AS (
     SELECT a.deployment_generation, a.node_id, s.id AS session_id, e.id AS environment_id, false AS pending,
-        (a.state = 'cleanup_pending' OR s.deleted_at IS NOT NULL OR e.status IN ('failed', 'expired')
+        (a.state = 'cleanup_pending' OR (e.session_owned AND s.id IS NULL) OR e.status IN ('failed', 'expired')
          OR (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL
             AND a.compute_retained_until <= observed.as_of)) AS cleanup
     FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    JOIN sessions s ON s.id = e.session_id CROSS JOIN observed
+    LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL CROSS JOIN observed
     WHERE a.state <> 'released'
     UNION ALL
     SELECT p.deployment_generation, p.node_id, s.id, e.id, true, false
-    FROM environments e JOIN sessions s ON s.id = e.session_id
+    FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
     LEFT JOIN runtime_placements p ON p.environment_id = e.id AND p.released_at IS NULL
-    WHERE s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+    WHERE (s.id IS NOT NULL OR NOT e.session_owned) AND e.status NOT IN ('failed','expired')
         AND ((e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)) OR p.environment_id IS NOT NULL)
-        AND s.configuration->'environment'->>'type' = 'openai_hosted'
+        AND e.configuration->>'type' = 'openai_hosted'
         AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
     UNION ALL
     SELECT r.deployment_generation, NULL::uuid, r.session_id, r.environment_id, true, false

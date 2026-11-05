@@ -1,15 +1,16 @@
 -- name: CreateInitialEnvironmentFile :exec
-INSERT INTO initial_environment_files (id, session_id, position, path, size_bytes, contents)
+INSERT INTO initial_environment_files (id, environment_id, position, path, size_bytes, contents)
 VALUES ($1, $2, $3, $4, $5, $6);
 
--- name: SetSessionInitialFileMetadata :exec
-UPDATE sessions SET configuration = jsonb_set(configuration, '{environment,files}', $2::jsonb)
+-- name: SetEnvironmentInitialFileMetadata :exec
+UPDATE environments SET configuration = jsonb_set(configuration, '{files}', $2::jsonb)
 WHERE id = $1;
 
 -- name: GetInitialEnvironmentFile :one
-SELECT f.* FROM initial_environment_files f JOIN sessions s ON s.id = f.session_id
-WHERE s.tenant_id = $1 AND f.session_id = $2 AND f.position = $3 AND s.deleted_at IS NULL;
+SELECT f.*, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS owner_session_id
+FROM initial_environment_files f JOIN environments e ON e.id = f.environment_id
+WHERE e.tenant_id = $1 AND f.environment_id = $2 AND f.position = $3;
 
 -- name: GetSessionInitializationReady :one
-SELECT NOT EXISTS (SELECT 1 FROM environments e WHERE e.session_id = s.id AND e.initialization <> 'complete') AS ready
+SELECT NOT EXISTS (SELECT 1 FROM environments e WHERE e.id = s.environment_id AND e.initialization <> 'complete') AS ready
 FROM sessions s WHERE s.tenant_id = $1 AND s.id = $2;

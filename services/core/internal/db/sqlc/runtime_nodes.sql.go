@@ -89,17 +89,17 @@ func (q *Queries) CreateRuntimePlacement(ctx context.Context, arg CreateRuntimeP
 
 const createSessionRuntimePlacement = `-- name: CreateSessionRuntimePlacement :exec
 INSERT INTO runtime_placements(environment_id,node_id,deployment_generation)
-SELECT id,$2,$3::bigint FROM environments WHERE session_id=$1
+SELECT environment_id,$2,$3::bigint FROM sessions WHERE id=$1
 `
 
 type CreateSessionRuntimePlacementParams struct {
-	SessionID  pgtype.UUID `json:"session_id"`
+	ID         pgtype.UUID `json:"id"`
 	NodeID     pgtype.UUID `json:"node_id"`
 	Generation int64       `json:"generation"`
 }
 
 func (q *Queries) CreateSessionRuntimePlacement(ctx context.Context, arg CreateSessionRuntimePlacementParams) error {
-	_, err := q.db.Exec(ctx, createSessionRuntimePlacement, arg.SessionID, arg.NodeID, arg.Generation)
+	_, err := q.db.Exec(ctx, createSessionRuntimePlacement, arg.ID, arg.NodeID, arg.Generation)
 	return err
 }
 
@@ -319,8 +319,8 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 }
 
 const listNodeRuntimeAllocations = `-- name: ListNodeRuntimeAllocations :many
-SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,e.initialization,a.created_at,a.environment_id,e.session_id,s.tenant_id
-FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
+SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,e.initialization,a.created_at,a.environment_id,s.id AS attached_session_id,e.tenant_id
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id LEFT JOIN sessions s ON s.environment_id=e.id AND s.deleted_at IS NULL
 WHERE a.node_id=$1 AND a.state<>'released' ORDER BY a.created_at,a.id LIMIT 1000
 `
 
@@ -335,7 +335,7 @@ type ListNodeRuntimeAllocationsRow struct {
 	Initialization        string             `json:"initialization"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	EnvironmentID         pgtype.UUID        `json:"environment_id"`
-	SessionID             pgtype.UUID        `json:"session_id"`
+	AttachedSessionID     pgtype.UUID        `json:"attached_session_id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 }
 
@@ -359,7 +359,7 @@ func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.
 			&i.Initialization,
 			&i.CreatedAt,
 			&i.EnvironmentID,
-			&i.SessionID,
+			&i.AttachedSessionID,
 			&i.TenantID,
 		); err != nil {
 			return nil, err
@@ -509,12 +509,12 @@ func (q *Queries) ReleaseRuntimePlacement(ctx context.Context, environmentID pgt
 
 const releaseUnallocatedRuntimePlacement = `-- name: ReleaseUnallocatedRuntimePlacement :exec
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE environment_id IN(SELECT id FROM environments WHERE session_id=$1)
+WHERE environment_id IN(SELECT s.environment_id FROM sessions s WHERE s.id=$1)
 AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
 `
 
-func (q *Queries) ReleaseUnallocatedRuntimePlacement(ctx context.Context, sessionID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, releaseUnallocatedRuntimePlacement, sessionID)
+func (q *Queries) ReleaseUnallocatedRuntimePlacement(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, releaseUnallocatedRuntimePlacement, id)
 	return err
 }
 

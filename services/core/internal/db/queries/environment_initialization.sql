@@ -1,8 +1,9 @@
 -- name: ListEnvironmentInitializations :many
-SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.device_id
-FROM environments e JOIN sessions s ON s.id = e.session_id
-LEFT JOIN session_devices b ON b.session_id = s.id
-WHERE e.id > $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed', 'expired')
+SELECT e.id, e.tenant_id, e.initialization, d.id AS device_id
+FROM environments e
+LEFT JOIN devices d ON d.environment_id = e.id AND d.revoked_at IS NULL
+WHERE e.id > $1 AND (NOT e.session_owned OR EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))
+ AND e.status NOT IN ('failed', 'expired')
  AND e.initialization IN ('pending', 'running')
 ORDER BY e.id LIMIT 32;
 

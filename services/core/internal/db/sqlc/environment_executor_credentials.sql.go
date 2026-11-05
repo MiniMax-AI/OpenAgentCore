@@ -16,7 +16,7 @@ SELECT s.tenant_id
 FROM environment_executor_credentials c
 JOIN execution_project_scopes p ON p.tenant_id = c.tenant_id
 JOIN environments e ON e.id = $1
-JOIN sessions s ON s.id = e.session_id
+JOIN sessions s ON s.environment_id = e.id
 WHERE c.token_sha256 = $2 AND c.revoked_at IS NULL
     AND c.tenant_id = s.tenant_id AND c.subject_kind = s.creator_kind AND c.subject_id = s.creator_id
     AND (c.environment_id IS NULL OR c.environment_id = e.id) AND s.deleted_at IS NULL
@@ -58,11 +58,11 @@ const getEnvironmentExecutorConnection = `-- name: GetEnvironmentExecutorConnect
 SELECT d.id AS device_id, d.executor_key_id, d.created_at AS enrolled_at,
     d.last_seen_at, a.credential_hash, e.status AS environment_status
 FROM environments e
-JOIN sessions s ON s.id = e.session_id
+JOIN sessions s ON s.environment_id = e.id
 LEFT JOIN devices d ON d.environment_id = e.id AND d.tenant_id = s.tenant_id
 LEFT JOIN runtime_device_authority a ON a.id = d.id
 WHERE e.id = $1 AND s.tenant_id = $2
-    AND s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'self_hosted'
+    AND s.deleted_at IS NULL AND e.configuration->>'type' = 'self_hosted'
 `
 
 type GetEnvironmentExecutorConnectionParams struct {
@@ -135,7 +135,7 @@ FROM execution_project_scopes p CROSS JOIN issued
 WHERE p.tenant_id = $6 AND p.organization_id = $7
     AND p.project_id = $8
     AND ($4::uuid IS NULL OR EXISTS (
-        SELECT 1 FROM environments e JOIN sessions s ON s.id = e.session_id
+        SELECT 1 FROM environments e JOIN sessions s ON s.environment_id = e.id
         WHERE e.id = $4 AND s.tenant_id = p.tenant_id AND s.deleted_at IS NULL
             AND s.creator_kind = $2 AND s.creator_id = $3
     ))

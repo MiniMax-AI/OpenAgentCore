@@ -48,13 +48,13 @@ func (q *Queries) CreateEnvironmentFileWrite(ctx context.Context, arg CreateEnvi
 
 const environmentFileWriteBlocksSession = `-- name: EnvironmentFileWriteBlocksSession :one
 SELECT EXISTS (
-    SELECT 1 FROM environments e JOIN environment_file_writes w ON w.environment_id = e.id
-    WHERE e.session_id = $1 AND w.state = 'pending'
+    SELECT 1 FROM sessions s JOIN environment_file_writes w ON w.environment_id = s.environment_id
+    WHERE s.id = $1 AND w.state = 'pending'
 )::boolean
 `
 
-func (q *Queries) EnvironmentFileWriteBlocksSession(ctx context.Context, sessionID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, environmentFileWriteBlocksSession, sessionID)
+func (q *Queries) EnvironmentFileWriteBlocksSession(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, environmentFileWriteBlocksSession, id)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -74,11 +74,10 @@ func (q *Queries) EnvironmentFileWriteHasPendingInput(ctx context.Context, sessi
 }
 
 const getEnvironmentFileWrite = `-- name: GetEnvironmentFileWrite :one
-SELECT w.id, w.environment_id, w.device_id, w.request_sha256, w.state, w.created_at, w.settled_at, w.audit_source, e.session_id
+SELECT w.id, w.environment_id, w.device_id, w.request_sha256, w.state, w.created_at, w.settled_at, w.audit_source
 FROM environment_file_writes w
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND e.id = $2 AND w.id = $3
+WHERE e.tenant_id = $1 AND e.id = $2 AND w.id = $3
 `
 
 type GetEnvironmentFileWriteParams struct {
@@ -89,7 +88,6 @@ type GetEnvironmentFileWriteParams struct {
 
 type GetEnvironmentFileWriteRow struct {
 	EnvironmentFileWrite EnvironmentFileWrite `json:"environment_file_write"`
-	SessionID            pgtype.UUID          `json:"session_id"`
 }
 
 func (q *Queries) GetEnvironmentFileWrite(ctx context.Context, arg GetEnvironmentFileWriteParams) (GetEnvironmentFileWriteRow, error) {
@@ -104,7 +102,6 @@ func (q *Queries) GetEnvironmentFileWrite(ctx context.Context, arg GetEnvironmen
 		&i.EnvironmentFileWrite.CreatedAt,
 		&i.EnvironmentFileWrite.SettledAt,
 		&i.EnvironmentFileWrite.AuditSource,
-		&i.SessionID,
 	)
 	return i, err
 }

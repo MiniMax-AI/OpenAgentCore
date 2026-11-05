@@ -15,9 +15,7 @@ const bindSessionDevice = `-- name: BindSessionDevice :one
 INSERT INTO session_devices (session_id, device_id)
 SELECT s.id, d.id FROM sessions s JOIN devices d ON d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.id = $3 AND d.revoked_at IS NULL
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id)
 ON CONFLICT (session_id) DO UPDATE SET device_id = session_devices.device_id
 WHERE session_devices.device_id = EXCLUDED.device_id
 RETURNING device_id
@@ -109,15 +107,37 @@ func (q *Queries) GetDeviceCredential(ctx context.Context, id pgtype.UUID) (GetD
 	return i, err
 }
 
+const getEnvironmentDevice = `-- name: GetEnvironmentDevice :one
+SELECT d.id, d.name, d.environment_id FROM devices d
+WHERE d.tenant_id = $1 AND d.environment_id = $2 AND d.revoked_at IS NULL
+AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
+`
+
+type GetEnvironmentDeviceParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+}
+
+type GetEnvironmentDeviceRow struct {
+	ID            pgtype.UUID `json:"id"`
+	Name          string      `json:"name"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+}
+
+func (q *Queries) GetEnvironmentDevice(ctx context.Context, arg GetEnvironmentDeviceParams) (GetEnvironmentDeviceRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentDevice, arg.TenantID, arg.EnvironmentID)
+	var i GetEnvironmentDeviceRow
+	err := row.Scan(&i.ID, &i.Name, &i.EnvironmentID)
+	return i, err
+}
+
 const getSessionDevice = `-- name: GetSessionDevice :one
 SELECT d.id, d.name, d.environment_id FROM session_devices b
 JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id)
 `
 
 type GetSessionDeviceParams struct {
@@ -146,9 +166,7 @@ JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR s.environment_id = d.environment_id)
 `
 
 type GetSessionExecutionBindingParams struct {

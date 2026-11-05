@@ -12,22 +12,23 @@ import (
 )
 
 const createEnvironmentSetup = `-- name: CreateEnvironmentSetup :exec
-INSERT INTO environment_setups (session_id, contents) VALUES ($1, $2)
+INSERT INTO environment_setups (environment_id, contents) VALUES ($1, $2)
 `
 
 type CreateEnvironmentSetupParams struct {
-	SessionID pgtype.UUID `json:"session_id"`
-	Contents  []byte      `json:"contents"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Contents      []byte      `json:"contents"`
 }
 
 func (q *Queries) CreateEnvironmentSetup(ctx context.Context, arg CreateEnvironmentSetupParams) error {
-	_, err := q.db.Exec(ctx, createEnvironmentSetup, arg.SessionID, arg.Contents)
+	_, err := q.db.Exec(ctx, createEnvironmentSetup, arg.EnvironmentID, arg.Contents)
 	return err
 }
 
 const getEnvironmentSetup = `-- name: GetEnvironmentSetup :one
-SELECT f.contents FROM sessions s LEFT JOIN environment_setups f ON s.id = f.session_id
-WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
+SELECT f.contents, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS owner_session_id
+FROM environments e LEFT JOIN environment_setups f ON f.environment_id = e.id
+WHERE e.tenant_id = $1 AND e.id = $2
 `
 
 type GetEnvironmentSetupParams struct {
@@ -35,25 +36,29 @@ type GetEnvironmentSetupParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) GetEnvironmentSetup(ctx context.Context, arg GetEnvironmentSetupParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getEnvironmentSetup, arg.TenantID, arg.ID)
-	var contents []byte
-	err := row.Scan(&contents)
-	return contents, err
+type GetEnvironmentSetupRow struct {
+	Contents       []byte      `json:"contents"`
+	OwnerSessionID pgtype.UUID `json:"owner_session_id"`
 }
 
-const setSessionSetupMetadata = `-- name: SetSessionSetupMetadata :exec
-UPDATE sessions SET configuration = jsonb_set(configuration, '{environment}',
-    (configuration->'environment') || jsonb_build_object(
+func (q *Queries) GetEnvironmentSetup(ctx context.Context, arg GetEnvironmentSetupParams) (GetEnvironmentSetupRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentSetup, arg.TenantID, arg.ID)
+	var i GetEnvironmentSetupRow
+	err := row.Scan(&i.Contents, &i.OwnerSessionID)
+	return i, err
+}
+
+const setEnvironmentSetupMetadata = `-- name: SetEnvironmentSetupMetadata :exec
+UPDATE environments SET configuration = configuration || jsonb_build_object(
         'packages', $2::jsonb,
         'skills', $3::jsonb,
         'plugins', $4::jsonb,
         'capability_directories', $5::jsonb,
-        'initialization', true))
+        'initialization', true)
 WHERE id = $1
 `
 
-type SetSessionSetupMetadataParams struct {
+type SetEnvironmentSetupMetadataParams struct {
 	ID                    pgtype.UUID `json:"id"`
 	Packages              []byte      `json:"packages"`
 	Skills                []byte      `json:"skills"`
@@ -61,8 +66,8 @@ type SetSessionSetupMetadataParams struct {
 	CapabilityDirectories []byte      `json:"capability_directories"`
 }
 
-func (q *Queries) SetSessionSetupMetadata(ctx context.Context, arg SetSessionSetupMetadataParams) error {
-	_, err := q.db.Exec(ctx, setSessionSetupMetadata,
+func (q *Queries) SetEnvironmentSetupMetadata(ctx context.Context, arg SetEnvironmentSetupMetadataParams) error {
+	_, err := q.db.Exec(ctx, setEnvironmentSetupMetadata,
 		arg.ID,
 		arg.Packages,
 		arg.Skills,
