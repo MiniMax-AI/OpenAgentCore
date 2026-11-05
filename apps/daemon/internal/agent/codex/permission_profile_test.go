@@ -49,7 +49,7 @@ func TestSelfHostedToolEnvironmentCannotRedirectNativeHistory(t *testing.T) {
 		values[key] = value
 	}
 	if values["CODEX_HOME"] == "" || values["CODEX_HOME"] == "wrong" || values["HOME"] == "wrong" || values["USERPROFILE"] == "wrong" || values["USER_VALUE"] != "ready" ||
-		values["CODEX_SQLITE_HOME"] != filepath.Join(runtimeRoot, "daemon", "agent-sessions", "session") {
+		values["CODEX_SQLITE_HOME"] != filepath.Join(runtimeRoot, "runtime", "codex", "state", "session") {
 		t.Fatal("initialization changed native state identity")
 	}
 }

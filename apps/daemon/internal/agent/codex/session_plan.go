@@ -27,7 +27,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	// Codex's SQLite databases stay on the compute's own disk, where they open faster than
 	// on shared state storage. A replacement compute rebuilds them from the history in
 	// CODEX_HOME; goals, whose state lives only there, are disabled.
-	sqliteHome, err := allocSessionDir(cfg.runtimeRoot, req.AgentStateKey)
+	sqliteHome, err := sessionDir(cfg.runtimeRoot, req.AgentStateKey)
 	if err != nil {
 		plan.Cleanup()
 		return SessionPlan{}, nil, err

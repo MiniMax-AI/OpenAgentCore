@@ -94,7 +94,7 @@ func saveEnvironmentBinding(root string, want environmentBinding) error {
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
 		// Unlabelled native state cannot safely be adopted by a new enrollment.
-		for _, native := range []string{"runtime", "sessions", "daemon/agent-sessions"} {
+		for _, native := range []string{"runtime", "sessions"} {
 			if _, e := os.Lstat(filepath.Join(root, native)); !errors.Is(e, os.ErrNotExist) {
 				return errors.New("connect: existing Runtime history has no Environment binding")
 			}
