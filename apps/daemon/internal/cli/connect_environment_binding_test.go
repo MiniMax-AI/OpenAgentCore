@@ -26,7 +26,7 @@ func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	t.Cleanup(localworkspace.Unbind)
-	return root, workspace, credential, machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}
+	return root, workspace, credential, machineapi.Enrollment{DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}
 }
 
 func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
@@ -44,14 +44,11 @@ func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
 				t.Fatal(err)
 			}
 			var receipt environmentBinding
-			want := bound
-			want.SessionID = ""
-			if decodeEnvironmentJSON(raw, &receipt) != nil || receipt.LocalWorkspace != workspace || receipt.Enrollment != want {
+			if decodeEnvironmentJSON(raw, &receipt) != nil || receipt.LocalWorkspace != workspace || receipt.Enrollment != bound {
 				t.Fatal("workspace identity changed", receipt)
 			}
-			bound.SessionID = uuid.NewString()
 			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, workspace, localworkspace.CapabilityDirectory); err != nil {
-				t.Fatal("same Environment refused for another Session", err)
+				t.Fatal("same Environment refused on rebind", err)
 			}
 			replacement := filepath.Join(filepath.Dir(workspace), "replacement")
 			if err := os.Mkdir(replacement, 0700); err != nil {

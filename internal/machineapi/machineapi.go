@@ -59,17 +59,16 @@ type EnrollRequest struct {
 	EnvironmentID string `json:"environment_id"`
 }
 
-// Enrollment answers POST agent-daemon/enroll: the device bound to the Environment's Session.
+// Enrollment answers POST agent-daemon/enroll: the device bound to the Environment.
 type Enrollment struct {
 	DeviceID           string `json:"device_id"`
-	SessionID          string `json:"session_id"`
 	EnvironmentID      string `json:"environment_id"`
 	WorkspaceDirectory string `json:"workspace_directory"`
 }
 
 // Validate checks that the binding names canonical IDs and the requested Environment.
 func (e Enrollment) Validate(environment string) error {
-	if !CanonicalUUID(e.DeviceID) || !CanonicalUUID(e.SessionID) || e.EnvironmentID != environment {
+	if !CanonicalUUID(e.DeviceID) || e.EnvironmentID != environment {
 		return errors.New("machineapi: invalid enrollment binding")
 	}
 	return nil

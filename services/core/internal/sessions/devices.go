@@ -33,7 +33,6 @@ func NewDeviceRegistration(name, credentialHash string) (DeviceRegistration, err
 // receives. It never carries another secret.
 type RuntimeEnrollment struct {
 	DeviceID           string
-	SessionID          string
 	EnvironmentID      string
 	WorkspaceDirectory string
 }
@@ -180,7 +179,7 @@ func (s *Service) EnrollRuntime(ctx context.Context, environment, credentialHash
 		if err := tx.BindDevice(ctx, device); err != nil {
 			return err
 		}
-		result = RuntimeEnrollment{DeviceID: device, SessionID: current.SessionID, EnvironmentID: current.ID, WorkspaceDirectory: authority.WorkspaceDirectory}
+		result = RuntimeEnrollment{DeviceID: device, EnvironmentID: current.ID, WorkspaceDirectory: authority.WorkspaceDirectory}
 		return nil
 	})
 	return result, err

@@ -43,7 +43,6 @@ func TestNativeStartInterruptCancelsEnrollment(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(machineapi.Enrollment{
 			DeviceID:           "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
-			SessionID:          "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb",
 			EnvironmentID:      config.Environment,
 			WorkspaceDirectory: config.Workspace,
 		})

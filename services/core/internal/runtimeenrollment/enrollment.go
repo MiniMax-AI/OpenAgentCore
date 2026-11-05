@@ -54,7 +54,7 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-store")
-			_ = json.NewEncoder(w).Encode(machineapi.Enrollment{DeviceID: binding.DeviceID, SessionID: binding.SessionID, EnvironmentID: binding.EnvironmentID, WorkspaceDirectory: binding.WorkspaceDirectory})
+			_ = json.NewEncoder(w).Encode(machineapi.Enrollment{DeviceID: binding.DeviceID, EnvironmentID: binding.EnvironmentID, WorkspaceDirectory: binding.WorkspaceDirectory})
 		}
 	})
 }
