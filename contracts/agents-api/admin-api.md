@@ -133,7 +133,7 @@ After an uncertain `POST` response, `GET` the archive before writing again. Repe
 
 ## Execution configuration
 
-`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` reports the model, Harness, native parameters and model provider a Session froze at creation. It reads only stored configuration: it never contacts a provider, starts a Turn or wakes a sandbox. Responses carry `Cache-Control: no-store`.
+`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` reports the Session's current model, and the Harness, native parameters and model provider it froze at creation. A model changed by a Session update reads with source `session`. It reads only stored configuration: it never contacts a provider, starts a Turn or wakes a sandbox. Responses carry `Cache-Control: no-store`.
 
 ```json
 {

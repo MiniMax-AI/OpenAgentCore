@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: b481386ff50d930d3b8698e0bed882aa512c85adf62d4dc61a42bb77d5a7abe1
+source_hash: 73dcaa859ac6e54b4b51950922b8cb781daff8e159e718dddde363a8e089168a
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -197,8 +197,7 @@ Session 创建和更新、Vault 创建、Credential 创建和更新、Environmen
 
 | 字段 | Param |
 | --- | --- |
-| 含任何成员的 Session 更新 `agent`；`{}` 不改变任何内容 | `agent` |
-| Session 创建或更新中的 `review: auto_review`；接受 `none`，响应省略 `review` | `review` |
+| Session 更新 `agent.tools` | `agent.tools` |
 | `environment.environment_id` | `environment_id` |
 | `environment.container_size`；响应携带 `container_size: null` | `container_size` |
 | `desktop.enabled: true`；响应携带 `desktop: {"enabled": false}` | `desktop.enabled` |
@@ -214,6 +213,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | --- | --- |
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`（含 `ultrafast`）、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
 | 任何 Harness 上的 `compaction.async: true`、`experimental.time_awareness: true`，或 `automations`、`computer_use` 工具，因为没有 Harness 原生运行它们 | 指出字段的消息，例如 `compaction.async=true is not supported.` |
+| 创建或更新中 Harness 未声明的 `review: auto_review`；`none` 始终被接受，响应省略它 | 指出字段的消息，例如 `review "auto_review" is not supported by this Harness.` |
 | 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -233,7 +233,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 
 ### 配置快照 {#configuration-snapshot}
 
-Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `agent_id` 时，已保存的 Agent 只会读取一次；内联 `agent` 中的字段会整体替换已保存字段，包括数组，而 null `tools` 会清空列表。省略的字段会继承保存值；如果内联 `x_agents_core` 省略 `harness`，则保留已保存的 Harness。已保存的 Agent metadata 永远不会成为 Session metadata。后续更新或删除 Agent 只会影响新的 Session。
+Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `agent_id` 时，已保存的 Agent 只会读取一次；内联 `agent` 中的字段会整体替换已保存字段，包括数组，而 null `tools` 会清空列表。省略的字段会继承保存值；如果内联 `x_agents_core` 省略 `harness`，则保留已保存的 Harness。已保存的 Agent metadata 永远不会成为 Session metadata。后续更新或删除 Agent 只会影响新的 Session。快照只会通过 Session 更新改变，每个根 Turn 采用 Core 接受创建它的输入时的当前设置。
 
 `stream` 默认为 false。`stream` 和 `agent_id` 不能为 null。省略或 null 的 `metadata` 为 `{}`。
 
@@ -253,7 +253,9 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 ### 更新和列表 {#update-and-list}
 
-`POST /agents/sessions/{session_id}` 只修改 `metadata`：null 或 `{}` 会将其清除，对象会替换所有键值对。仅含 `review` 或空 `agent` 的正文不改变任何内容并返回该 Session；`metadata`、`agent`、`review` 都不含的正文返回 400。含成员的 `agent` 会被拒绝（[不支持的字段](#unsupported-fields)）。执行状态和创建重试标识保持不变。
+`POST /agents/sessions/{session_id}` 只在一个事务中应用出现的成员，并返回该 Session。`metadata` 为 null 或 `{}` 会将其清除，对象会替换所有键值对。`agent.model`、`agent.reasoning.effort`（null 选择模型的默认值）、`agent.service_tier`（null 变为 `auto`）和 `review` 会改变之后才被接受输入的 Turn 所用的快照；已存在的 Turn 及其 Subagent 保持原有设置。`agent.tools` 会被拒绝（[不支持的字段](#unsupported-fields)）。空 `agent` 不改变任何内容，`metadata`、`agent`、`review` 都不含的正文返回 400。
+
+更改的取值若 Harness 没有声明可在 Turn 之间原生应用，或 `review` 未被声明，则返回 400 `unsupported_or_invalid_configuration` 并指出字段，且不写入任何内容。未改变的取值始终通过。创建重试标识保持不变。
 
 `GET /agents/sessions` 接受 `agent_id`，它会匹配 Session 不可变的根 Agent ID，包括内联 Agent ID，以及此后已更新或删除的 Agent。筛选在分页之前应用；空 `agent_id` 是一个筛选条件，而不是省略该筛选条件。[`metadata` 筛选](#query-parameters)同样适用。
 
