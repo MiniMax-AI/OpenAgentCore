@@ -37,6 +37,16 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, &fieldError{param: "vault_ids", message: "Vault credentials attach to Sessions, not to standalone Environments."})
 		return
 	}
+	key := r.Header.Get("Idempotency-Key")
+	if key == "" {
+		key = uuid.NewString()
+	} else if id, found, err := h.Execution.SessionAdmission.ReplayEnvironment(r.Context(), tenantID(r), sessionCreator(r), key, raw); err != nil {
+		writeOperationError(w, r, err)
+		return
+	} else if found {
+		h.writeEnvironmentCreated(w, r, id)
+		return
+	}
 	var input sessionRequest
 	err := input.decodeEnvironment(body.Environment, false)
 	if err == nil && input.Environment.Type != "openai_hosted" {
@@ -66,10 +76,6 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeSessionsError(w, r, err)
 		return
 	}
-	key := r.Header.Get("Idempotency-Key")
-	if key == "" {
-		key = uuid.NewString()
-	}
 	id, err := h.Execution.SessionAdmission.CreateEnvironment(r.Context(), tenantID(r), sessions.CreateEnvironment{
 		Creator: sessionCreator(r), IdempotencyKey: key, CreationRequest: raw,
 		Configuration: configuration, Initialization: input.initialization, InitialFiles: input.initialFiles,
@@ -78,6 +84,10 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeOperationError(w, r, err)
 		return
 	}
+	h.writeEnvironmentCreated(w, r, id)
+}
+
+func (h *Handler) writeEnvironmentCreated(w http.ResponseWriter, r *http.Request, id string) {
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), id)
 	if err == nil {
 		var response any

@@ -31,6 +31,8 @@ type SessionCreation interface {
 type SessionAdmission interface {
 	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 	CreateEnvironment(context.Context, string, sessions.CreateEnvironment) (string, error)
+	// ReplayEnvironment returns the Environment a retry's key already created.
+	ReplayEnvironment(ctx context.Context, tenant string, creator identity.Subject, key string, request json.RawMessage) (string, bool, error)
 }
 
 // Sessions updates and deletes Sessions, and records their public write audit.

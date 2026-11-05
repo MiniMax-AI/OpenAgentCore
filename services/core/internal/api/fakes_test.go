@@ -785,6 +785,10 @@ type fakeSessionAdmission struct {
 	createEnvironment func(context.Context, string, sessions.CreateEnvironment) (string, error)
 }
 
+func (f *fakeSessionAdmission) ReplayEnvironment(context.Context, string, identity.Subject, string, json.RawMessage) (string, bool, error) {
+	return "", false, nil
+}
+
 func (f *fakeSessionAdmission) CreateEnvironment(a0 context.Context, a1 string, a2 sessions.CreateEnvironment) (string, error) {
 	if f.createEnvironment == nil {
 		unexpectedCall(f.t, "CreateEnvironment")

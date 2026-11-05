@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
@@ -245,6 +246,11 @@ func (w *Worker) CreateEnvironment(ctx context.Context, tenant string, input ses
 		w.wakeScheduler()
 	}
 	return id, err
+}
+
+// ReplayEnvironment returns the Environment a retry's key already created.
+func (w *Worker) ReplayEnvironment(ctx context.Context, tenant string, creator identity.Subject, key string, request json.RawMessage) (string, bool, error) {
+	return w.dispatcher.Sessions.ReplayEnvironment(ctx, tenant, creator, key, request)
 }
 
 // Run retains queued work across restarts, but never replays an uncertain claim.

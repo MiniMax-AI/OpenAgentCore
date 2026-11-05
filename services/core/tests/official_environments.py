@@ -36,9 +36,18 @@ def main():
         assert error(lambda: api.create(environment=HOSTED, vault_ids=["vault"]))[:3] == (400, "invalid_request_error", "vault_ids")
         assert api.create(environment=HOSTED, vault_ids=[]).id != env.id
 
+        # A retry compares the request as sent, even after its Template is gone; keys run to 256 bytes.
+        templates = api.templates
+        template = templates.create(name="prewarm", env={"A": "b"})
+        long_key = "k" * 256
+        templated = {"type": "openai_hosted", "environment_template_id": template.id}
+        kept = api.create(environment=templated, idempotency_key=long_key)
+        templates.delete(template.id)
+        assert api.create(environment=templated, idempotency_key=long_key).id == kept.id
+
         page = api.list(limit=1, order="asc")
         assert page.data[0].id == env.id and page.has_more, page
-        assert [item.id for item in api.list().data].count(env.id) == 1
+        assert {env.id, kept.id} <= {item.id for item in api.list().data}
         assert not foreign.beta.agents.environments.list().data
         assert error(lambda: foreign.beta.agents.environments.retrieve(env.id))[0] == 404
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -251,6 +252,10 @@ type unavailableAdmission struct{}
 
 func (unavailableAdmission) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	return sessions.Creation{}, execution.ErrExecutionUnavailable
+}
+
+func (unavailableAdmission) ReplayEnvironment(context.Context, string, identity.Subject, string, json.RawMessage) (string, bool, error) {
+	return "", false, execution.ErrExecutionUnavailable
 }
 
 func (unavailableAdmission) CreateEnvironment(context.Context, string, sessions.CreateEnvironment) (string, error) {

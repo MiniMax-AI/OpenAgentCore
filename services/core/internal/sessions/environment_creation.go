@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -146,7 +147,7 @@ func (s *Service) environmentIdentity(key string, creator identity.Subject, requ
 	if err := creator.Validate(); err != nil {
 		return EnvironmentIdentity{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	if !validCreationKey(key) {
+	if strings.TrimSpace(key) == "" || len(key) > 256 {
 		return EnvironmentIdentity{}, ErrInvalidInput
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)
@@ -165,6 +166,32 @@ func (i EnvironmentIdentity) decide(record EnvironmentCreationRecord) error {
 		return ErrIdempotencyConflict
 	}
 	return nil
+}
+
+// ReplayEnvironment returns the Environment already stored under the key, if
+// any, for the same request and creator. It runs before the request's
+// references resolve, so a retry compares the request as sent.
+func (s *Service) ReplayEnvironment(ctx context.Context, tenant string, creator identity.Subject, key string, request json.RawMessage) (string, bool, error) {
+	ident, err := s.environmentIdentity(key, creator, request)
+	if err != nil {
+		return "", false, err
+	}
+	var environment string
+	err = s.storage.WithEnvironmentCreation(ctx, tenant, ident, func(ctx context.Context, tx StandaloneCreationTx) error {
+		record, err := tx.FindCreation(ctx)
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := ident.decide(record); err != nil {
+			return err
+		}
+		environment = record.EnvironmentID
+		return nil
+	})
+	return environment, environment != "", err
 }
 
 // CreateEnvironment creates a standalone Environment under a tenant-scoped
