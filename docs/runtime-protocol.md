@@ -91,7 +91,7 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
 | Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where the payload validator requires them |
-| Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration; the root Turn's `turn` settings are not part of the identity |
+| Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration |
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
 | Run ID | One execution attempt; `Envelope.id` for output, cancellation, active input and functions |
@@ -189,7 +189,7 @@ sequenceDiagram
 - Consume Run events until a native terminal outcome or loss of observation. An execution error is followed by `done`, which closes the stream; the preceding errors remain part of its outcome.
 - To abandon before start, send `execution_release`. After ownership passes to a Run, use `prompt_cancel`; releasing the old handle cannot cancel its successor.
 
-A preparation reserves a per-Turn admission, not a new Executor. It carries an explicit Session identity, immutable configuration and the root Turn's settings (`turn`) without model input or a Run ID. A fresh request returns a connection-local handle and the owning Executor ID; a reused healthy Executor returns `ready` without native preparation. Per-handle revisions order status observations: ignore older or repeated revisions and never apply a status to another handle. An admission moves through the states below. A `rejected` control operation carries an `operation` and error code and does not replace the handle's current revision. Releasing an admission abandons only that admission; it does not close the Session's idle Executor or cancel a later Turn.
+A preparation reserves a per-Turn admission, not a new Executor. It carries an explicit Session identity and immutable configuration without model input or a Run ID. A fresh request returns a connection-local handle and the owning Executor ID; a reused healthy Executor returns `ready` without native preparation. Per-handle revisions order status observations: ignore older or repeated revisions and never apply a status to another handle. An admission moves through the states below. A `rejected` control operation carries an `operation` and error code and does not replace the handle's current revision. Releasing an admission abandons only that admission; it does not close the Session's idle Executor or cancel a later Turn.
 
 ```mermaid
 stateDiagram-v2
@@ -220,7 +220,7 @@ The `execution_prepare` configuration carries the opt-ins Core sets for each Run
 
 | Field | Set by Core |
 | --- | --- |
-| `turn` | Always: the root Turn's `model`, plus `reasoning_effort` and a non-`auto` `service_tier` when the Agent sets them. `review` (`auto_review`; empty is none) is part of the same object. A retained Executor accepts a different `turn` without a `configuration_conflict`; the Runtime passes each Turn's settings to `StartTurn`, and a settled Executor's next Turn takes the settings of its own `execution_prepare`. Read-only workspace preparation sends an empty `turn` |
+| `turn` | Always: the root Turn's `model`, plus `reasoning_effort` and a non-`auto` `service_tier` when the Agent sets them. Read-only workspace preparation sends an empty `turn` |
 | `agent_options` | Always `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
 | `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning summary or a `json_schema` output format. Core validates these and the `turn` settings against the Harness declaration before dispatch; native option names belong to the adapter |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |

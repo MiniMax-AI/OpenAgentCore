@@ -102,7 +102,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, turn: req.Turn, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
 	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })

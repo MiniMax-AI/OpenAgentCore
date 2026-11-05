@@ -40,12 +40,8 @@ func TestPrepareModelConfiguration(t *testing.T) {
 			}
 		})
 	}
-	got, err := c.Prepare("fixture", map[string]any{"model_provider": provider()})
-	if err != nil {
+	if _, err := c.Prepare("fixture", map[string]any{"model_provider": provider()}); err != nil {
 		t.Fatal(err)
-	}
-	if got.Model != "fixture" {
-		t.Fatal("prepared model changed")
 	}
 	if _, err := (Configuration{}).Prepare("fixture", map[string]any{"model_provider": provider()}); err == nil {
 		t.Fatal("empty declaration inferred provider support")

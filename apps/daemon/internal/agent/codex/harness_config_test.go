@@ -61,7 +61,6 @@ func TestNativeTurnsCarryNoCollaborationMode(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			req.Turn.ReasoningEffort = "low"
 			for _, id := range []string{"one", "two"} {
 				out := make(chan proto.Envelope, 20)
 				turn, err := e.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput("answer"), out)

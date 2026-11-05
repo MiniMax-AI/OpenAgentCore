@@ -28,9 +28,7 @@ type PromptRequestPayload struct {
 	// Input preserves ordered user messages and content.
 	Input MessageInput `json:"input,omitempty"`
 
-	// Turn holds the root Turn's official settings. It is not part of the
-	// Executor identity: a retained Executor receives each Turn's settings at
-	// StartTurn.
+	// Turn holds the root Turn's official settings.
 	Turn TurnSettings `json:"turn"`
 
 	// AgentOptions carries only the keys ValidateAgentOptions accepts. The
@@ -85,8 +83,6 @@ type TurnSettings struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// ServiceTier is never "auto": auto means unset.
 	ServiceTier string `json:"service_tier,omitempty"`
-	// Review is "auto_review"; empty is none.
-	Review string `json:"review,omitempty"`
 }
 
 // WebSearchControl is the resolved official web_search tool. A nil

@@ -157,9 +157,6 @@ func (d Declaration) ValidateDeclaration() error {
 		(d.Capabilities.MCPHTTPBearerAuth.IsSupported() && len(d.MCPOrigins) == 0) {
 		return errors.New("harnessconfig: invalid MCP origins")
 	}
-	if !validChoices(d.Execution.Reviews, "auto_review") {
-		return errors.New("harnessconfig: invalid reviews")
-	}
 	// Core always sends the official default text verbosity.
 	if !slices.Contains(d.Execution.TextVerbosities, "medium") {
 		return errors.New("harnessconfig: execution must declare text verbosity medium")
@@ -179,11 +176,8 @@ func validChoices(values []string, allowed ...string) bool {
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
-// Model may be absent only for the existing native-owned connection path. A
-// supplied model must be a nonempty string; an explicit provider requires an
-// explicit model. HarnessConfig is always an independently owned object.
+// HarnessConfig is always an independently owned object.
 type PreparedConfiguration struct {
-	Model         string
 	HarnessConfig proto.HarnessConfig
 }
 
@@ -199,17 +193,18 @@ func ValidateModel(value any) (string, error) {
 }
 
 // Prepare validates the current model/provider/native-parameter contract before
-// creating native resources. An empty model is absent. Other options belong to
-// the execution contract.
+// creating native resources. An empty model is absent, which only the
+// native-owned connection path without a provider may use. Other options belong
+// to the execution contract.
 func (c Configuration) Prepare(model string, options map[string]any) (PreparedConfiguration, error) {
-	result := PreparedConfiguration{Model: model}
+	var result PreparedConfiguration
 	if model != "" {
 		if _, err := ValidateModel(model); err != nil {
 			return PreparedConfiguration{}, err
 		}
 	}
 	if value, present := options["model_provider"]; present {
-		if result.Model == "" {
+		if model == "" {
 			return PreparedConfiguration{}, ErrModel
 		}
 		if _, err := c.ParseProvider(value); err != nil {
@@ -375,8 +370,6 @@ type ExecutionOptions struct {
 	ReasoningEfforts, ReasoningSummaries []string
 	// ServiceTiers are the supported tiers other than auto.
 	ServiceTiers []string
-	// Reviews are the supported review values other than none.
-	Reviews []string
 	// ProgrammaticToolCalling lists the supported enabled values.
 	ProgrammaticToolCalling []bool
 	// TextVerbosities are the supported text verbosity levels.
@@ -388,7 +381,6 @@ func (o ExecutionOptions) Clone() ExecutionOptions {
 	o.ReasoningEfforts = slices.Clone(o.ReasoningEfforts)
 	o.ReasoningSummaries = slices.Clone(o.ReasoningSummaries)
 	o.ServiceTiers = slices.Clone(o.ServiceTiers)
-	o.Reviews = slices.Clone(o.Reviews)
 	o.ProgrammaticToolCalling = slices.Clone(o.ProgrammaticToolCalling)
 	o.TextVerbosities = slices.Clone(o.TextVerbosities)
 	return o
@@ -427,14 +419,14 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 	return nil
 }
 
-// ValidateTurnSettings rejects an effort, tier or review the Harness does not
+// ValidateTurnSettings rejects an effort or tier the Harness does not
 // declare. Core admission and the Runtime call it with the same settings.
 func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	o := d.Execution
 	for _, check := range []struct {
 		field, value string
 		allowed      []string
-	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}, {"review", turn.Review, o.Reviews}} {
+	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}} {
 		if check.value != "" && !slices.Contains(check.allowed, check.value) {
 			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
 		}

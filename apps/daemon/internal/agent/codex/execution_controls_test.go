@@ -74,7 +74,7 @@ func TestTurnSettingsReachNativeConfigAndRejectUndeclaredValues(t *testing.T) {
 	if plan.Model != "m" || !slices.Contains(plan.ExtraConfig, [2]string{"model_reasoning_effort", `"max"`}) || !slices.Contains(plan.ExtraConfig, [2]string{"service_tier", `"priority"`}) {
 		t.Fatalf("turn settings not applied: %v", plan.ExtraConfig)
 	}
-	for _, turn := range []proto.TurnSettings{{ReasoningEffort: "ultra"}, {ServiceTier: "scale"}, {Review: "auto_review"}} {
+	for _, turn := range []proto.TurnSettings{{ReasoningEffort: "ultra"}, {ServiceTier: "scale"}} {
 		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, turn, nil); err == nil {
 			plan.Cleanup()
 			t.Fatal("undeclared turn setting accepted", turn)

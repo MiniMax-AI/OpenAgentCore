@@ -38,7 +38,6 @@ func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
 	req.RunID, req.Input = "", nil
 	req.AgentSessionID = ""
 	req.RequireExistingNativeSession = false
-	req.Turn = proto.TurnSettings{}
 	data, err := json.Marshal(req)
 	return sha256.Sum256(data), err
 }

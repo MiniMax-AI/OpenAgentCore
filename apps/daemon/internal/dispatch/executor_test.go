@@ -23,7 +23,6 @@ type reusableExecutor struct {
 	mu       sync.Mutex
 	closeErr error
 	startErr error
-	turns    chan proto.TurnSettings
 }
 
 func (e *reusableExecutor) Close(context.Context) error {
@@ -32,10 +31,7 @@ func (e *reusableExecutor) Close(context.Context) error {
 	defer e.mu.Unlock()
 	return e.closeErr
 }
-func (e *reusableExecutor) StartTurn(_ context.Context, id string, turn proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
-	if e.turns != nil {
-		e.turns <- turn
-	}
+func (e *reusableExecutor) StartTurn(_ context.Context, id string, _ proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if e.startErr != nil {
 		return nil, e.startErr
 	}
@@ -176,32 +172,6 @@ func TestExecutorCancelSettlesTurnWithoutClosingOwner(t *testing.T) {
 		t.Fatalf("cancel=%+v closes=%d", ack, owner.closes.Load())
 	}
 }
-func TestExecutorTakesEachTurnsSettingsWithoutChangingIdentity(t *testing.T) {
-	owner := &reusableExecutor{starts: make(chan *reusableTurn, 2), turns: make(chan proto.TurnSettings, 2)}
-	r, s, calls := executorRouter(t, owner, time.Minute)
-	for i, turn := range []proto.TurnSettings{{Model: "one", ReasoningEffort: "low"}, {Model: "two", ServiceTier: "flex"}} {
-		key := fmt.Sprint("turn-", i)
-		req := executorRequest()
-		req.Configuration.Turn = turn
-		if i == 1 {
-			req.Configuration.AgentSessionID = "native-session"
-		}
-		p := executorAdmission(t, r, s, key, req)
-		if p.Reused != (i == 1) {
-			t.Fatalf("Turn %d: reused=%v", i, p.Reused)
-		}
-		startExecutorTurn(t, r, s, key, key, p)
-		if got := <-owner.turns; got != turn {
-			t.Fatalf("StartTurn got %+v, want %+v", got, turn)
-		}
-		(<-owner.starts).finish()
-		waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "Turn settlement")
-	}
-	if calls.Load() != 1 || owner.closes.Load() != 0 {
-		t.Fatal("a Turn setting change replaced the Executor")
-	}
-}
-
 func TestExecutorRejectsConfigurationAndNativeIdentityChanges(t *testing.T) {
 	owner := &reusableExecutor{starts: make(chan *reusableTurn, 1)}
 	r, s, calls := executorRouter(t, owner, time.Minute)
@@ -212,7 +182,7 @@ func TestExecutorRejectsConfigurationAndNativeIdentityChanges(t *testing.T) {
 	for _, kind := range []string{"configuration", "native"} {
 		req := executorRequest()
 		if kind == "configuration" {
-			req.Configuration.AgentOptions = map[string]any{"system_prompt": "changed"}
+			req.Configuration.Turn.Model = "changed"
 		} else {
 			req.Configuration.AgentSessionID = "other-native"
 		}
@@ -410,7 +380,7 @@ func TestExecutorResumesSameOwnerAndNextTurnAfterSuspension(t *testing.T) {
 	req := preparationRequest()
 	req.Configuration.AgentSessionID = "native-session"
 	conflict := req
-	conflict.Configuration.AgentOptions = map[string]any{"system_prompt": "changed"}
+	conflict.Configuration.Turn.Model = "changed"
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "conflict", conflict)); err == nil {
 		t.Fatal("suspension relaxed the fixed configuration")
 	}

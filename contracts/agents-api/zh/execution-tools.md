@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 7783010b0968214d235d349fd60d1ee6096f0ab9d33d58397d90bb0fd935cded
+source_hash: 5d24e4ec54240ace34300b551ddf0ecf14fb8cf0fa0aef227e0068643a6728ff
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -71,7 +71,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 
 执行把解析后的值交给 Harness，并按 `internal/harnessconfig` 中的声明（`Execution`）校验：支持的 Web 搜索模式以及是否接受搜索设置、reasoning effort 与 summary、service tier、程序化工具调用的取值和 text verbosity。声明之外的值会在 Session 准入时被拒绝，消息会指出字段，除非 Session 替换了保存的工具。Core 仅在 Agent 设置了选项或适用固定版本的默认值时才发送该选项，因此省略 `web_search` 或 `programmatic_tool_calling` 会保留各 Harness 的原生行为。对程序化调用而言，这与官方默认启用的行为不同。无关的原生实用工具不会被移除。省略该控制项时，工作区位置上的 Claude Code 也保留 `WebSearch` 和 `WebFetch`；其 `web_search_call` 操作见 [Turn 与 Item](./sessions-events.md#turns-and-items)。
 
-`ExecutionControls` 携带这些选项（[Runtime 协议](../../../docs/zh/runtime-protocol.md#capability-declarations)）。Runtime 只需要 `execution_controls` 能力。
+`ExecutionControls` 携带这些选项，推理强度和服务层级除外，它们随 Turn 设置传递（[Runtime 协议](../../../docs/zh/runtime-protocol.md#capability-declarations)）。Runtime 只需要 `execution_controls` 能力。
 
 | Harness | Web 搜索 | 程序化工具调用 |
 | --- | --- | --- |
