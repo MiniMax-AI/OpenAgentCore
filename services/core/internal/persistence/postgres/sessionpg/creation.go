@@ -170,7 +170,7 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 		size := int64(len(body))
 		metadata[i].ID = id.String()
 		metadata[i].SizeBytes = &size
-		encrypted, err := t.cipher.SealEnvironmentFile(body, fileBinding(t.tenant, t.session, id.String()))
+		encrypted, err := t.cipher.SealEnvironmentFile(body, fileBinding(t.tenant, t.environment, id.String()))
 		if err != nil {
 			return fmt.Errorf("seal initial file: %w", err)
 		}
@@ -192,7 +192,7 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 	if err != nil {
 		return err
 	}
-	encrypted, err := t.cipher.SealEnvironmentSetup(plaintext, setupBinding(t.tenant, t.session))
+	encrypted, err := t.cipher.SealEnvironmentSetup(plaintext, setupBinding(t.tenant, t.environment))
 	if err != nil {
 		return fmt.Errorf("seal environment setup: %w", err)
 	}
@@ -217,14 +217,21 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 }
 
 func (t *creationTx) CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error) {
-	t.environment = pgtype.UUID{Bytes: uuid.New(), Valid: true}
-	if err := t.q.CreateEnvironment(ctx, sqlc.CreateEnvironmentParams{ID: t.environment, TenantID: t.tenant, Configuration: configuration, Prepared: prepared}); err != nil {
+	if err := t.insertEnvironment(ctx, sqlc.CreateEnvironmentParams{Configuration: configuration, Prepared: prepared}); err != nil {
 		return "", err
 	}
 	if err := t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: t.environment}); err != nil {
 		return "", err
 	}
 	return optionalID(t.environment), nil
+}
+
+// insertEnvironment inserts the Environment with a new ID, which the later
+// preparation steps act on.
+func (t *creationTx) insertEnvironment(ctx context.Context, params sqlc.CreateEnvironmentParams) error {
+	t.environment = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	params.ID, params.TenantID = t.environment, t.tenant
+	return t.q.CreateEnvironment(ctx, params)
 }
 
 func (t *creationTx) PruneChanges(ctx context.Context) error {

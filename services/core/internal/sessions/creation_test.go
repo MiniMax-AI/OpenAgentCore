@@ -124,6 +124,16 @@ func (s *fakeStorage) FindCreation(_ context.Context, tenant, key string) (Creat
 	return s.findCreation()
 }
 
+func (s *fakeStorage) WithEnvironmentCreation(context.Context, string, EnvironmentIdentity, func(context.Context, StandaloneCreationTx) error) error {
+	s.record("WithEnvironmentCreation", false)
+	return nil
+}
+
+func (s *fakeStorage) FindEnvironmentCreation(context.Context, string, string) (EnvironmentCreationRecord, error) {
+	s.record("FindEnvironmentCreation", false)
+	return EnvironmentCreationRecord{}, nil
+}
+
 // fingerprints is a fake FingerprintProviderKey that keeps keys apart.
 func fingerprints(secret string) (string, error) { return "fp-" + secret, nil }
 
@@ -410,8 +420,8 @@ func TestCreateSession(t *testing.T) {
 		if err != nil || !result.Created || result.Cursor != 4 || result.Session.Engine != "loaded" {
 			t.Fatalf("result %+v, %v", result, err)
 		}
-		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "SaveModelExecution https://model.example/v1",
-			"SaveExecutionConfiguration available " + uuid.Nil.String(), "CreateEnvironment", "SaveInitialFiles 1", "SaveSetup skill_a@3",
+		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "CreateEnvironment", "SaveInitialFiles 1", "SaveSetup skill_a@3",
+			"SaveModelExecution https://model.example/v1", "SaveExecutionConfiguration available " + uuid.Nil.String(),
 			"LoadEnvironmentInput", `CreateInputReservation <key> [{"kind":"message","payload":` + hi + `}] initial`, "LoadEnvironmentInput",
 			"PruneChanges", "AuditCreation session:session environment:environment:session", "LoadSession"}
 		if strings.Join(calls, "\n") != strings.Join(want, "\n") {

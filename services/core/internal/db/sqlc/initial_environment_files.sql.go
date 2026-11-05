@@ -38,7 +38,7 @@ func (q *Queries) CreateInitialEnvironmentFile(ctx context.Context, arg CreateIn
 }
 
 const getInitialEnvironmentFile = `-- name: GetInitialEnvironmentFile :one
-SELECT f.id, f.environment_id, f.position, f.path, f.size_bytes, f.contents, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS owner_session_id
+SELECT f.id, f.environment_id, f.position, f.path, f.size_bytes, f.contents, (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
 FROM initial_environment_files f JOIN environments e ON e.id = f.environment_id
 WHERE e.tenant_id = $1 AND f.environment_id = $2 AND f.position = $3
 `
@@ -50,13 +50,13 @@ type GetInitialEnvironmentFileParams struct {
 }
 
 type GetInitialEnvironmentFileRow struct {
-	ID             pgtype.UUID `json:"id"`
-	EnvironmentID  pgtype.UUID `json:"environment_id"`
-	Position       int32       `json:"position"`
-	Path           string      `json:"path"`
-	SizeBytes      int64       `json:"size_bytes"`
-	Contents       []byte      `json:"contents"`
-	OwnerSessionID pgtype.UUID `json:"owner_session_id"`
+	ID            pgtype.UUID `json:"id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Position      int32       `json:"position"`
+	Path          string      `json:"path"`
+	SizeBytes     int64       `json:"size_bytes"`
+	Contents      []byte      `json:"contents"`
+	Reclaimed     bool        `json:"reclaimed"`
 }
 
 func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialEnvironmentFileParams) (GetInitialEnvironmentFileRow, error) {
@@ -69,7 +69,7 @@ func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialE
 		&i.Path,
 		&i.SizeBytes,
 		&i.Contents,
-		&i.OwnerSessionID,
+		&i.Reclaimed,
 	)
 	return i, err
 }

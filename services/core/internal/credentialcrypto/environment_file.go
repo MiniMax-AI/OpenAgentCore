@@ -30,7 +30,7 @@ func (c *Cipher) OpenEnvironmentFile(ciphertext []byte, binding EnvironmentFileB
 }
 
 func environmentFileData(binding EnvironmentFileBinding) ([]byte, error) {
-	if binding.Resource != "environment_template" && binding.Resource != "session" {
+	if binding.Resource != "environment_template" && binding.Resource != "environment" {
 		return nil, errInvalidBinding
 	}
 	for _, value := range []string{binding.TenantID, binding.OwnerID, binding.FileID} {

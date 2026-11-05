@@ -1,6 +1,16 @@
 -- name: CreateEnvironment :exec
-INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization)
-VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(configuration), true, CASE WHEN sqlc.arg(prepared)::boolean THEN 'pending' ELSE 'complete' END);
+-- A creation identity makes the Environment standalone; without one a Session owns it.
+INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization, idempotency_key, request_hash, creator_kind, creator_id)
+VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(configuration), sqlc.narg(idempotency_key)::text IS NULL,
+        CASE WHEN sqlc.arg(prepared)::boolean THEN 'pending' ELSE 'complete' END,
+        sqlc.narg(idempotency_key), sqlc.narg(request_hash), sqlc.narg(creator_kind), sqlc.narg(creator_id));
+
+-- name: LockEnvironmentCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(tenant_id)::text || ':' || sqlc.arg(idempotency_key)::text, 0));
+
+-- name: FindEnvironmentCreation :one
+SELECT id, idempotency_key, request_hash, creator_kind, creator_id
+FROM environments WHERE tenant_id = $1 AND idempotency_key = $2;
 
 -- name: AttachSessionEnvironment :exec
 UPDATE sessions SET environment_id = $2 WHERE id = $1;

@@ -293,6 +293,16 @@ func (s *fakeArtifactStorage) FindCreation(context.Context, string, string) (Cre
 	return CreationRecord{}, nil
 }
 
+func (s *fakeArtifactStorage) WithEnvironmentCreation(context.Context, string, EnvironmentIdentity, func(context.Context, StandaloneCreationTx) error) error {
+	s.t.Fatal("unexpected call to WithEnvironmentCreation")
+	return nil
+}
+
+func (s *fakeArtifactStorage) FindEnvironmentCreation(context.Context, string, string) (EnvironmentCreationRecord, error) {
+	s.t.Fatal("unexpected call to FindEnvironmentCreation")
+	return EnvironmentCreationRecord{}, nil
+}
+
 func discard(content io.Reader, size int64) error {
 	_, err := io.CopyN(io.Discard, content, size)
 	return err

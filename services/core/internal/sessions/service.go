@@ -27,6 +27,7 @@ func NewService(storage Storage, rules *placement.Rules) (*Service, error) {
 type Storage interface {
 	ArtifactStorage
 	CreationStorage
+	EnvironmentCreationStorage
 	DeviceStorage
 	ExecutorCredentialStorage
 	SessionStorage

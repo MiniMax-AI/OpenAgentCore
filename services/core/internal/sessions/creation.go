@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -65,40 +64,18 @@ type CreationRecord struct {
 type CreationTx interface {
 	InputAdmissionTx
 	InputActivityTx
+	EnvironmentCreationTx
 	// UpsertSession inserts the Session or, under the tenant and key, returns
 	// the stored one with Created false when its creator and identity match:
 	// the intent hash when the stored Session has one, else the request hash.
 	// A deleted or mismatched one is ErrIdempotencyConflict. Cursor is the
 	// Session's event sequence before anything the transaction admits.
 	UpsertSession(ctx context.Context, session NewSession) (Creation, error)
-	// LockDeployment locks and reads the sandbox deployment, serializing
-	// hosted creation with deployment changes, restore and node removal.
-	LockDeployment(ctx context.Context) (placement.Deployment, error)
-	// LockSkills locks the tenant's Skills in ID order, whatever the order of
-	// ids, and returns them by ID. A missing one is ErrNotFound.
-	LockSkills(ctx context.Context, ids []string) (map[string]skills.Skill, error)
-	// ReadSkillVersion opens and verifies a version of a locked Skill. A
-	// missing one is ErrNotFound; one that does not open or verify is an
-	// internal error.
-	ReadSkillVersion(ctx context.Context, skill string, version int64) (skills.Content, error)
 	// SaveModelExecution seals the Session's model provider bundle.
 	SaveModelExecution(ctx context.Context, provider v1.ModelProviderInput) error
 	// SaveExecutionConfiguration records the frozen execution projection and,
 	// unless it is uuid.Nil, the deployment provider revision it resolved.
 	SaveExecutionConfiguration(ctx context.Context, projection v1.SessionExecutionConfiguration, revision uuid.UUID) error
-	// SaveInitialFiles copies the validated initial files, a file_id one from
-	// its locked source File, seals them under the Session and records their
-	// metadata in the Environment's configuration. A missing source is ErrNotFound and one
-	// beyond environmentconfig.MaxInitialFileBytes ErrInvalidInput.
-	SaveInitialFiles(ctx context.Context, files []environmentconfig.InitialFile) error
-	// SaveSetup seals the installed setup under the Session and records its
-	// metadata in the Environment's configuration.
-	SaveSetup(ctx context.Context, setup environmentconfig.Setup) error
-	// CreateEnvironment creates the Session's Environment with the
-	// configuration, pending preparation when prepared, attaches it to the
-	// Session and returns its ID. It precedes the setup and initial files,
-	// which are saved for it.
-	CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error)
 	// CreateInputReservation reserves the batch under key until the deadline
 	// the database clock sets, marked as the Session's initial input and
 	// bound to settings.
@@ -150,35 +127,42 @@ func (s *Service) CreateSession(ctx context.Context, tenant string, input Create
 	return result, nil
 }
 
-// createResources freezes what the new Session keeps, creates its Environment
-// and admits its initial inputs, in lock order: the hosted deployment, the
-// Skills, then the Session's own rows. It returns the resources created.
+// createResources creates the new Session's Environment, freezes what the
+// Session keeps and admits its initial inputs, in lock order: the Environment's
+// steps, then the Session's own rows. It returns the resources created.
 func (s *Service) createResources(ctx context.Context, tx CreationTx, session Session, input CreateSession, batch []Input, encoded json.RawMessage) ([]writeaudit.Resource, error) {
-	var configuration struct {
-		Environment struct {
-			Type string `json:"type"`
-		} `json:"environment"`
-	}
-	if err := json.Unmarshal(session.Configuration, &configuration); err != nil {
-		return nil, err
-	}
-	hosted := configuration.Environment.Type == "openai_hosted"
-	var deployment placement.Deployment
-	if hosted {
-		if s.rules == nil {
-			return nil, errors.New("hosted Session creation requires placement rules")
-		}
-		var err error
-		if deployment, err = tx.LockDeployment(ctx); err != nil {
-			return nil, err
-		}
-		if err := s.rules.CheckAdmission(deployment, ""); err != nil {
-			return nil, err
-		}
-	}
-	setup, err := freezeSkills(ctx, tx, input.Initialization)
+	created := []writeaudit.Resource{{Type: writeaudit.ResourceSession, ID: session.ID}}
+	creates, err := createsEnvironment(session.Configuration)
 	if err != nil {
 		return nil, err
+	}
+	environment, retained := "", false
+	var target sandbox.DeploymentSpec
+	if creates {
+		var snapshot struct {
+			Environment struct {
+				Type string `json:"type"`
+			} `json:"environment"`
+		}
+		if err := json.Unmarshal(session.Configuration, &snapshot); err != nil {
+			return nil, err
+		}
+		_, configuration, err := SplitEnvironment(session.Configuration)
+		if err != nil {
+			return nil, err
+		}
+		hosted := snapshot.Environment.Type == "openai_hosted"
+		var deployment placement.Deployment
+		if environment, deployment, err = s.createEnvironment(ctx, tx, environmentPreparation{Hosted: hosted, Configuration: configuration, Initialization: input.Initialization, InitialFiles: input.InitialFiles}); err != nil {
+			return nil, err
+		}
+		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
+		if hosted {
+			if err := json.Unmarshal(deployment.Specification, &target); err != nil {
+				return nil, err
+			}
+			retained = true
+		}
 	}
 	if input.ModelProvider != nil {
 		if err := tx.SaveModelExecution(ctx, *input.ModelProvider); err != nil {
@@ -194,44 +178,7 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 			return nil, err
 		}
 	}
-	created := []writeaudit.Resource{{Type: writeaudit.ResourceSession, ID: session.ID}}
-	creates, err := createsEnvironment(session.Configuration)
-	if err != nil {
-		return nil, err
-	}
-	environment := ""
-	if creates {
-		_, configuration, err := SplitEnvironment(session.Configuration)
-		if err != nil {
-			return nil, err
-		}
-		prepared := hosted || len(input.InitialFiles) > 0 || !setup.Empty()
-		if environment, err = tx.CreateEnvironment(ctx, configuration, prepared); err != nil {
-			return nil, err
-		}
-		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
-	}
-	if len(input.InitialFiles) > 0 {
-		if environmentconfig.ValidateInitialFiles(input.InitialFiles) != nil {
-			return nil, ErrInvalidInput
-		}
-		if err := tx.SaveInitialFiles(ctx, input.InitialFiles); err != nil {
-			return nil, err
-		}
-	}
-	if !setup.Empty() {
-		if err := tx.SaveSetup(ctx, setup); err != nil {
-			return nil, err
-		}
-	}
-	if hosted {
-		if err := s.rules.CheckPublicOrigin(deployment.Provider); err != nil {
-			return nil, err
-		}
-		var target sandbox.DeploymentSpec
-		if err := json.Unmarshal(deployment.Specification, &target); err != nil {
-			return nil, err
-		}
+	if retained {
 		if err := ValidateRetainedHistory(target.Workspace != nil, input.SupportsRetainedNativeHistory); err != nil {
 			return nil, err
 		}
@@ -267,7 +214,7 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 // selects, read under the Skill locks, so the result no longer depends on any
 // Skill. The locks serialize selection with default changes and version and
 // Skill deletion.
-func freezeSkills(ctx context.Context, tx CreationTx, setup environmentconfig.Setup) (environmentconfig.Setup, error) {
+func freezeSkills(ctx context.Context, tx EnvironmentCreationTx, setup environmentconfig.Setup) (environmentconfig.Setup, error) {
 	if setup.Validate() != nil {
 		return environmentconfig.Setup{}, ErrInvalidInput
 	}
