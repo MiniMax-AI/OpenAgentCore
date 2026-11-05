@@ -49,7 +49,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	done := startLocalWrite(ctx, w, environment)
 	begin := h.read(proto.TypeWorkspaceWrite)
 	var request proto.WorkspaceWritePayload
-	if begin.DecodePayload(&request) != nil || request.Step != "begin" || request.EnvironmentID != environment.ID || request.SessionID != h.session.ID || request.Path != "input" || request.SizeBytes != 3 {
+	if begin.DecodePayload(&request) != nil || request.Step != "begin" || request.EnvironmentID != environment.ID || request.Path != "input" || request.SizeBytes != 3 {
 		t.Fatal("upload identity changed")
 	}
 	intent, err := FixtureFileWrite(t.Context(), h.s.pool, h.tenant, environment.ID, begin.ID)

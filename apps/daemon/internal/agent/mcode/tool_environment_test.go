@@ -44,7 +44,7 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 			req.AgentSessionID = "native-1"
 			write(source, `{"MCP_TEST_TOKEN":"changed","TOOL_SECRET":"changed"}`)
 		}
-		binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, config.Directory, capabilityDirectory)
+		binding, err := localworkspace.NewWithCapabilityDirectory(environment, config.Directory, capabilityDirectory)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	if err := os.Remove(filepath.Join(initialization, "tool-env.json")); err != nil {
 		t.Fatal(err)
 	}
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, config.Directory, capabilityDirectory)
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, config.Directory, capabilityDirectory)
 	if err != nil {
 		t.Fatal(err)
 	}

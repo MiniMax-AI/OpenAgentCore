@@ -149,7 +149,7 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	}
 	request := operation.Request
 	request.BudgetMS = budget
-	request.EnvironmentID, request.SessionID = identity.EnvironmentID, identity.SessionID
+	request.EnvironmentID = identity.EnvironmentID
 	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), request, operation.Data)
 	if err == nil && result.Outcome == "completed" {
 		return result, nil

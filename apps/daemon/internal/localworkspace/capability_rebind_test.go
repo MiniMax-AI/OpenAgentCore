@@ -23,7 +23,7 @@ func TestFinalizeRebindsIdenticalRestoredInstallation(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The next Session's directory holds the files restored from the first.
-	next, err := NewWithCapabilityDirectory(uuid.NewString(), uuid.NewString(), first.workspace, first.capabilityRoot)
+	next, err := NewWithCapabilityDirectory(uuid.NewString(), first.workspace, first.capabilityRoot)
 	if err != nil {
 		t.Fatal(err)
 	}

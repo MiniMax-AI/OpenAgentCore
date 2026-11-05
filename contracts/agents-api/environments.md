@@ -180,13 +180,13 @@ Changing `environment` to `{"type":"openai_hosted"}` reuses the same preparation
 
 **Readiness.** Transport `connected` is a connection observation, not readiness. Execution and live file access wait for initialization; then the native preparation owner validates the installed snapshot and Harness before admitting a Turn. File reads keep their own readiness and authorization and do not require capability or native readiness. Deployment model credentials are never sent to application-owned machines.
 
-**Transfer.** Initial files, configure, npm, Python and setup operations, inert Skill and Plugin archives and finalization selections travel as typed `runtime_prepare` operations with canonical Session and Environment identities; the [protocol](../../docs/runtime-protocol.md#preparation-and-execution-order) owns chunking and receipts. Files and setup working directories use logical `/workspace` addresses; the Runtime chooses executables and physical destinations, and Core supplies no executable or host-platform field. Source selections accept portable absolute Unix, Windows drive and UNC paths; Core never resolves them on its own host, and the daemon applies its local path and access checks.
+**Transfer.** Initial files, configure, npm, Python and setup operations, inert Skill and Plugin archives and finalization selections travel as typed `runtime_prepare` operations with a canonical Environment identity; the [protocol](../../docs/runtime-protocol.md#preparation-and-execution-order) owns chunking and receipts. Files and setup working directories use logical `/workspace` addresses; the Runtime chooses executables and physical destinations, and Core supplies no executable or host-platform field. Source selections accept portable absolute Unix, Windows drive and UNC paths; Core never resolves them on its own host, and the daemon applies its local path and access checks.
 
 ### Installed snapshot
 
 Both origins use the common Runtime parser and an `installed.json` manifest on Linux, macOS and Windows. The Runtime operator chooses the capability root ([installer options](../../docs/getting-started/self-hosted.md#options-for-automation)); Core and transfer requests cannot.
 
-- The manifest binds the Session and Environment to the ordered source-selection digest. The preparation owner verifies or creates it before native execution, also for an empty selection.
+- The manifest binds the Environment to the ordered source-selection digest. The preparation owner verifies or creates it before native execution, also for an empty selection.
 - After the setup commands, the initializer snapshots the declared workspace-contained capability directories into Runtime storage. Directory bytes are read after setup, not at Session creation.
 - A filesystem lock prevents concurrent installation. A private completion record keeps only the operator's installation root, so a deleted snapshot is never mistaken for a first preparation or captured again.
 - Missing, partial, conflicting or foreign snapshots fail without deleting data, repairing or replaying.

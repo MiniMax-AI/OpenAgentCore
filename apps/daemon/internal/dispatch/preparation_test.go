@@ -83,7 +83,7 @@ func preparationWorkspace(t *testing.T) *localworkspace.Binding {
 	}
 	t.Setenv("OAC_RUNTIME_HOME", runtimeHome)
 	preparationDirectories.workspace, preparationDirectories.capabilities = t.TempDir(), t.TempDir()
-	binding, err := localworkspace.NewWithCapabilityDirectory(preparationEnvironmentID, preparationSessionID, preparationDirectories.workspace, preparationDirectories.capabilities)
+	binding, err := localworkspace.NewWithCapabilityDirectory(preparationEnvironmentID, preparationDirectories.workspace, preparationDirectories.capabilities)
 	if err != nil {
 		t.Fatal(err)
 	}

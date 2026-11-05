@@ -25,10 +25,9 @@ const MaxSnapshotBytes = 50 << 20
 
 var ErrInvalid = errors.New("capability installation unavailable or unsupported")
 
-// Identity binds an installation to one immutable Environment and Session.
+// Identity binds an installation to one immutable Environment.
 type Identity struct {
 	EnvironmentID string `json:"environment_id"`
-	SessionID     string `json:"session_id"`
 }
 
 // DirectoryResolver opens a declared source after local authorization and path
@@ -131,11 +130,9 @@ func (m *Manifest) addMCPPackage(root string) error {
 }
 
 func validateIdentity(identity Identity) error {
-	for _, value := range []string{identity.EnvironmentID, identity.SessionID} {
-		id, err := uuid.Parse(value)
-		if err != nil || id == uuid.Nil || id.String() != value {
-			return ErrInvalid
-		}
+	id, err := uuid.Parse(identity.EnvironmentID)
+	if err != nil || id == uuid.Nil || id.String() != identity.EnvironmentID {
+		return ErrInvalid
 	}
 	return nil
 }

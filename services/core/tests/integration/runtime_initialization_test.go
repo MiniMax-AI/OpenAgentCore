@@ -172,7 +172,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	var actions []string
 	var actionsMu sync.Mutex
 	provider.apply = func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
-		if request.SessionID != session.ID || request.EnvironmentID != environment.ID {
+		if request.EnvironmentID != environment.ID {
 			t.Error("Runtime identity changed")
 		}
 		action := request.Action

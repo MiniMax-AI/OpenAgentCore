@@ -74,7 +74,7 @@ After an uncertain startup, inspect the same VM or destroy it. The SDK's `Sandbo
 | `/root/.oac/e2b/launch.json` | The startup claim, written before any other startup step |
 | `/root/.oac/e2b/ready.json` | Process handoff only (`daemon_started`, with the daemon PID), even if the daemon exits later |
 | `/home/runtime/.oac/daemon/default/daemon.log` | The daemon log |
-| `/home/runtime/.oac/daemon/environment.json` | The daemon's verified Environment and Session binding |
+| `/home/runtime/.oac/daemon/environment.json` | The daemon's verified Environment binding |
 
 Neither record proves enrollment, native readiness or a successful Turn; check the Environment status in Core. Keep the records and native history after a failure. `init.py` refuses to run again once any launch record exists. VM expiry destroys the history in it; a replacement VM never recovers the original Session.
 

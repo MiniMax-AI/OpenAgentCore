@@ -20,7 +20,7 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		return r, nil
 	}
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey || r.LocalEnvironment.WorkspaceRoot != b.workspace {
+		r.LocalEnvironment.ID != b.environment || r.LocalEnvironment.WorkspaceRoot != b.workspace {
 		return r, agentcapabilities.ErrInvalid
 	}
 	b.capabilityMu.Lock()
@@ -86,7 +86,7 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 // ApplyRuntimePreparation settles every filesystem operation before returning. A
 // cancelled caller never leaves an unowned installation goroutine behind.
 func (b *Binding) ApplyRuntimePreparation(ctx context.Context, input proto.RuntimePreparePayload, data []byte) error {
-	if b == nil || !b.Matches(input.EnvironmentID, input.SessionID) || !proto.ValidRuntimePrepareRequest(input) || input.Step != "begin" {
+	if b == nil || !b.Matches(input.EnvironmentID) || !proto.ValidRuntimePrepareRequest(input) || input.Step != "begin" {
 		return agentcapabilities.ErrInvalid
 	}
 	b.capabilityMu.Lock()
@@ -151,7 +151,7 @@ func (b *Binding) loadCapabilitySnapshot(root *os.Root, input proto.CapabilitySo
 	}
 	manifest, err := agentcapabilities.Load(root)
 	if err == nil && !completed && manifest.Identity != identity {
-		// A preparation restored from an identical earlier Session carries that Session's identity.
+		// A preparation restored from an identical earlier Environment carries that Environment's identity.
 		err = agentcapabilities.Rebind(root, &manifest, input, identity)
 	}
 	if err != nil || agentcapabilities.ValidateSelection(manifest, input, identity) != nil {
@@ -161,7 +161,7 @@ func (b *Binding) loadCapabilitySnapshot(root *os.Root, input proto.CapabilitySo
 }
 
 func (b *Binding) capabilityIdentity() agentcapabilities.Identity {
-	return agentcapabilities.Identity{EnvironmentID: b.environment, SessionID: b.stateKey}
+	return agentcapabilities.Identity{EnvironmentID: b.environment}
 }
 
 // The current Linux Runtime layout is shared by user-owned and managed hosts.

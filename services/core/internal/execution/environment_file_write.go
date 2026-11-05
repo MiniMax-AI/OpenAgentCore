@@ -108,7 +108,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	dataDigest := sha256.Sum256(request.data)
 	body, _ := json.Marshal([]any{request.path, len(request.data), hex.EncodeToString(dataDigest[:])})
 	digest := sha256.Sum256(body)
-	wire := proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment.ID, SessionID: session.ID, Path: request.path, SizeBytes: len(request.data), SHA256: hex.EncodeToString(dataDigest[:])}
+	wire := proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment.ID, Path: request.path, SizeBytes: len(request.data), SHA256: hex.EncodeToString(dataDigest[:])}
 	if !proto.ValidWorkspaceWriteRequest(wire) {
 		return fileWriteResult{err: sessions.ErrInvalidInput}
 	}
@@ -120,7 +120,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if intent.Replayed {
 		return unavailable
 	}
-	result, err := peer.WriteWorkspaceFile(ctx, key.ID, proto.WorkspaceWritePayload{EnvironmentID: environment.ID, SessionID: session.ID, Path: request.path}, request.data)
+	result, err := peer.WriteWorkspaceFile(ctx, key.ID, proto.WorkspaceWritePayload{EnvironmentID: environment.ID, Path: request.path}, request.data)
 	if err != nil || (result.Outcome != "completed" && result.Outcome != "rejected") {
 		return unavailable
 	}

@@ -45,7 +45,7 @@ sequenceDiagram
 - The first heartbeat is sent at once, then at the interval that bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 - Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Environment binding.
 
 ## Versioning
 
@@ -90,7 +90,8 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | Identity | Scope and meaning |
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
-| Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where the payload validator requires them |
+| Environment ID | The Environment and workspace a Runtime is bound to for its lifetime; a canonical UUID in `runtime_prepare` and `workspace_write` |
+| Session ID | Core-owned identity of the configuration in one `execution_prepare`; a Runtime bound to an Environment serves one Session at a time |
 | Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration, except the `turn` settings its Harness declares changeable |
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
@@ -207,6 +208,8 @@ stateDiagram-v2
     preparing --> failed
     ready --> failed
 ```
+
+One Session at a time: a Runtime bound to an Environment serves a single Session, and each `execution_prepare` names it. A Runtime without a bound Environment, such as the service-side host for `environment: none` Sessions, serves Sessions concurrently within its capacity and never switches. If an Executor of another Session is preparing, admitted or running, the prepare is rejected with `resource_unavailable`. Otherwise the new Executor's preparation closes the other Sessions' Executors, waits for each confirmed close, removes the native state of every other Session and only then starts the Harness; an unconfirmed close fails the preparation and keeps the state. A read-only workspace preparation starts no Harness and never switches Sessions.
 
 Preparation and start run outside the receive loop and router lock. An admission expires at a fixed deadline that retries do not extend; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains a bounded number of admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 

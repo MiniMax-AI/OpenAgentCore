@@ -19,7 +19,7 @@ func bootstrapProfile(path string) (*auth.Profile, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	if err = localworkspace.Bind(input.EnvironmentID, input.SessionID, input.Workspace, localworkspace.CapabilityDirectory); err != nil {
+	if err = localworkspace.Bind(input.EnvironmentID, input.Workspace, localworkspace.CapabilityDirectory); err != nil {
 		return nil, false, errors.New("connect: Runtime workspace binding unavailable")
 	}
 	return &auth.Profile{ServerURL: input.CoreURL, RuntimeID: input.DeviceID, RunnerCredential: input.Credential}, input.SuspendControl, nil

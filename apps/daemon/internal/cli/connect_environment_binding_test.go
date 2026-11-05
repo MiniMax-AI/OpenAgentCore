@@ -44,11 +44,14 @@ func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
 				t.Fatal(err)
 			}
 			var receipt environmentBinding
-			if decodeEnvironmentJSON(raw, &receipt) != nil || receipt.LocalWorkspace != workspace || receipt.Enrollment != bound {
+			want := bound
+			want.SessionID = ""
+			if decodeEnvironmentJSON(raw, &receipt) != nil || receipt.LocalWorkspace != workspace || receipt.Enrollment != want {
 				t.Fatal("workspace identity changed", receipt)
 			}
+			bound.SessionID = uuid.NewString()
 			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, workspace, localworkspace.CapabilityDirectory); err != nil {
-				t.Fatal("same binding refused", err)
+				t.Fatal("same Environment refused for another Session", err)
 			}
 			replacement := filepath.Join(filepath.Dir(workspace), "replacement")
 			if err := os.Mkdir(replacement, 0700); err != nil {

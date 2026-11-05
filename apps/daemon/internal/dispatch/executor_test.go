@@ -332,6 +332,16 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 }
 
+func TestUnboundRuntimeKeepsSessionsSideBySide(t *testing.T) {
+	owner := &reusableExecutor{}
+	r, s, calls := executorRouter(t, owner, time.Minute)
+	executorAdmission(t, r, s, "first", executorRequest())
+	executorAdmission(t, r, s, "second", noEnvironmentPreparation("next", proto.PromptRequestPayload{AgentKind: "reusable"}))
+	if owner.closes.Load() != 0 || calls.Load() != 2 {
+		t.Fatalf("unbound Runtime closes=%d prepares=%d, want 0 and 2", owner.closes.Load(), calls.Load())
+	}
+}
+
 func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {
 	for name, change := range map[string]func(*proto.PromptRequestPayload){
 		"no environment":       func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },

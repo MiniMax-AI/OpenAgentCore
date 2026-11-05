@@ -153,7 +153,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 			return sessions.ErrInvalidInput
 		}
 	}
-	identity := agentcapabilities.Identity{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID}
+	identity := agentcapabilities.Identity{EnvironmentID: owner.EnvironmentID}
 	operations := setupOperations(setup)
 	step := func(index int) error {
 		err := w.lease.CheckOwnership(ctx)

@@ -39,7 +39,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err := os.MkdirAll(workspace, 0700); err != nil {
 				t.Fatal(err)
 			}
-			binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, filepath.Join(t.TempDir(), "capabilities"))
+			binding, err := localworkspace.NewWithCapabilityDirectory(environment, workspace, filepath.Join(t.TempDir(), "capabilities"))
 			if err != nil {
 				t.Fatal(err)
 			}

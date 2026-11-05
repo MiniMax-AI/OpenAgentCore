@@ -35,7 +35,8 @@ var ErrInvalid = errors.New("invalid Runtime bootstrap input")
 // Connection is a current-version launch input, not Runtime's private auth store.
 // CoreURL includes the machine API base path. The provider owns delivery and
 // file permissions; Runtime owns validation and its authentication representation.
-// EnvironmentID, SessionID and Workspace bind the Runtime to its Environment.
+// EnvironmentID and Workspace bind the Runtime to its Environment; the Runtime
+// ignores SessionID.
 // SuspendControl is true exactly when the Provider declares checkpoint support.
 type Connection struct {
 	Version        int    `json:"version"`

@@ -17,7 +17,7 @@ func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
 	defer s.Close("test")
 	data := bytes.Repeat([]byte{0, 255, 3}, 400000)
 	id := uuid.NewString()
-	request := proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file"}
+	request := proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), Path: "file"}
 	done := make(chan error, 1)
 	go func() {
 		result, err := s.WriteWorkspaceFile(t.Context(), id, request, data)
@@ -37,7 +37,7 @@ func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
 		switch p.Step {
 		case "begin":
 			digest := sha256.Sum256(data)
-			if p.EnvironmentID != request.EnvironmentID || p.SessionID != request.SessionID || p.SizeBytes != len(data) || p.SHA256 != hex.EncodeToString(digest[:]) {
+			if p.EnvironmentID != request.EnvironmentID || p.SizeBytes != len(data) || p.SHA256 != hex.EncodeToString(digest[:]) {
 				t.Fatal("scope or digest changed")
 			}
 			result.Outcome = "ready"
@@ -72,7 +72,7 @@ func TestWorkspaceWriteDoesNotCommitAfterLostObservation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.WriteWorkspaceFile(ctx, uuid.NewString(), proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file"}, []byte("value"))
+		_, err := s.WriteWorkspaceFile(ctx, uuid.NewString(), proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), Path: "file"}, []byte("value"))
 		done <- err
 	}()
 	<-s.sendCh

@@ -101,8 +101,18 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	active := 0
+	// A Runtime bound to an Environment serves one Session at a time; the new
+	// executor closes the other Sessions' idle executors before it prepares.
+	var others []*executorState
 	for _, candidate := range r.executors {
-		if candidate.sessionID != input.SessionID && candidate.stateKey == req.AgentStateKey {
+		switch {
+		case candidate.sessionID == input.SessionID:
+		case r.localWorkspace != nil && (candidate.preparing || candidate.admission != nil || candidate.run != nil):
+			r.mu.Unlock()
+			return r.rejectPreparation(env, "resource_unavailable")
+		case r.localWorkspace != nil:
+			others = append(others, candidate)
+		case candidate.stateKey == req.AgentStateKey:
 			r.mu.Unlock()
 			return r.rejectPreparation(env, "session_binding_conflict")
 		}
@@ -169,12 +179,15 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if reused {
 		r.publishPreparation(p, status)
 	} else {
-		go r.prepareExecutor(p, req, factory)
+		go r.prepareExecutor(p, req, factory, others)
 	}
 	return nil
 }
 
-func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory) {
+// prepareExecutor confirms the close of the other Sessions' executors and
+// removes their native state, which also covers state left by expired
+// executors and earlier processes, before it prepares the new executor.
+func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory, others []*executorState) {
 	defer r.shutdownWG.Done()
 	owner := p.executor
 	started := time.Now()
@@ -184,15 +197,21 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	if !r.sendPreparation(p.requestID, p.trace, initial) {
 		r.abandonExecutorAdmission(p, "failed", "status_delivery_failed", false)
 	}
-	var native agent.Executor
-	var err error
-	if owner.ctx.Err() == nil {
-		req, err = r.localWorkspace.Prepare(owner.ctx, req)
-		if err == nil && owner.ctx.Err() == nil {
-			native, err = factory(owner.ctx, req)
+	err := owner.ctx.Err()
+	for _, other := range others {
+		if err == nil {
+			err = r.closeExecutor(other)
 		}
-	} else {
-		err = owner.ctx.Err()
+	}
+	if err == nil {
+		err = r.localWorkspace.RemoveOtherSessionState(req.AgentStateKey)
+	}
+	if err == nil {
+		req, err = r.localWorkspace.Prepare(owner.ctx, req)
+	}
+	var native agent.Executor
+	if err == nil && owner.ctx.Err() == nil {
+		native, err = factory(owner.ctx, req)
 	}
 	r.mu.Lock()
 	owner.native, owner.preparing = native, false

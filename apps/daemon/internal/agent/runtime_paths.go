@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -48,4 +49,42 @@ func safeRuntimePathPart(value string) string {
 		return ""
 	}
 	return value
+}
+
+// RemoveSessionState deletes the state directory of every key but keepKey under
+// both roots, for every agent kind. It lists directories instead of tracking
+// Sessions, so it also covers state left by earlier processes and checkpoints.
+func RemoveSessionState(stateRoot, runtimeRoot, keepKey string) error {
+	keep := safeRuntimePathParts(keepKey)
+	if len(keep) != 1 {
+		return fmt.Errorf("agent: invalid agent state key %q", keepKey)
+	}
+	for _, root := range []string{stateRoot, runtimeRoot} {
+		if !filepath.IsAbs(root) || filepath.Clean(root) != root {
+			return fmt.Errorf("agent: state root must be a clean absolute directory")
+		}
+		kinds, err := os.ReadDir(filepath.Join(root, "runtime"))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		for _, kind := range kinds {
+			if !kind.IsDir() {
+				continue
+			}
+			states := filepath.Join(root, "runtime", kind.Name(), "state")
+			entries, err := os.ReadDir(states)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			for _, entry := range entries {
+				if entry.Name() == keep[0] {
+					continue
+				}
+				if err := os.RemoveAll(filepath.Join(states, entry.Name())); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }

@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: b5b774b66b84f5efd11650e8b5d6e7b5cd569804ffbc53487ba62bdb584ff3fe
+source_hash: 968ac5ce4f3d0b40acdafbae4435cba2348456e8978e53f0ab2bbe618e111c49
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -47,7 +47,7 @@ sequenceDiagram
 - 立即发送第一个 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
 - Heartbeat 仅证明存活，不证明执行进度，也不充当此前消息的回执。
 
-每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Environment 绑定。
 
 ## 版本 {#versioning}
 
@@ -92,7 +92,8 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | 身份 | 范围与含义 |
 | --- | --- |
 | Device ID 和连接 | 经认证的 Runtime 路由与连接所有权 |
-| Session ID / Environment ID | Core 拥有的配置与工作区绑定；payload validator 要求时使用规范 UUID |
+| Environment ID | Runtime 在其生命周期内绑定的 Environment 与工作区；`runtime_prepare` 和 `workspace_write` 中为规范 UUID |
+| Session ID | Core 拥有的、一次 `execution_prepare` 中配置的身份；绑定了 Environment 的 Runtime 一次只服务一个 Session |
 | Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留，其 Harness 声明可变的 `turn` 设置除外 |
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
@@ -209,6 +210,8 @@ stateDiagram-v2
     preparing --> failed
     ready --> failed
 ```
+
+一次只服务一个 Session：绑定了 Environment 的 Runtime 只服务一个 Session，每个 `execution_prepare` 指明该 Session。未绑定 Environment 的 Runtime，例如 `environment: none` Session 的服务端宿主，在其容量内并发服务多个 Session，从不切换。若另一个 Session 的 Executor 正在 preparing、已 admitted 或正在运行，该 prepare 以 `resource_unavailable` 拒绝。否则新 Executor 的 preparation 先关闭其他 Session 的 Executor，等待每次关闭确认，删除其他所有 Session 的原生状态，然后才启动 Harness；关闭未确认时 preparation 失败，状态保留。只读工作区 preparation 不启动 Harness，也从不切换 Session。
 
 preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在固定截止时间到期，重试不延长该时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 保留有限数量的 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
 
