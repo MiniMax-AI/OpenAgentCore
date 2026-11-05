@@ -69,10 +69,14 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
 	operation, stopOperation := context.WithCancel(ctx)
-	turn, err := e.StartTurn(operation, "actual-run", proto.TurnSettings{}, proto.TextInput("hello"), out)
+	turn, err := e.StartTurn(operation, "actual-run", proto.TurnSettings{Model: "turn-model", Review: "auto_review"}, proto.TextInput("hello"), out)
 	stopOperation()
 	if err != nil {
 		t.Fatal(err)
+	}
+	var sent struct{ Settings json.RawMessage }
+	if json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &sent) != nil || string(sent.Settings) != `{"model":"turn-model","effort":null,"review":"auto_review"}` {
+		t.Fatalf("turn_start settings = %s", sent.Settings)
 	}
 	if turn.(*session).owner != e || turn.(*session).process.Cmd.Process.Pid != pid {
 		t.Fatal("StartTurn replaced the prepared native process")

@@ -37,6 +37,15 @@ type turnStartFrame struct {
 	Type   string             `json:"type"`
 	TurnID string             `json:"turn_id"`
 	Input  proto.MessageInput `json:"input"`
+	// Settings are the Turn's model, effort and review; the bridge applies what differs from the last Turn.
+	Settings turnSettings `json:"settings"`
+}
+
+// turnSettings carries a null Effort to return to the model's default effort.
+type turnSettings struct {
+	Model  string  `json:"model"`
+	Effort *string `json:"effort"`
+	Review string  `json:"review"`
 }
 
 type turnCancelFrame struct {

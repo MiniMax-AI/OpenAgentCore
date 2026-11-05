@@ -13,13 +13,13 @@ export function startupFrom(queryFixture, { exitCode = 0, args } = {}) {
     const close = () => child.stdin.end();
     return { close, query: prompt => Object.assign(queryFixture({ prompt, options }), {
       close, initializationResult: async () => ({ hooks_applied: true }), mcpServerStatus: async () => [],
-      interrupt: async () => ({ still_queued: [] }) }) };
+      interrupt: async () => ({ still_queued: [] }), setPermissionMode: async () => {} }) };
   };
 }
 
 // Runs one Turn through execute(). Returns the frames in order, without the lifecycle frames of readiness and settlement.
 // onFrame may call turns.submit() or globalThis.cancelTurn() while the Turn runs.
-export async function runTurn(request, abort, input, onFrame = async () => {}) {
+export async function runTurn(request, abort, input, onFrame = async () => {}, review = "") {
   const { execute } = await import("../dist/adapter.js");
   const { ExecutorTurns } = await import("../dist/executor_protocol.js");
   const frames = [];
@@ -37,7 +37,7 @@ export async function runTurn(request, abort, input, onFrame = async () => {}) {
   const done = execute(request, async frame => { assertFrame(frame); if (frame.type === "executor_ready") ready(); else frames.push(frame); }, abort, turns).finally(() => { finished = true; });
   await Promise.race([readied, done]);
   if (finished) return { frames, settled };
-  await turns.start({ type: "turn_start", turn_id: "run", input });
+  await turns.start({ type: "turn_start", turn_id: "run", input, settings: { model: request.model, effort: request.native_model_options?.effort ?? null, review } });
   await done;
   return { frames, settled };
 }

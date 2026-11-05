@@ -91,7 +91,7 @@ func runPreparationHelper() {
 	raw = append([]byte{}, scanner.Bytes()...)
 	_ = os.WriteFile(filepath.Join(state, "start.json"), raw, 0o600)
 	fields = nil
-	if json.Unmarshal(raw, &fields) != nil || len(fields) != 3 || string(fields["type"]) != `"turn_start"` || string(fields["input"]) != `[{"content":[{"type":"input_text","text":"hello"}]}]` {
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 4 || string(fields["type"]) != `"turn_start"` || string(fields["input"]) != `[{"content":[{"type":"input_text","text":"hello"}]}]` {
 		os.Exit(4)
 	}
 	var turnID string

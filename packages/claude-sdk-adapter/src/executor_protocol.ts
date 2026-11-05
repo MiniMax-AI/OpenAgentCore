@@ -1,4 +1,4 @@
-import type { Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { EffortLevel, Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Inputs } from "./inputs.js";
 import { parseMessageInput, type MessageInput } from "./message_input.js";
 
@@ -7,6 +7,7 @@ export type ExecutorEvent =
   | { type: "turn_started"; turn_id: string }
   | { type: "turn_settled"; turn_id: string; confirmed: boolean; reusable: boolean; reason: string };
 type WireEvent = { type: string; [key: string]: unknown };
+export type TurnSettings = { model: string; effort: string | null; review: string };
 type Turn = { id: string; inputs: Inputs; cancelled: boolean; interrupt?: Promise<boolean>; callbacks: Set<Promise<unknown>> };
 
 // The SDK sees one iterator for the Executor lifetime. Each yielded batch belongs
@@ -21,9 +22,12 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
   private begin?: (input: MessageInput, emit: (event: WireEvent) => Promise<void>) => Inputs;
   private submitInput?: (value: Record<string,unknown>) => Promise<void>;
   private nativeID = "";
+  private applied: TurnSettings = { model: "", effort: null, review: "" };
   constructor(private readonly output: (event: WireEvent) => Promise<void>, private readonly abort: AbortController) {}
 
-  configure(stream: Query, begin: NonNullable<ExecutorTurns["begin"]>, submit: (value: Record<string,unknown>)=>Promise<void>): void { this.stream = stream; this.begin = begin; this.submitInput=submit; }
+  // `applied` is what the native Query was started with; each Turn applies only what differs.
+  configure(stream: Query, begin: NonNullable<ExecutorTurns["begin"]>, submit: (value: Record<string,unknown>)=>Promise<void>, applied: TurnSettings): void { this.stream = stream; this.begin = begin; this.submitInput=submit; this.applied = applied; }
+  get review(): string { return this.applied.review; }
   async submit(value: Record<string,unknown>): Promise<void> {
     const payload=this.assertCurrent(value);
     if(!this.submitInput || (payload.type!=="steer" && payload.type!=="function_result")) throw new Error("invalid turn input");
@@ -40,8 +44,17 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
   async start(value: Record<string, unknown>): Promise<void> {
     const id = value.turn_id;
     if (this.ended || this.active || !this.stream || !this.begin || typeof id !== "string" || !id.trim() || id.length > 256 ||
-        this.used.has(id) || Object.keys(value).some(key => !["type", "turn_id", "input"].includes(key))) throw new Error("invalid turn start");
+        this.used.has(id) || Object.keys(value).some(key => !["type", "turn_id", "input", "settings"].includes(key))) throw new Error("invalid turn start");
     const input = parseMessageInput(value.input);
+    const next = value.settings as TurnSettings;
+    if (!next || typeof next.model !== "string" || !next.model || !(next.effort === null || typeof next.effort === "string") || !["", "auto_review"].includes(next.review)) throw new Error("invalid turn start");
+    // Settings reach the native Query before the Turn's input does.
+    if (next.model !== this.applied.model) await this.stream.setModel(next.model);
+    this.applied.model = next.model;
+    if (next.effort !== this.applied.effort) await this.stream.applyFlagSettings({ effortLevel: next.effort as EffortLevel | null });
+    this.applied.effort = next.effort;
+    if (next.review !== this.applied.review) await this.stream.setPermissionMode(next.review ? "auto" : "default");
+    this.applied.review = next.review;
     const output = async (event: WireEvent) => {
       if (this.active?.id !== id) throw new Error("late turn event");
       await this.output({ ...event, turn_id: id });
