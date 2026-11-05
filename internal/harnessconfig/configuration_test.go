@@ -8,7 +8,7 @@ import (
 
 func testDeclaration(kind string, configuration Configuration) Declaration {
 	return Declaration{Kind: kind, Label: kind, Configuration: configuration, Capabilities: proto.UnsupportedCapabilities(),
-		Placements: []string{"none"}, MCPOrigins: []string{}, WhitespaceOnlyText: proto.CapabilityUnsupported, Execution: ExecutionOptions{TextVerbosities: []string{"medium"}}}
+		Placements: []string{"none"}, MCPOrigins: []string{}, WhitespaceOnlyText: proto.CapabilityUnsupported, SessionUpdates: SessionUpdates{proto.CapabilityUnsupported, proto.CapabilityUnsupported, proto.CapabilityUnsupported, proto.CapabilityUnsupported}, Execution: ExecutionOptions{TextVerbosities: []string{"medium"}}}
 }
 
 func TestRegistryOwnsDeclarations(t *testing.T) {
@@ -61,6 +61,8 @@ func TestDeclarationRequiresExplicitSupport(t *testing.T) {
 		"label":        func(d *Declaration) { d.Label = " " },
 		"unknown kind": func(d *Declaration) { d.Kind = " example" },
 		"verbosity":    func(d *Declaration) { d.Execution.TextVerbosities = []string{"high"} },
+		"updates":      func(d *Declaration) { d.SessionUpdates.Model = proto.CapabilityUnspecified },
+		"reviews":      func(d *Declaration) { d.Execution.Reviews = []string{"none"} },
 	} {
 		declaration := valid.Clone()
 		change(&declaration)
