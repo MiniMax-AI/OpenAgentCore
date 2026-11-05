@@ -207,10 +207,11 @@ Each item is Core's deliberate or native behavior where the official service beh
   - A `once` Automation completes when its scheduled invocation is terminal.
   - Pause holds a queued scheduled invocation until resume; manual invocations still deliver, in every status.
   - Pausing a paused Automation and resuming an active one return it unchanged. Pausing or resuming a completed one, resuming a `once` Automation whose past `run_at` has no pending invocation, and changing `run_at` after its scheduled invocation exists return 409 `conflict_error`.
-  - A past `run_at`, a timing field of the other type, a target of another type, an invalid cron expression or time zone, and an inline `agent` without `model` return 400 `invalid_request_error` with Core's own params and messages.
+  - A past `run_at`, a timing field of the other type, a target of another type, an invalid cron expression or time zone, and an inline `agent` without `model` where no deployment default applies return 400 `invalid_request_error` with Core's own params and messages.
   - A skipped `existing_session` invocation carries the target's `session_id`; a `new_session` invocation has null until its Session exists.
   - A `limit` outside 1–100 is clamped, and an unresolved `after` returns 404.
-  - Create validates shapes, Core's Session rules and that the target Session exists; saved references resolve at each invocation.
+  - Create validates the target with the checks Session create runs before it creates anything (shape, Environment Template, saved Agent, model and provider, Vault bindings, Harness support) and that an `existing_session` target's Session exists. Deployment readiness, admission and leases are checked at each delivery.
+  - Saved references resolve at each invocation. A queued invocation delivers the target as it was when it was recorded or invoked; an update applies to later invocations.
   - Invocations are kept until the Automation is deleted. A deleted target Session fails each delivery.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.

@@ -210,10 +210,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
   - `once` Automation 在其计划 invocation 到达终态时完成。
   - 暂停会保留排队中的计划 invocation 直到恢复；手动 invocation 在任何状态下仍会投递。
   - 暂停已暂停的 Automation、恢复已激活的 Automation，会原样返回。暂停或恢复已完成的 Automation、恢复过去 `run_at` 且没有待处理 invocation 的 `once` Automation，以及在计划 invocation 产生后修改 `run_at`，均返回 409 `conflict_error`。
-  - 过去的 `run_at`、另一类型的时间字段、另一类型的目标、无效的 cron 表达式或时区、缺少 `model` 的内联 `agent`，返回 400 `invalid_request_error`，param 和消息为 Core 自己的内容。
+  - 过去的 `run_at`、另一类型的时间字段、另一类型的目标、无效的 cron 表达式或时区、没有适用部署默认值而缺少 `model` 的内联 `agent`，返回 400 `invalid_request_error`，param 和消息为 Core 自己的内容。
   - 被跳过的 `existing_session` invocation 带有目标的 `session_id`；`new_session` invocation 在其 Session 存在之前为 null。
   - 超出 1–100 的 `limit` 会被截断，无法解析的 `after` 返回 404。
-  - 创建时校验 schema、Core 的 Session 规则以及目标 Session 是否存在；目标中保存的引用在每次 invocation 时解析。
+  - 创建时用 Session 创建在创建任何东西之前执行的检查校验目标（形状、Environment Template、已保存的 Agent、模型和 provider、Vault 绑定、Harness 支持），并校验 `existing_session` 目标的 Session 是否存在。部署就绪、准入和租约在每次投递时检查。
+  - 目标中保存的引用在每次 invocation 时解析。排队中的 invocation 投递的是它被记录或触发时的目标；更新只作用于之后的 invocation。
   - invocation 保留到 Automation 被删除。目标 Session 被删除后，每次投递都会失败。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。

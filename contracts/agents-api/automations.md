@@ -15,8 +15,6 @@ An Automation saves a schedule and a target. When the schedule fires, Core deliv
 | `POST …/invocations` | 200, a queued manual invocation |
 | `GET …/invocations`, `GET …/invocations/{invocation_id}` | A page, or one invocation |
 
-Lists take `after`, `limit` (default 20; 0 becomes 1 and above 100 becomes 100) and `order` (default `desc`). A cursor that names no record returns 404 `not_found_error`.
-
 ## Resource
 
 `type` is `periodic` or `once`.
@@ -28,7 +26,7 @@ Lists take `after`, `limit` (default 20; 0 becomes 1 and above 100 becomes 100) 
 
 ### Schedules
 
-`expression` is a five-field crontab: minute, hour, day of month, month and day of week. A field is `*` or a comma list of `n`, `a-b`, `*/s` and `a-b/s`; months and weekdays also take three-letter names, and weekday 7 is Sunday. When both day fields are restricted, a day matches either. Descriptors such as `@daily`, a seconds field, `Local` and an empty zone are rejected, and so is an expression with no occurrence in the next five years.
+`expression` is a five-field crontab: minute, hour, day of month, month and day of week. A field is `*` or a comma list of `n`, `a-b`, `*/s` and `a-b/s`; months and weekdays also take three-letter names, and weekday 7 is Sunday. When neither day field starts with `*`, a day matches either. Descriptors such as `@daily`, a seconds field, `Local` and an empty zone are rejected, and so is an expression with no occurrence in the next five years.
 
 `timezone` is an IANA name, resolved from the tzdata Core embeds. A wall-clock minute that does not exist on a daylight saving change is skipped; a minute that occurs twice fires once, at its first instant.
 
@@ -38,15 +36,15 @@ If Core was down when occurrences were due, it records only the latest one.
 
 `target.type` is `new_session` or `existing_session`. An update keeps the type; another type returns 400 with param `target.type`.
 
-`new_session` takes the body of Session create without `type`: `environment` and `input` (an array of user messages) are required; `agent` or `agent_id` is optional, and exactly one of them must be given; `metadata` and `vault_ids` are optional. The target is validated by the code that validates Session create, so its rejections are the same, with their params prefixed `target.`: `environment.environment_id`, `container_size`, `desktop.enabled`, `packages.system` and `blocked_domains` are rejected. Beyond that:
+`new_session` takes the fields of the Session create body, plus `type`: `environment` and `input` (an array of user messages) are required, exactly one of `agent` and `agent_id` must be given, and `metadata` and `vault_ids` are optional. Create and update run the checks Session create runs before it creates anything: the request shape, the Environment Template, the saved Agent, the model and its provider, the Vault bindings, and the Harness's support for the configuration, so an unsupported tool such as `automations` returns 400 at create. The rejections are Session create's, with their params prefixed `target.`: `environment.environment_id`, `container_size`, `desktop.enabled`, `packages.system` and `blocked_domains` are rejected. Deployment readiness, admission and leases are checked at each delivery. Beyond that:
 
-- An inline `agent` needs `model` (param `target.agent.model`) and rejects `x_agents_core`.
+- An inline `agent` follows Session create: `model` is required unless a deployment default model applies.
 - `x_agents_core` is rejected anywhere in the target.
-- The saved resource shows the inline agent without `id` and `name`, MCP headers removed. `environment` shows the members the request supplied and `null` for the rest, which means inherit. `env` and `setup_commands` are never shown.
+- The saved resource shows the inline agent without `id` and `name`, MCP headers removed. `environment` shows the members the request supplied and `null` for the rest, which means inherit; a `self_hosted` environment always lists `capability_directories`. `env` and `setup_commands` are never shown.
 
-`existing_session` takes `session_id` and `instructions` (1 byte to 1 MiB). The Session must exist when the Automation is created or updated; a Session deleted later fails each delivery with the input path's 404. Core sends `instructions` as one user message with one `input_text` part, exactly as `agent.session.input.message` would.
+`existing_session` takes `session_id` and `instructions` (1 to 1,048,576 characters). The Session must exist when the Automation is created or updated, and Core saves its canonical ID whatever form the request used; a Session deleted later fails each delivery with the input path's 404. Core sends `instructions` as one user message with one `input_text` part, exactly as `agent.session.input.message` would.
 
-Create and update save the target; references inside it, such as a Skill, a File or an Agent, resolve at each invocation.
+Create and update save the target; references inside it, such as a Skill, a File or an Agent, resolve at each invocation. A queued invocation delivers the target as it was when it was recorded or invoked, so an update applies to later invocations.
 
 The target request may hold values that reads never return, so Core stores it sealed with the credential key, bound to the Project and the Automation.
 
@@ -61,7 +59,7 @@ A scheduled occurrence and a manual invocation each produce one invocation recor
 | `failed` | Delivery was rejected for good; `error` holds the `code` and `message` the same request would return |
 | `skipped` | `skip_reason` is `pending_delivery`: the Automation already had a queued invocation |
 
-Core records due occurrences and delivers queued invocations once a second, and runs at most 16 deliveries at the same time, each for up to 5 s. A delivery uses the code of `POST /v1/agents/sessions` or `POST /v1/agents/sessions/{id}/events`, with the invocation ID as its `Idempotency-Key`, so a retry after a crash finds the Session or the input it already made. Core retries a delivery while the cause is temporary: execution unavailable, a sandbox reset, a pending earlier input, or a Turn that cannot take input. Any other rejection fails the invocation. One Automation delivers one invocation at a time, oldest first, and invocations are kept until the Automation is deleted.
+Core records due occurrences and delivers queued invocations once a second, and runs at most 16 deliveries at the same time, each for up to 5 s. A delivery uses the code of `POST /v1/agents/sessions` or `POST /v1/agents/sessions/{id}/events`, with the invocation ID as its `Idempotency-Key`, so a retry after a crash finds the Session or the input it already made. Core retries a delivery while the cause is temporary: execution unavailable, a sandbox reset, a pending earlier input, or a Turn that cannot take input. Any other rejection fails the invocation. One Automation delivers one invocation at a time, oldest first, and the Automation attempted least recently goes first, so a stuck invocation does not hold every slot. An invocation whose saved target cannot be opened fails with `internal_error`. Invocations are kept until the Automation is deleted.
 
 A `once` Automation completes when its scheduled invocation reaches `completed`, `failed` or `skipped`. A manual invocation never changes the schedule.
 
