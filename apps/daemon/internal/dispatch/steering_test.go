@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -153,6 +154,46 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-2"); ack.ErrorCode != "unsupported" {
 		t.Fatalf("whitespace: %+v", ack)
 	}
+}
+
+func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+	entered, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+		return &steeringSession{
+			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
+			steer: func(context.Context, proto.PromptSteerPayload) error {
+				close(entered)
+				<-release
+				return agent.ErrSteeringRejected
+			},
+		}, nil
+	}))
+	ctx := context.Background()
+	for _, run := range []struct{ id, engine string }{{"run-1", "codex"}, {"run-2", "fake_alpha"}} {
+		startRun(t, h.router, h.sender, run.id, proto.PromptRequestPayload{AgentKind: run.engine})
+	}
+	other := <-h.gotSess
+	other.closeOutOnCancel = true
+	returned := make(chan error, 1)
+	go func() {
+		returned <- h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "slow", Input: proto.TextInput("extra")}))
+	}()
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("steering blocked dispatch")
+	}
+	<-entered
+	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptCancel, "run-2", nil)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return other.cancels() == 1 }, "other run cancellation")
 }
 
 func lastSteeringAck(t *testing.T, sender *recSender, runID, inputID string) proto.PromptSteerAckPayload {

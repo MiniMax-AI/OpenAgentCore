@@ -91,7 +91,7 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
 | Environment ID | The Environment and workspace a Runtime is bound to for its lifetime; a canonical UUID in `runtime_prepare` and `workspace_write` |
-| Session ID | Core-owned identity of the configuration in one `execution_prepare`; the Runtime serves one Session at a time |
+| Session ID | Core-owned identity of the configuration in one `execution_prepare`; a Runtime bound to an Environment serves one Session at a time |
 | Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration, except the `turn` settings its Harness declares changeable |
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
@@ -209,7 +209,7 @@ stateDiagram-v2
     ready --> failed
 ```
 
-One Session at a time: a Runtime serves a single Session, and each `execution_prepare` names it. If an Executor of another Session is preparing, admitted or running, the prepare is rejected with the retryable `resource_unavailable`. If it is idle, the Runtime closes it, waits for the confirmed close, removes the native state of every other Session and then prepares the new Session. A read-only workspace preparation starts no Harness and never switches Sessions.
+One Session at a time: a Runtime bound to an Environment serves a single Session, and each `execution_prepare` names it. A Runtime without a bound Environment, such as the service-side host for `environment: none` Sessions, serves Sessions concurrently within its capacity and never switches. If an Executor of another Session is preparing, admitted or running, the prepare is rejected with the retryable `resource_unavailable`. If it is idle, the Runtime closes it, waits for the confirmed close, removes the native state of every other Session and then prepares the new Session. A read-only workspace preparation starts no Harness and never switches Sessions.
 
 Preparation and start run outside the receive loop and router lock. An admission expires at a fixed deadline that retries do not extend; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains a bounded number of admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 

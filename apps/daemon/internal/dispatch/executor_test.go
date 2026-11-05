@@ -5,6 +5,7 @@ import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -296,22 +297,48 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 }
 
-func TestExecutorSwitchesSessionOnlyWhenOtherSessionIsIdle(t *testing.T) {
-	owner := &reusableExecutor{starts: make(chan *reusableTurn, 1)}
+func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
+	var mu sync.Mutex
+	var owners []*reusableExecutor
+	r, s := poolRouter(t, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		e := &reusableExecutor{}
+		mu.Lock()
+		owners = append(owners, e)
+		mu.Unlock()
+		return e, nil
+	})
+	for i := 0; i < 17; i++ {
+		id := fmt.Sprint("idle-", i)
+		ready := executorAdmission(t, r, s, id, poolRequest(id))
+		if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, id, proto.ExecutionReleasePayload{Handle: ready.Handle})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		var closed int32
+		for _, e := range owners {
+			closed += e.closes.Load()
+		}
+		return closed == 1
+	}, "idle capacity eviction")
+	for i := 0; i < 4; i++ {
+		id := fmt.Sprint("active-", i)
+		executorAdmission(t, r, s, id, poolRequest(id))
+	}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "overflow", poolRequest("overflow"))); err == nil {
+		t.Fatal("active capacity exceeded")
+	}
+}
+
+func TestUnboundRuntimeKeepsSessionsSideBySide(t *testing.T) {
+	owner := &reusableExecutor{}
 	r, s, calls := executorRouter(t, owner, time.Minute)
-	first := executorAdmission(t, r, s, "first", executorRequest())
-	next := noEnvironmentPreparation("next", proto.PromptRequestPayload{AgentKind: "reusable"})
-	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "busy", next))
-	if got := waitPreparationStatus(t, s, "busy", "rejected", ""); got.ErrorCode != "resource_unavailable" || owner.closes.Load() != 0 || calls.Load() != 1 {
-		t.Fatalf("admitted Session was displaced: %+v closes=%d", got, owner.closes.Load())
-	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, "first", proto.ExecutionReleasePayload{Handle: first.Handle})); err != nil {
-		t.Fatal(err)
-	}
-	waitPreparationStatus(t, s, "first", "released", "")
-	executorAdmission(t, r, s, "switch", next)
-	if owner.closes.Load() != 1 || calls.Load() != 2 {
-		t.Fatalf("switch closes=%d prepares=%d, want 1 and 2", owner.closes.Load(), calls.Load())
+	executorAdmission(t, r, s, "first", executorRequest())
+	executorAdmission(t, r, s, "second", noEnvironmentPreparation("next", proto.PromptRequestPayload{AgentKind: "reusable"}))
+	if owner.closes.Load() != 0 || calls.Load() != 2 {
+		t.Fatalf("unbound Runtime closes=%d prepares=%d, want 0 and 2", owner.closes.Load(), calls.Load())
 	}
 }
 func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {

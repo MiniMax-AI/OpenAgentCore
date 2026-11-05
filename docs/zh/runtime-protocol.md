@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 089f67fdb36cfd4778418684a5d0eec4b7425bc386e7d224c6cc382be35ee003
+source_hash: b17c514575d105856306c3dd89340c29efd23513e328127abc5ff5b1b69df20f
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -93,7 +93,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | --- | --- |
 | Device ID 和连接 | 经认证的 Runtime 路由与连接所有权 |
 | Environment ID | Runtime 在其生命周期内绑定的 Environment 与工作区；`runtime_prepare` 和 `workspace_write` 中为规范 UUID |
-| Session ID | Core 拥有的、一次 `execution_prepare` 中配置的身份；Runtime 一次只服务一个 Session |
+| Session ID | Core 拥有的、一次 `execution_prepare` 中配置的身份；绑定了 Environment 的 Runtime 一次只服务一个 Session |
 | Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留，其 Harness 声明可变的 `turn` 设置除外 |
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
@@ -211,7 +211,7 @@ stateDiagram-v2
     ready --> failed
 ```
 
-一次只服务一个 Session：Runtime 只服务一个 Session，每个 `execution_prepare` 指明该 Session。若另一个 Session 的 Executor 正在 preparing、已 admitted 或正在运行，该 prepare 以可重试的 `resource_unavailable` 拒绝。若它空闲，Runtime 先关闭它，等待确认关闭，删除其他所有 Session 的原生状态，再 prepare 新 Session。只读工作区 preparation 不启动 Harness，也从不切换 Session。
+一次只服务一个 Session：绑定了 Environment 的 Runtime 只服务一个 Session，每个 `execution_prepare` 指明该 Session。未绑定 Environment 的 Runtime，例如 `environment: none` Session 的服务端宿主，在其容量内并发服务多个 Session，从不切换。若另一个 Session 的 Executor 正在 preparing、已 admitted 或正在运行，该 prepare 以可重试的 `resource_unavailable` 拒绝。若它空闲，Runtime 先关闭它，等待确认关闭，删除其他所有 Session 的原生状态，再 prepare 新 Session。只读工作区 preparation 不启动 Harness，也从不切换 Session。
 
 preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在固定截止时间到期，重试不延长该时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 保留有限数量的 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
 

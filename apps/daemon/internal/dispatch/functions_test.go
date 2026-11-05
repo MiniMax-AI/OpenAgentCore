@@ -49,8 +49,8 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer router.Shutdown(context.Background())
-	{
-		startRun(t, router, sender, "one", proto.PromptRequestPayload{AgentKind: "function-test", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
+	for _, id := range []string{"one", "two"} {
+		startRun(t, router, sender, id, proto.PromptRequestPayload{AgentKind: "function-test", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
 	}
 	submit := func(run, call, text, delivery string) proto.InteractionDecisionAckPayload {
 		t.Helper()
@@ -119,6 +119,9 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 		if ack.Applied || ack.ErrorCode != "decision_conflict" {
 			t.Fatal(mutation, ack)
 		}
+	}
+	if a := submit("two", "call", "second answer", "other-run"); !a.Applied {
+		t.Fatal(a)
 	}
 	for _, s := range sessions {
 		s.mu.Lock()
