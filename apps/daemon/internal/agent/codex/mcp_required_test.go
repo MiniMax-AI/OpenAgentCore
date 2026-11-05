@@ -17,7 +17,7 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 	for _, mode := range []string{"new ready", "new failed", "resume ready", "resume failed"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
-			req.AgentOptions = map[string]any{"model": "fixture-model"}
+			req.Turn.Model = "fixture-model"
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
 			req.MCPHTTPServers = &servers
 			method := "thread/start"
@@ -45,7 +45,7 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			}
 			result := make(chan started, 1)
 			go func() {
-				turn, err := e.StartTurn(t.Context(), "required-run", proto.TextInput("actual prompt"), out)
+				turn, err := e.StartTurn(t.Context(), "required-run", proto.TurnSettings{}, proto.TextInput("actual prompt"), out)
 				result <- started{turn, err}
 			}()
 			waitPreparationMethod(t, root, method)

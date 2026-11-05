@@ -67,7 +67,7 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		name string
 		edit func(*proto.PromptRequestPayload)
 	}{
-		{"missing model", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model") }},
+		{"missing model", func(r *proto.PromptRequestPayload) { r.Turn.Model = "" }},
 		{"missing provider", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }},
 	}
 	for _, tt := range tests {

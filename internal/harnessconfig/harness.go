@@ -176,11 +176,8 @@ func validChoices(values []string, allowed ...string) bool {
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
-// Model may be absent only for the existing native-owned connection path. A
-// supplied model must be a nonempty string; an explicit provider requires an
-// explicit model. HarnessConfig is always an independently owned object.
+// HarnessConfig is always an independently owned object.
 type PreparedConfiguration struct {
-	Model         string
 	HarnessConfig proto.HarnessConfig
 }
 
@@ -196,18 +193,18 @@ func ValidateModel(value any) (string, error) {
 }
 
 // Prepare validates the current model/provider/native-parameter contract before
-// creating native resources. Other options belong to the execution contract.
-func (c Configuration) Prepare(options map[string]any) (PreparedConfiguration, error) {
+// creating native resources. An empty model is absent, which only the
+// native-owned connection path without a provider may use. Other options belong
+// to the execution contract.
+func (c Configuration) Prepare(model string, options map[string]any) (PreparedConfiguration, error) {
 	var result PreparedConfiguration
-	if value, present := options["model"]; present {
-		model, err := ValidateModel(value)
-		if err != nil {
+	if model != "" {
+		if _, err := ValidateModel(model); err != nil {
 			return PreparedConfiguration{}, err
 		}
-		result.Model = model
 	}
 	if value, present := options["model_provider"]; present {
-		if result.Model == "" {
+		if model == "" {
 			return PreparedConfiguration{}, ErrModel
 		}
 		if _, err := c.ParseProvider(value); err != nil {
@@ -413,17 +410,26 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 	if enabled := controls.ProgrammaticToolCalling; enabled != nil && !slices.Contains(o.ProgrammaticToolCalling, *enabled) {
 		return fmt.Errorf("programmatic_tool_calling.enabled=%t is not supported by this Harness.", *enabled)
 	}
-	if v := controls.ReasoningEffort; v != "" && !slices.Contains(o.ReasoningEfforts, v) {
-		return reject("reasoning.effort", v)
-	}
 	if v := controls.ReasoningSummary; v != "" && !slices.Contains(o.ReasoningSummaries, v) {
 		return reject("reasoning.summary", v)
 	}
-	if v := controls.ServiceTier; v != "" && !slices.Contains(o.ServiceTiers, v) {
-		return reject("service_tier", v)
-	}
 	if v := controls.TextVerbosity; v != "" && !slices.Contains(o.TextVerbosities, v) {
 		return reject("text.verbosity", v)
+	}
+	return nil
+}
+
+// ValidateTurnSettings rejects an effort or tier the Harness does not
+// declare. Core admission and the Runtime call it with the same settings.
+func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
+	o := d.Execution
+	for _, check := range []struct {
+		field, value string
+		allowed      []string
+	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}} {
+		if check.value != "" && !slices.Contains(check.allowed, check.value) {
+			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
+		}
 	}
 	return nil
 }

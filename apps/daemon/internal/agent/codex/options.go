@@ -66,16 +66,15 @@ type SessionPlan struct {
 }
 
 // BuildSessionPlan derives a SessionPlan from the request's agent_options and
-// execution controls. It reads these agent_options keys:
+// turn settings and execution controls. It reads these agent_options keys:
 //
-//	model           string  codex model slug, e.g. "gpt-5.5"
 //	system_prompt   string  forwarded as developerInstructions
 //	model_provider  object  frozen upstream protocol, endpoint, credential and token limits
 //	harness_config  object  native parameters accepted by harnessconfig/codex
 //
 // Execution controls map one to one to native settings; see applyExecutionControls.
 // The codex binary itself is resolved via PATH only.
-func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
+func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, turn proto.TurnSettings, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool,
 		// an unreachable model host fails the Turn after the provider's
@@ -90,7 +89,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		return plan, err
 	}
 
-	if value, present := opts["model_provider"]; present && (value == nil || stringOpt(opts, "model") == "") {
+	if value, present := opts["model_provider"]; present && (value == nil || turn.Model == "") {
 		return plan, errors.New("codex: model and complete model_provider are required")
 	}
 
@@ -98,7 +97,11 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		return plan, err
 	}
 
-	plan.Model = stringOpt(opts, "model")
+	if err := harnessconfiguration.Declaration.ValidateTurnSettings(turn); err != nil {
+		return plan, err
+	}
+
+	plan.Model = turn.Model
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
 	codexHome, err := allocSessionDir(stateRoot, agentStateKey)
@@ -130,7 +133,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 	}
 
 	plan.Env = env
-	applyExecutionControls(&plan, controls)
+	applyExecutionControls(&plan, turn, controls)
 	if plan.ModelProvider != "" {
 		// Pin model_provider at the CLI layer so codex skips its builtin
 		// "openai" provider — without this the [model_providers.oac]
@@ -160,11 +163,17 @@ func excludeFromShellEnvironment(plan *SessionPlan, pattern string) {
 // applyExecutionControls maps each official value to its native setting. An
 // absent control sends nothing, so Codex keeps its native default; Codex itself
 // ignores a value the selected model does not support.
-func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls) {
+func applyExecutionControls(plan *SessionPlan, turn proto.TurnSettings, controls *proto.ExecutionControls) {
 	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
 	if controls == nil || controls.ReasoningSummary == "" {
 		// The official default is no reasoning summary, while Codex defaults to a model-dependent one.
 		set("model_reasoning_summary", strconv("none"))
+	}
+	if turn.ReasoningEffort != "" {
+		set("model_reasoning_effort", strconv(turn.ReasoningEffort))
+	}
+	if turn.ServiceTier != "" {
+		set("service_tier", strconv(turn.ServiceTier))
 	}
 	if controls == nil {
 		return
@@ -193,15 +202,9 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 	if format := controls.OutputFormat; format != nil {
 		plan.OutputSchema = format.Schema
 	}
-	if controls.ReasoningEffort != "" {
-		set("model_reasoning_effort", strconv(controls.ReasoningEffort))
-	}
 	if controls.ReasoningSummary != "" {
 		plan.ReasoningSummary = true
 		set("model_reasoning_summary", strconv(controls.ReasoningSummary))
-	}
-	if controls.ServiceTier != "" {
-		set("service_tier", strconv(controls.ServiceTier))
 	}
 	if controls.TextVerbosity != "" {
 		set("model_verbosity", strconv(controls.TextVerbosity))

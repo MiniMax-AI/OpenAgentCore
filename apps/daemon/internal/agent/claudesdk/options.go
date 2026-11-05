@@ -45,18 +45,18 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Declaration.Configuration.Prepare(req.AgentOptions)
+	modelConfiguration, err := harnessconfiguration.Declaration.Configuration.Prepare(req.Turn.Model, req.AgentOptions)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
 	if err := harnessconfiguration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
 		return fail(err.Error())
 	}
-	effort := ""
-	if req.ExecutionControls != nil {
-		effort = req.ExecutionControls.ReasoningEffort
+	if err := harnessconfiguration.Declaration.ValidateTurnSettings(req.Turn); err != nil {
+		return fail(err.Error())
 	}
-	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig, effort)
+	start.Model = req.Turn.Model
+	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig, req.Turn.ReasoningEffort)
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
@@ -113,12 +113,9 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		}
 		value, ok := raw.(string)
 		if !ok {
-			return fail("model and system_prompt options must be strings")
+			return fail("system_prompt option must be a string")
 		}
-		switch name {
-		case "model":
-			start.Model = value
-		case "system_prompt":
+		if name == "system_prompt" {
 			start.SystemPrompt = value
 		}
 	}

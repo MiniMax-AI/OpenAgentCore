@@ -6,7 +6,7 @@ func ValidWorkspaceReadPreparation(r PromptRequestPayload) bool {
 	return r.WorkspaceReadOnly && r.LocalEnvironment != nil && r.AgentStateKey != "" &&
 		r.RunID == "" && len(r.Input) == 0 && r.AgentSessionID == "" &&
 		!r.RequireExistingNativeSession && !r.DisableExecutionEnvironment &&
-		len(r.AgentOptions) == 0 && r.ExecutionControls == nil && r.MCPHTTPServers == nil &&
+		r.Turn == (TurnSettings{}) && len(r.AgentOptions) == 0 && r.ExecutionControls == nil && r.MCPHTTPServers == nil &&
 		len(r.FunctionTools) == 0 && !r.ToolSearch &&
 		!r.ObserveSubagentIdentities
 }

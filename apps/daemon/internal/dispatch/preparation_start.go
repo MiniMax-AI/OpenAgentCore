@@ -95,7 +95,7 @@ func (r *Router) startPreparedExecution(p *preparationState, state *sessionState
 	if blocked {
 		startErr = context.Canceled
 	} else {
-		turn, startErr = handoff.target.StartTurn(p.ctx, input.RunID, input.Input, state.out)
+		turn, startErr = handoff.target.StartTurn(p.ctx, input.RunID, p.turn, input.Input, state.out)
 	}
 	r.mu.Lock()
 	handoff.turn = turn

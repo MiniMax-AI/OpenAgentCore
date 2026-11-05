@@ -31,7 +31,7 @@ func (e *reusableExecutor) Close(context.Context) error {
 	defer e.mu.Unlock()
 	return e.closeErr
 }
-func (e *reusableExecutor) StartTurn(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *reusableExecutor) StartTurn(_ context.Context, id string, _ proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if e.startErr != nil {
 		return nil, e.startErr
 	}
@@ -182,7 +182,7 @@ func TestExecutorRejectsConfigurationAndNativeIdentityChanges(t *testing.T) {
 	for _, kind := range []string{"configuration", "native"} {
 		req := executorRequest()
 		if kind == "configuration" {
-			req.Configuration.AgentOptions = map[string]any{"model": "changed"}
+			req.Configuration.Turn.Model = "changed"
 		} else {
 			req.Configuration.AgentSessionID = "other-native"
 		}
@@ -380,7 +380,7 @@ func TestExecutorResumesSameOwnerAndNextTurnAfterSuspension(t *testing.T) {
 	req := preparationRequest()
 	req.Configuration.AgentSessionID = "native-session"
 	conflict := req
-	conflict.Configuration.AgentOptions = map[string]any{"model": "changed"}
+	conflict.Configuration.Turn.Model = "changed"
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "conflict", conflict)); err == nil {
 		t.Fatal("suspension relaxed the fixed configuration")
 	}

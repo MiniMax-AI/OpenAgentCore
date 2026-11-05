@@ -65,11 +65,11 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	}
 	config.Env[0] = "ANTHROPIC_AUTH_TOKEN=changed"
 	config.Workspace.Directory = "/changed"
-	req.AgentOptions["model"] = "changed"
+	req.Turn.Model = "changed"
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
 	operation, stopOperation := context.WithCancel(ctx)
-	turn, err := e.StartTurn(operation, "actual-run", proto.TextInput("hello"), out)
+	turn, err := e.StartTurn(operation, "actual-run", proto.TurnSettings{}, proto.TextInput("hello"), out)
 	stopOperation()
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 					prompt = "hello"
 					cancel()
 				}
-				_, startErr := e.StartTurn(operation, "run", proto.TextInput(prompt), make(chan proto.Envelope, 8))
+				_, startErr := e.StartTurn(operation, "run", proto.TurnSettings{}, proto.TextInput(prompt), make(chan proto.Envelope, 8))
 				cancel()
 				if startErr == nil {
 					t.Fatal("invalid or cancelled StartTurn succeeded")
@@ -176,7 +176,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("unused process was not settled")
 			}
-			if _, err := e.StartTurn(t.Context(), "late", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
+			if _, err := e.StartTurn(t.Context(), "late", proto.TurnSettings{}, proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
 				t.Fatal("released Executor was reusable")
 			}
 		})

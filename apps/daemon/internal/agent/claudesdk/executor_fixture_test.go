@@ -21,7 +21,7 @@ func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequest
 	if err != nil {
 		return nil, err
 	}
-	turn, err := resource.StartTurn(ctx, run, input, out)
+	turn, err := resource.StartTurn(ctx, run, proto.TurnSettings{}, input, out)
 	if turn == nil {
 		_ = resource.Close(context.Background())
 		return nil, err

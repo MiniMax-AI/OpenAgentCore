@@ -14,18 +14,17 @@ func TestNullableSystemPrompt(t *testing.T) {
 		want    string
 		reject  bool
 	}{
-		{"omitted", map[string]any{"model": "test-model"}, "", false},
-		{"null", map[string]any{"model": "test-model", "system_prompt": nil}, "", false},
-		{"empty", map[string]any{"model": "test-model", "system_prompt": ""}, "", false},
-		{"text", map[string]any{"model": "test-model", "system_prompt": "instructions"}, "instructions", false},
-		{"null-model", map[string]any{"model": nil}, "", true},
-		{"null-unknown", map[string]any{"model": "test-model", "unsupported": nil}, "", true},
+		{"omitted", map[string]any{}, "", false},
+		{"null", map[string]any{"system_prompt": nil}, "", false},
+		{"empty", map[string]any{"system_prompt": ""}, "", false},
+		{"text", map[string]any{"system_prompt": "instructions"}, "instructions", false},
+		{"null-unknown", map[string]any{"unsupported": nil}, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-			start, _, err := prepareConfiguration(config, proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentOptions: tc.options})
+			start, _, err := prepareConfiguration(config, proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), Turn: proto.TurnSettings{Model: "test-model"}, AgentOptions: tc.options})
 			if (err != nil) != tc.reject || (!tc.reject && start.SystemPrompt != tc.want) {
 				t.Fatalf("system prompt %q, error %v", start.SystemPrompt, err)
 			}

@@ -135,7 +135,7 @@ type Executor interface {
 	// A nil Turn guarantees no input was submitted or output retained and leaves
 	// out with the caller. A non-nil Turn owns out, including on error; input
 	// may have been submitted and must never be replayed automatically.
-	StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (Turn, error)
+	StartTurn(ctx context.Context, runID string, turn proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (Turn, error)
 	// Success confirms all native work and owned output streams have stopped.
 	// It does not establish an otherwise unknown Turn result. An error retains
 	// resource ownership; another caller may await or retry Close.
@@ -259,7 +259,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
 	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+		if _, err := configuration.Prepare(req.Turn.Model, req.AgentOptions); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req)

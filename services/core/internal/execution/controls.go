@@ -15,17 +15,24 @@ func executionControls(agent v1.Agent, tools executionToolSet) *proto.ExecutionC
 	if controls.TextVerbosity == "" {
 		controls.TextVerbosity = "medium"
 	}
-	if agent.Reasoning.Effort != nil {
-		controls.ReasoningEffort = *agent.Reasoning.Effort
-	}
 	if agent.Reasoning.Summary != nil {
 		controls.ReasoningSummary = *agent.Reasoning.Summary
-	}
-	if agent.ServiceTier != "auto" {
-		controls.ServiceTier = agent.ServiceTier
 	}
 	if agent.Text.Format.Type == "json_schema" {
 		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: agent.Text.Format.Schema}
 	}
 	return controls
+}
+
+// turnSettings assembles the root Turn's settings from the Session snapshot.
+// Auto service tier means unset.
+func turnSettings(agent v1.Agent) proto.TurnSettings {
+	turn := proto.TurnSettings{Model: agent.Model}
+	if agent.Reasoning.Effort != nil {
+		turn.ReasoningEffort = *agent.Reasoning.Effort
+	}
+	if agent.ServiceTier != "auto" {
+		turn.ServiceTier = agent.ServiceTier
+	}
+	return turn
 }

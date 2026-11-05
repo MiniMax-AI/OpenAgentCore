@@ -13,7 +13,7 @@ func TestHarnessConfigReachesBridgeAndOwnsSnapshot(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 	native := map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 1024}}
-	req := proto.PromptRequestPayload{AgentOptions: map[string]any{"model": "fixture", "harness_config": native}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", ReasoningEffort: "high"}}
+	req := proto.PromptRequestPayload{Turn: proto.TurnSettings{Model: "fixture", ReasoningEffort: "high"}, AgentOptions: map[string]any{"harness_config": native}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 	start, _, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)

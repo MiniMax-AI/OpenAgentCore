@@ -36,7 +36,7 @@ func workspaceFixture(t *testing.T) Config {
 
 func workspaceRequest() proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
-		AgentOptions: map[string]any{"model": "fixture"}}
+		Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
 }
 
 func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {

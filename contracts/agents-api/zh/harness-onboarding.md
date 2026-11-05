@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: bb67d20b3c7684d18944ac0bf51038835df199a91fda3445b727aaae7a049e64
+source_hash: 0d3cfce2ec6a1ff9714c021b8ba154c1a955efbdc7f1a77b6d16616a6b16ab1e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -98,7 +98,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 | Session Executor | Runtime | 空闲过期、关闭或确认失效时执行 `Executor.Close` |
 | Turn | 由 Runtime 跟踪的适配器 `Turn` | `AwaitSettlement` 确认结算完成 |
 
-Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
+Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 依据输入和该 Turn 的 `proto.TurnSettings`（与准备时的取值相同）创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
 
 Executor 按下列状态转移。每个 Turn 在 `StartTurn` 与 `AwaitSettlement` 之间运行。
 
@@ -201,7 +201,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 
 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个声明携带一个 `Configuration`，Core 组合和 Runtime 的 `RegisterKind` 都使用它。Executor 路径会在产生原生副作用之前通过该声明进行验证。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
 
-提供的 `model` 必须是非空字符串，并且显式指定 `model_provider` 时必须提供它。原生所有权连接路径可以省略二者；显式 null 无效。显式为空的声明不接受任何提供商或非空原生参数，也不宣称支持提供商。未知协议格式和重复协议声明会导致注册失败。
+`turn.model` 不能为空白，并且显式指定 `model_provider` 时必须提供它。原生所有权连接路径可以二者都不提供。显式为空的声明不接受任何提供商或非空原生参数，也不宣称支持提供商。未知协议格式和重复协议声明会导致注册失败。
 
 声明中的有序 `protocols` 列表是接受协议及默认协议（第一个条目）的唯一来源；它还为 Core 的配置支持描述符提供数据，Core 和 Runtime 通过它拒绝不受支持的组合。适配器通过原生配置直接连接；它们绝不引入模型 API 代理或协议转换器、第二套模型能力 registry，也不会从模型名称推断能力。Claude 的私有 bridge 接收编译后的原生选项，并且只执行结构检查，而不是声明规则的第二份副本。
 

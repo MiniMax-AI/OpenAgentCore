@@ -15,7 +15,7 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 		t.Run(tc.protocol, func(t *testing.T) {
 			req := testRequest(t)
 			req.AgentOptions["model_provider"].(map[string]any)["protocol"] = tc.protocol
-			req.AgentOptions["model"] = "chosen-model"
+			req.Turn.Model = "chosen-model"
 			opts, err := prepareOptions(testStateRoot(t), req, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -120,7 +120,7 @@ func TestOptionsAllowLoopbackProviderFixture(t *testing.T) {
 
 func TestOptionsWriteNativeThinkingEffort(t *testing.T) {
 	req := testRequest(t)
-	req.ExecutionControls.ReasoningEffort = "high"
+	req.Turn.ReasoningEffort = "high"
 	opts, err := prepareOptions(testStateRoot(t), req, nil)
 	if err != nil {
 		t.Fatal(err)

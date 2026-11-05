@@ -69,7 +69,7 @@ Saved Agents keep every pinned `web_search` mode: omitted or null is saved as `l
 
 Execution carries the resolved values to the Harness and validates them against its declaration in `internal/harnessconfig` (`Execution`): the supported web search modes and whether search settings are accepted, reasoning efforts and summaries, service tiers, programmatic-tool-calling values and text verbosities. A value outside the declaration is rejected at Session admission with a message naming the field, unless the Session replaces the saved tools. Core sends an option only when the Agent sets it or the pinned default applies, so an omitted `web_search` or `programmatic_tool_calling` keeps each Harness's native behavior. For programmatic calling this differs from the official default-on behavior. Unrelated native utility tools are not removed. Claude Code on a workspace placement also keeps `WebSearch` and `WebFetch` when the control is omitted; [Turns and Items](./sessions-events.md#turns-and-items) gives their `web_search_call` actions.
 
-`ExecutionControls` carries the options ([Runtime protocol](../../docs/runtime-protocol.md#capability-declarations)). The Runtime needs only the `execution_controls` capability.
+`ExecutionControls` carries the options, except reasoning effort and service tier, which travel in the Turn settings ([Runtime protocol](../../docs/runtime-protocol.md#capability-declarations)). The Runtime needs only the `execution_controls` capability.
 
 | Harness | Web search | Programmatic tool calling |
 | --- | --- | --- |

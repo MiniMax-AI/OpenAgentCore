@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: ac10ed0c636be22b92802eeae3af6ded928239c637e24cafe748a62fa16174f0
+source_hash: 1154cf99b5c9d5f2d3d1079b074df946946f2b490a617eac0074cb666ff0385b
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -222,8 +222,9 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 
 | 字段 | Core 设置方式 |
 | --- | --- |
-| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
-| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning effort 和 summary、非 `auto` 的 service tier，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验每个值；原生选项名称属于适配器 |
+| `turn` | 始终设置：根 Turn 的 `model`，以及 Agent 设置时的 `reasoning_effort` 和非 `auto` 的 `service_tier`。只读工作区 preparation 发送空的 `turn` |
+| `agent_options` | 始终设置 Agent 的 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
+| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning summary，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验这些值和 `turn` 设置；原生选项名称属于适配器 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |

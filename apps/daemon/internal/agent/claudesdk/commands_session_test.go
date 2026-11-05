@@ -37,7 +37,7 @@ func TestWorkspaceCommandFramesKeepStartIdentityAndObservedOutput(t *testing.T) 
 		t.Fatal("preparation submitted a command")
 	}
 	out := make(chan proto.Envelope, 16)
-	s, err := resource.StartTurn(t.Context(), "actual-command-run", proto.TextInput("hello"), out)
+	s, err := resource.StartTurn(t.Context(), "actual-command-run", proto.TurnSettings{}, proto.TextInput("hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

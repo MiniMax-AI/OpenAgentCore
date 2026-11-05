@@ -23,6 +23,7 @@ type preparationState struct {
 	requestID        string
 	trace            string
 	fingerprint      [32]byte
+	turn             proto.TurnSettings
 	startFingerprint [32]byte
 	status           proto.PreparationStatusPayload
 	deadline         time.Time

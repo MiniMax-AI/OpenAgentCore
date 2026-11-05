@@ -16,7 +16,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
-			req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
+			req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
 			tools := []string{"echo"}
 			switch mode {
 			case "selected":

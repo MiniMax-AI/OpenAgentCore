@@ -145,7 +145,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
 	operation, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, turn: req.Turn, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
 	state := "preparing"
 	if reused {
 		state = "ready"

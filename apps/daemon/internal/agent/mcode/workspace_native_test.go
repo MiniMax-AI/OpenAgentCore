@@ -75,7 +75,7 @@ func TestNativeMCodeWorkspaceTools(t *testing.T) {
 			}
 		}()
 		out := make(chan proto.Envelope, 1024)
-		turn, err := e.StartTurn(ctx, "turn", proto.TextInput(prompt), out)
+		turn, err := e.StartTurn(ctx, "turn", proto.TurnSettings{}, proto.TextInput(prompt), out)
 		if err != nil {
 			t.Fatal(err)
 		}

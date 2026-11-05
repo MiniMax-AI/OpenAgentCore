@@ -46,7 +46,7 @@ type terminalHandoffExecutor struct {
 }
 
 func (e *terminalHandoffExecutor) Close(context.Context) error { e.closes.Add(1); return nil }
-func (e *terminalHandoffExecutor) StartTurn(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *terminalHandoffExecutor) StartTurn(_ context.Context, id string, _ proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	turn := &terminalHandoffTurn{id: id, out: out, settled: make(chan struct{})}
 	e.turns <- turn
 	return turn, nil

@@ -57,7 +57,7 @@ func (e *preparationExecutor) Close(ctx context.Context) error {
 	return err
 }
 
-func (e *preparationExecutor) StartTurn(ctx context.Context, id string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *preparationExecutor) StartTurn(ctx context.Context, id string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	upstream := make(chan proto.Envelope, 64)
 	terminal := make(chan struct{})
 	var once sync.Once
