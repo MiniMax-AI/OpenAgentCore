@@ -84,7 +84,7 @@ func runPreparationHelper() {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	emit(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	emit(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if !scanner.Scan() {
 		return
 	}

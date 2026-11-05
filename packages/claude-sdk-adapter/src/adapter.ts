@@ -168,7 +168,7 @@ export async function execute(request: ExecutorPrepare, ownerEmit: (event: Event
       if(value.type==="steer") for(const event of inputs.submit(value)) await emit(event);
       else functions.submit(JSON.stringify(value));
     },{model:request.model,effort:request.native_model_options?.effort??null,review:""});
-    await ownerEmit({type:"executor_ready",protocol:3});
+    await ownerEmit({type:"executor_ready",protocol:4});
     for await (const message of stream) {
       // Native command queue telemetry can follow a result. It is not model
       // output or a consumed-input receipt, and has no authority over a Turn.

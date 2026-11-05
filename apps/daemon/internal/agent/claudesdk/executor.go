@@ -135,7 +135,7 @@ func (e *executor) read() {
 			break
 		}
 		if !ready {
-			if event.Type != "executor_ready" || event.Protocol != 3 || event.TurnID != "" {
+			if event.Type != "executor_ready" || event.Protocol != 4 || event.TurnID != "" {
 				if event.Type == "error" {
 					readyFailure = bridgeFailure(event.Code)
 				}

@@ -27,7 +27,7 @@ case "$1" in
     printf '%s\n' '{"type":"runtime_ready","protocol":3,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare","workspace_command_observations"]}' ;;
   *)
     IFS= read -r request
-    printf '%s\n' '{"type":"executor_ready","protocol":3}'
+    printf '%s\n' '{"type":"executor_ready","protocol":4}'
     IFS= read -r request
     printf '%s\n' '{"type":"result","turn_id":"run","session_id":"native","text":"completed"}'
     printf '%s\n' '{"type":"turn_settled","turn_id":"run","confirmed":true,"reusable":true,"reason":""}' ;;

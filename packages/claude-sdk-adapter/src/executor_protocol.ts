@@ -3,7 +3,7 @@ import { Inputs } from "./inputs.js";
 import { parseMessageInput, type MessageInput } from "./message_input.js";
 
 export type ExecutorEvent =
-  | { type: "executor_ready"; protocol: 3 }
+  | { type: "executor_ready"; protocol: 4 }
   | { type: "turn_started"; turn_id: string }
   | { type: "turn_settled"; turn_id: string; confirmed: boolean; reusable: boolean; reason: string };
 type WireEvent = { type: string; [key: string]: unknown };
@@ -47,7 +47,7 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
         this.used.has(id) || Object.keys(value).some(key => !["type", "turn_id", "input", "settings"].includes(key))) throw new Error("invalid turn start");
     const input = parseMessageInput(value.input);
     const next = value.settings as TurnSettings;
-    if (!next || typeof next.model !== "string" || !next.model || !(next.effort === null || typeof next.effort === "string") || !["", "auto_review"].includes(next.review)) throw new Error("invalid turn start");
+    if (!next || typeof next.model !== "string" || !(next.effort === null || typeof next.effort === "string") || typeof next.review !== "string") throw new Error("invalid turn start");
     const output = async (event: WireEvent) => {
       if (this.active?.id !== id) throw new Error("late turn event");
       await this.output({ ...event, turn_id: id });
@@ -57,7 +57,7 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
     this.used.add(id);
     await this.output({ type: "turn_started", turn_id: id });
     // Native answers to these requests are Turn events, so the Turn is active first; the input is not queued yet.
-    if (next.model !== this.applied.model) await this.stream.setModel(next.model);
+    if (next.model !== this.applied.model) await this.stream.setModel(next.model || undefined);
     this.applied.model = next.model;
     if (next.effort !== this.applied.effort) await this.stream.applyFlagSettings({ effortLevel: next.effort as EffortLevel | null });
     this.applied.effort = next.effort;
