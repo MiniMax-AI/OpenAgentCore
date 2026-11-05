@@ -178,6 +178,20 @@ type reservationTx struct {
 	tenant, environment, session pgtype.UUID
 }
 
+// LoadEnvironment and LoadBoundDevice read by Environment: a standalone
+// Environment reserves compute with no Session.
+func (t *reservationTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
+	return sessionpg.LoadEnvironment(ctx, t.q, uuidString(t.tenant), uuidString(t.environment))
+}
+
+func (t *reservationTx) LoadBoundDevice(ctx context.Context) (bool, error) {
+	_, err := t.q.GetEnvironmentDevice(ctx, sqlc.GetEnvironmentDeviceParams{TenantID: t.tenant, EnvironmentID: t.environment})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (t *reservationTx) FindAllocation() (deployment.Allocation, bool, error) {
 	return findAllocation(t.ctx, t.q, t.tenant, t.environment)
 }

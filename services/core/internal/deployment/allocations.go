@@ -247,7 +247,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || evidence == cleanupRequested {
+		if err != nil || evidence == cleanupRequested || evidence == idleExpiry {
 			result = pending
 			return err
 		}

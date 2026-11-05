@@ -71,6 +71,27 @@ func TestSessionCreationRejectsInvalidEnvironmentReference(t *testing.T) {
 	}
 }
 
+// Standalone create and list reject malformed requests before any write.
+func TestStandaloneEnvironmentRequestValidation(t *testing.T) {
+	h, s := validationHandler(t)
+	for name, test := range map[string]struct{ path, body, param string }{
+		"no environment":   {"/v1/agents/environments", `{}`, "environment"},
+		"vault ids":        {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"vault_ids":["v"]}`, "vault_ids"},
+		"self hosted":      {"/v1/agents/environments", `{"environment":{"type":"self_hosted","workspace_directory":"/w"}}`, ""},
+		"attach on create": {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}}`, ""},
+		"unknown member":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"extra":1}`, ""},
+	} {
+		w := bodyGateRequest(h, test.path, "application/json", []byte(test.body))
+		var response struct{ Error struct{ Param *string } }
+		if json.Unmarshal(w.Body.Bytes(), &response) != nil || w.Code != http.StatusBadRequest || (test.param != "" && (response.Error.Param == nil || *response.Error.Param != test.param)) {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	if s.writes != 0 {
+		t.Fatalf("an invalid Environment request reached storage: %d writes", s.writes)
+	}
+}
+
 func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing.T) {
 	s := environmentSession()
 	s.Configuration = json.RawMessage(`{"agent":{"id":"agent","model":"model"},"environment":{"type":"openai_hosted"}}`)
