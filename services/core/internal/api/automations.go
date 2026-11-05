@@ -353,9 +353,6 @@ func (h *Handler) newSessionTarget(r *http.Request, raw json.RawMessage, fields 
 	if inline == saved {
 		return fail, &fieldError{param: "target", message: "Provide exactly one of agent and agent_id."}
 	}
-	if length := utf8.RuneCountInString(stringField(fields["agent_id"])); length > 64 {
-		return fail, &fieldError{param: "target.agent_id", message: fmt.Sprintf("Invalid 'target.agent_id': string too long. Expected a string with maximum length 64, but got a string with length %d instead.", length)}
-	}
 	if inline {
 		var agent map[string]json.RawMessage
 		_ = json.Unmarshal(fields["agent"], &agent)
@@ -379,7 +376,7 @@ func (h *Handler) newSessionTarget(r *http.Request, raw json.RawMessage, fields 
 		var required *modelProviderRequiredError
 		if errors.As(err, &required) {
 			report = func(w http.ResponseWriter, _ *http.Request, _ error) {
-				writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "target.x_agents_core.model_provider")
+				writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "target")
 			}
 		}
 		return automationTarget{report: report}, prefixTarget(err)
@@ -439,11 +436,4 @@ func automationEnvironment(input sessionRequest) *v1.AutomationEnvironment {
 		result.WorkspaceDirectory = &env.WorkspaceDirectory
 	}
 	return result
-}
-
-// stringField reads a JSON string, or "" for anything else.
-func stringField(raw json.RawMessage) string {
-	var value string
-	_ = json.Unmarshal(raw, &value)
-	return value
 }

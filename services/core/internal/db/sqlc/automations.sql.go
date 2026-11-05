@@ -26,6 +26,24 @@ func (q *Queries) AdvanceAutomation(ctx context.Context, arg AdvanceAutomationPa
 	return err
 }
 
+const automationQueue = `-- name: AutomationQueue :one
+SELECT EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = $1::uuid AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
+    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = $1::uuid AND i.status = 'queued') AS queued
+`
+
+type AutomationQueueRow struct {
+	Pending bool `json:"pending"`
+	Queued  bool `json:"queued"`
+}
+
+// A statement after LockAutomation, so it reads what committed while the lock waited.
+func (q *Queries) AutomationQueue(ctx context.Context, id pgtype.UUID) (AutomationQueueRow, error) {
+	row := q.db.QueryRow(ctx, automationQueue, id)
+	var i AutomationQueueRow
+	err := row.Scan(&i.Pending, &i.Queued)
+	return i, err
+}
+
 const completeOnceAutomation = `-- name: CompleteOnceAutomation :exec
 UPDATE automations SET status = 'completed', next_run_at = NULL WHERE id = $1 AND type = 'once'
 `
@@ -151,8 +169,7 @@ func (q *Queries) DueAutomationIDs(ctx context.Context, arg DueAutomationIDsPara
 }
 
 const getAutomation = `-- name: GetAutomation :one
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
 FROM automations a WHERE a.tenant_id = $1 AND a.id = $2
 `
 
@@ -174,8 +191,6 @@ type GetAutomationRow struct {
 	NextRunAt  pgtype.Timestamptz `json:"next_run_at"`
 	Target     []byte             `json:"target"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	Pending    bool               `json:"pending"`
-	Queued     bool               `json:"queued"`
 }
 
 func (q *Queries) GetAutomation(ctx context.Context, arg GetAutomationParams) (GetAutomationRow, error) {
@@ -194,8 +209,6 @@ func (q *Queries) GetAutomation(ctx context.Context, arg GetAutomationParams) (G
 		&i.NextRunAt,
 		&i.Target,
 		&i.CreatedAt,
-		&i.Pending,
-		&i.Queued,
 	)
 	return i, err
 }
@@ -286,7 +299,7 @@ func (q *Queries) InsertAutomation(ctx context.Context, arg InsertAutomationPara
 const insertManualInvocation = `-- name: InsertManualInvocation :one
 INSERT INTO automation_invocations (id, automation_id, status, session_id, delivery)
 SELECT $1, a.id, 'queued', (CASE WHEN a.target->>'type' = 'existing_session' THEN a.target->>'session_id' END)::uuid, a.target_contents FROM automations a WHERE a.tenant_id = $2 AND a.id = $3
-RETURNING created_at
+RETURNING created_at, session_id
 `
 
 type InsertManualInvocationParams struct {
@@ -295,11 +308,16 @@ type InsertManualInvocationParams struct {
 	AutomationID pgtype.UUID `json:"automation_id"`
 }
 
-func (q *Queries) InsertManualInvocation(ctx context.Context, arg InsertManualInvocationParams) (pgtype.Timestamptz, error) {
+type InsertManualInvocationRow struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	SessionID pgtype.UUID        `json:"session_id"`
+}
+
+func (q *Queries) InsertManualInvocation(ctx context.Context, arg InsertManualInvocationParams) (InsertManualInvocationRow, error) {
 	row := q.db.QueryRow(ctx, insertManualInvocation, arg.ID, arg.TenantID, arg.AutomationID)
-	var created_at pgtype.Timestamptz
-	err := row.Scan(&created_at)
-	return created_at, err
+	var i InsertManualInvocationRow
+	err := row.Scan(&i.CreatedAt, &i.SessionID)
+	return i, err
 }
 
 const insertScheduledInvocation = `-- name: InsertScheduledInvocation :exec
@@ -333,8 +351,7 @@ func (q *Queries) InsertScheduledInvocation(ctx context.Context, arg InsertSched
 }
 
 const listAutomations = `-- name: ListAutomations :many
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
 FROM automations a
 WHERE a.tenant_id = $1
   AND ($2::text IS NULL OR (a.target->>'type' = 'existing_session' AND a.target->>'session_id' = $2::text))
@@ -371,8 +388,6 @@ type ListAutomationsRow struct {
 	NextRunAt  pgtype.Timestamptz `json:"next_run_at"`
 	Target     []byte             `json:"target"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	Pending    bool               `json:"pending"`
-	Queued     bool               `json:"queued"`
 }
 
 func (q *Queries) ListAutomations(ctx context.Context, arg ListAutomationsParams) ([]ListAutomationsRow, error) {
@@ -404,8 +419,6 @@ func (q *Queries) ListAutomations(ctx context.Context, arg ListAutomationsParams
 			&i.NextRunAt,
 			&i.Target,
 			&i.CreatedAt,
-			&i.Pending,
-			&i.Queued,
 		); err != nil {
 			return nil, err
 		}
@@ -491,9 +504,8 @@ func (q *Queries) ListInvocations(ctx context.Context, arg ListInvocationsParams
 }
 
 const lockAutomation = `-- name: LockAutomation :one
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
-FROM automations a WHERE a.tenant_id = $1 AND a.id = $2 FOR UPDATE OF a
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
+FROM automations a WHERE a.tenant_id = $1 AND a.id = $2 FOR UPDATE
 `
 
 type LockAutomationParams struct {
@@ -514,8 +526,6 @@ type LockAutomationRow struct {
 	NextRunAt  pgtype.Timestamptz `json:"next_run_at"`
 	Target     []byte             `json:"target"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	Pending    bool               `json:"pending"`
-	Queued     bool               `json:"queued"`
 }
 
 func (q *Queries) LockAutomation(ctx context.Context, arg LockAutomationParams) (LockAutomationRow, error) {
@@ -534,8 +544,6 @@ func (q *Queries) LockAutomation(ctx context.Context, arg LockAutomationParams) 
 		&i.NextRunAt,
 		&i.Target,
 		&i.CreatedAt,
-		&i.Pending,
-		&i.Queued,
 	)
 	return i, err
 }

@@ -64,9 +64,6 @@ func (h *Handler) deliverAutomations(ctx context.Context) (*int64, int64, error)
 	}
 	wg.Wait()
 	processed := int64(recorded) + settled.Load()
-	if processed == 0 && failed.Load() == 0 {
-		return nil, 0, nil
-	}
 	return &processed, failed.Load(), nil
 }
 

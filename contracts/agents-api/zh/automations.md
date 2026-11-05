@@ -1,7 +1,7 @@
 ---
 title: "Automations"
 source: contracts/agents-api/automations.md
-source_hash: 7973306d7ac27b5cb7aedc164368760a133f2e75663acfe8a401c3d09e8433b3
+source_hash: 4644f72c63abb5381898a794a5421bbe968bf5ab418237ea40d111dee850a515
 ---
 
 Automation 保存一个计划和一个目标。计划触发时，Core 投递目标：创建新 Session，或向已有 Session 发送指令。锁定版本 SDK 的全部十个操作都在 `/v1/agents/automations` 下实现，并与其他 Beta 路由一样需要项目身份验证和 `OpenAI-Beta: agents=v1`。Automation 属于其密钥所在的项目；不存在的 ID 与其他项目的 ID 都返回 404。
@@ -64,7 +64,7 @@ Automation 保存一个计划和一个目标。计划触发时，Core 投递目�
 | `failed` | 投递被永久拒绝；`error` 包含相同请求会返回的 `code` 和 `message` |
 | `skipped` | `skip_reason` 为 `pending_delivery`：该 Automation 已有排队中的 invocation |
 
-Core 每秒记录到期的触发并投递排队中的 invocation，最多同时运行 16 个投递，每个最长 5 s。投递使用 `POST /v1/agents/sessions` 或 `POST /v1/agents/sessions/{id}/events` 的代码，并以 invocation ID 作为 `Idempotency-Key`，因此崩溃后的重试会找到已经创建的 Session 或输入。原因是暂时的，Core 就会重试：执行不可用、沙箱重置、较早的输入仍在待处理，或 Turn 无法接收输入。其他任何拒绝都会让 invocation 失败。同一个 Automation 一次只投递一个 invocation，先到先投递，最久未尝试的 Automation 先投递，因此卡住的 invocation 不会占满所有名额。已保存的目标无法打开的 invocation 以 `internal_error` 失败。invocation 保留到 Automation 被删除。
+Core 每秒记录到期的触发并投递排队中的 invocation，最多同时运行 16 个投递，每个最长 5 s。投递使用 `POST /v1/agents/sessions` 或 `POST /v1/agents/sessions/{id}/events` 的代码，并以 invocation ID 作为 `Idempotency-Key`，因此崩溃后的重试会找到已经创建的 Session 或输入。投递得到 500 及以上的状态、遇到无法接收输入的 Turn 或超时，Core 会重试；4xx 状态会让 invocation 失败。同一个 Automation 一次只投递一个 invocation，先到先投递，最久未尝试的 Automation 先投递，因此卡住的 invocation 不会占满所有名额。已保存的目标无法打开的 invocation 以 `internal_error` 失败。invocation 保留到 Automation 被删除。
 
 `once` Automation 在其计划 invocation 到达 `completed`、`failed` 或 `skipped` 时完成。手动 invocation 从不改变计划。
 

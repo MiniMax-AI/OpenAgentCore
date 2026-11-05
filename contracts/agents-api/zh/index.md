@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: cc7259f262c8aad57eb45516d738dcc94dc38dfbd80011bb7a68d0c7f4458a3e
+source_hash: 1bd8a9d1f30c1986d41a2f0dffe0dcd8bdf3570fbc62d777570ef6750c8a4022
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -133,6 +133,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **Automations**（[Automations](automations.md)）
 
 - `existing_session` 目标的 `instructions` 为空时，创建和更新返回 400；固定版本 schema 允许 0 字节，而 Core 无法发送空消息。
+- `run_at` 大于 253402300799（9999 年）时返回 400；固定版本 schema 没有设上限。
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
@@ -206,7 +207,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
   - [指令投递](automations.md#targets)为一条输入消息。
   - [cron 语法与夏令时](automations.md#schedules)。
   - [停机、跳过、完成与暂停](automations.md#invocations)。
-  - [冲突与拒绝的情形](automations.md#state-changes)，包括 `run_at` 上限。
+  - [冲突与拒绝的情形](automations.md#state-changes)。
   - [目标校验与保存的引用](automations.md#targets)。
   - [分页](automations.md)：`limit` 截断与无法解析的 `after`。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。

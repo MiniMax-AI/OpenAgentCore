@@ -11,11 +11,10 @@ import (
 // Schedule is a parsed five-field crontab(5) expression in a time zone.
 type Schedule struct {
 	minutes, hours, days, months, weekdays uint64
-	// anyDay and anyWeekday report a day field that starts with "*". When
-	// neither does, a day matches either field. fixed reports a minute and an
-	// hour field that both do not.
-	anyDay, anyWeekday, fixed bool
-	location                  *time.Location
+	// dayOr reports day fields that both do not start with "*", so a day
+	// matches either. fixed reports the same of the minute and hour fields.
+	dayOr, fixed bool
+	location     *time.Location
 }
 
 var (
@@ -40,7 +39,7 @@ func ParseSchedule(expression, timezone string) (*Schedule, error) {
 	if err != nil {
 		return nil, &InvalidError{"timezone", "timezone must be an IANA time zone name."}
 	}
-	s := &Schedule{location: location, anyDay: strings.HasPrefix(fields[2], "*"), anyWeekday: strings.HasPrefix(fields[4], "*"), fixed: !strings.HasPrefix(fields[0], "*") && !strings.HasPrefix(fields[1], "*")}
+	s := &Schedule{location: location, dayOr: !strings.HasPrefix(fields[2], "*") && !strings.HasPrefix(fields[4], "*"), fixed: !strings.HasPrefix(fields[0], "*") && !strings.HasPrefix(fields[1], "*")}
 	for i, target := range []struct {
 		mask     *uint64
 		min, max int
@@ -122,9 +121,9 @@ func (s *Schedule) Next(after time.Time) (time.Time, bool) {
 		w := t.In(s.location)
 		switch {
 		case s.months&(1<<w.Month()) == 0:
-			t = time.Date(w.Year(), w.Month()+1, 1, 0, 0, 0, 0, s.location)
+			t = forward(t, time.Date(w.Year(), w.Month()+1, 1, 0, 0, 0, 0, s.location))
 		case !s.dayMatches(w):
-			t = time.Date(w.Year(), w.Month(), w.Day()+1, 0, 0, 0, 0, s.location)
+			t = forward(t, time.Date(w.Year(), w.Month(), w.Day()+1, 0, 0, 0, 0, s.location))
 		case s.hours&(1<<w.Hour()) == 0:
 			t = t.Add(time.Duration(60-w.Minute()) * time.Minute)
 		case s.minutes&(1<<w.Minute()) == 0 || s.fixed && s.repeated(t):
@@ -134,6 +133,15 @@ func (s *Schedule) Next(after time.Time) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// forward returns next, or the minute after t when a daylight saving gap at
+// midnight turns next's missing wall-clock time into an instant before it.
+func forward(t, next time.Time) time.Time {
+	if next.After(t) {
+		return next
+	}
+	return t.Add(time.Minute)
 }
 
 // repeated reports whether t is the later instant of a wall-clock minute that
@@ -149,10 +157,13 @@ func (s *Schedule) repeated(t time.Time) bool {
 // gapBefore returns the first instant after a daylight saving gap that holds a
 // wall-clock minute a fixed-time Schedule matches, when it comes before t; else t.
 func (s *Schedule) gapBefore(after, t time.Time) time.Time {
-	for z := after.In(s.location); s.fixed; {
+	if !s.fixed {
+		return t
+	}
+	for z := after.In(s.location); ; {
 		_, end := z.ZoneBounds()
 		if end.IsZero() || !end.Before(t) {
-			break
+			return t
 		}
 		_, was := end.Add(-time.Second).In(s.location).Zone()
 		_, is := end.In(s.location).Zone()
@@ -163,13 +174,12 @@ func (s *Schedule) gapBefore(after, t time.Time) time.Time {
 		}
 		z = end.In(s.location)
 	}
-	return t
 }
 
 func (s *Schedule) dayMatches(civil time.Time) bool {
 	day, weekday := s.days&(1<<civil.Day()) != 0, s.weekdays&(1<<int(civil.Weekday())) != 0
-	if s.anyDay || s.anyWeekday {
-		return day && weekday
+	if s.dayOr {
+		return day || weekday
 	}
-	return day || weekday
+	return day && weekday
 }

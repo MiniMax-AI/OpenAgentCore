@@ -79,11 +79,7 @@ func (s *Store) Update(ctx context.Context, tenantID, id string, change func(aut
 	var result automations.Automation
 	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		row, err := q.LockAutomation(ctx, sqlc.LockAutomationParams{TenantID: tenant, ID: pgunit.PathID(id)})
-		if err != nil {
-			return err
-		}
-		current, err := automation(sqlc.GetAutomationRow(row))
+		current, err := lock(ctx, q, tenant, pgunit.PathID(id))
 		if err != nil {
 			return err
 		}
@@ -100,7 +96,7 @@ func (s *Store) Update(ctx context.Context, tenantID, id string, change func(aut
 				return err
 			}
 		}
-		if err := q.UpdateAutomation(ctx, sqlc.UpdateAutomationParams{TenantID: tenant, ID: row.ID, Name: result.Name, Metadata: metadata, Status: result.Status, RunAt: timestamp(result.RunAt),
+		if err := q.UpdateAutomation(ctx, sqlc.UpdateAutomationParams{TenantID: tenant, ID: pgunit.PathID(id), Name: result.Name, Metadata: metadata, Status: result.Status, RunAt: timestamp(result.RunAt),
 			Expression: text(result.Expression), Timezone: text(result.Timezone), NextRunAt: timestamp(result.NextRunAt), SetTarget: result.Contents != nil, Target: result.Target, TargetContents: contents}); err != nil {
 			return err
 		}
@@ -141,7 +137,7 @@ func (s *Store) Invoke(ctx context.Context, tenantID, id string) (automations.In
 		if err != nil {
 			return err
 		}
-		result.CreatedAt = created.Time
+		result.CreatedAt, result.SessionID = created.CreatedAt.Time, uuidString(created.SessionID)
 		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionCreate, writeaudit.ResourceAutomationInvocation, result.ID, result.AutomationID, writeaudit.Resource{Type: writeaudit.ResourceAutomationInvocation, ID: result.ID, ParentID: result.AutomationID})
 	})
 	return result, storageError(err)
@@ -173,14 +169,10 @@ func (s *Store) Record(ctx context.Context, now time.Time) (int, error) {
 func (s *Store) record(ctx context.Context, tenant, id pgtype.UUID, now time.Time) (recorded bool, err error) {
 	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		row, err := q.LockAutomation(ctx, sqlc.LockAutomationParams{TenantID: tenant, ID: id})
+		a, err := lock(ctx, q, tenant, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // deleted since the pass listed it
 		}
-		if err != nil {
-			return err
-		}
-		a, err := automation(sqlc.GetAutomationRow(row))
 		if err != nil {
 			return err
 		}
@@ -344,9 +336,25 @@ func (s *Store) ListInvocations(ctx context.Context, tenantID, id string, query 
 	return page, nil
 }
 
+// lock locks one Automation and only then reads its queue, so the queue
+// reflects every commit made while the lock waited.
+func lock(ctx context.Context, q *sqlc.Queries, tenant, id pgtype.UUID) (automations.Automation, error) {
+	row, err := q.LockAutomation(ctx, sqlc.LockAutomationParams{TenantID: tenant, ID: id})
+	if err != nil {
+		return automations.Automation{}, err
+	}
+	a, err := automation(sqlc.GetAutomationRow(row))
+	if err != nil {
+		return a, err
+	}
+	queue, err := q.AutomationQueue(ctx, row.ID)
+	a.Pending, a.Queued = queue.Pending, queue.Queued
+	return a, err
+}
+
 func automation(row sqlc.GetAutomationRow) (automations.Automation, error) {
 	a := automations.Automation{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Type: row.Type, Name: row.Name, Status: row.Status, RunAt: timePtr(row.RunAt),
-		Expression: row.Expression.String, Timezone: row.Timezone.String, NextRunAt: timePtr(row.NextRunAt), Target: row.Target, CreatedAt: row.CreatedAt.Time, Pending: row.Pending, Queued: row.Queued}
+		Expression: row.Expression.String, Timezone: row.Timezone.String, NextRunAt: timePtr(row.NextRunAt), Target: row.Target, CreatedAt: row.CreatedAt.Time}
 	var target struct {
 		Type string `json:"type"`
 	}

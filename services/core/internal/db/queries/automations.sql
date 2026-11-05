@@ -3,14 +3,17 @@ INSERT INTO automations (id, tenant_id, type, name, metadata, status, run_at, ex
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING created_at;
 
 -- name: GetAutomation :one
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
 FROM automations a WHERE a.tenant_id = $1 AND a.id = $2;
 
 -- name: LockAutomation :one
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
-FROM automations a WHERE a.tenant_id = $1 AND a.id = $2 FOR UPDATE OF a;
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
+FROM automations a WHERE a.tenant_id = $1 AND a.id = $2 FOR UPDATE;
+
+-- name: AutomationQueue :one
+-- A statement after LockAutomation, so it reads what committed while the lock waited.
+SELECT EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = sqlc.arg(id)::uuid AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
+    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = sqlc.arg(id)::uuid AND i.status = 'queued') AS queued;
 
 -- name: UpdateAutomation :exec
 UPDATE automations SET name = $3, metadata = $4, status = $5, run_at = $6, expression = $7, timezone = $8, next_run_at = $9,
@@ -22,8 +25,7 @@ WHERE tenant_id = $1 AND id = $2;
 DELETE FROM automations WHERE tenant_id = $1 AND id = $2 RETURNING id;
 
 -- name: ListAutomations :many
-SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at, EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued' AND i.scheduled_at IS NOT NULL) AS pending,
-    EXISTS (SELECT 1 FROM automation_invocations i WHERE i.automation_id = a.id AND i.status = 'queued') AS queued
+SELECT a.id, a.tenant_id, a.type, a.name, a.metadata, a.status, a.run_at, a.expression, a.timezone, a.next_run_at, a.target, a.created_at
 FROM automations a
 WHERE a.tenant_id = sqlc.arg(tenant_id)
   AND (sqlc.narg(session_id)::text IS NULL OR (a.target->>'type' = 'existing_session' AND a.target->>'session_id' = sqlc.narg(session_id)::text))
@@ -40,7 +42,7 @@ LIMIT sqlc.arg(page_limit);
 -- name: InsertManualInvocation :one
 INSERT INTO automation_invocations (id, automation_id, status, session_id, delivery)
 SELECT sqlc.arg(id), a.id, 'queued', (CASE WHEN a.target->>'type' = 'existing_session' THEN a.target->>'session_id' END)::uuid, a.target_contents FROM automations a WHERE a.tenant_id = sqlc.arg(tenant_id) AND a.id = sqlc.arg(automation_id)
-RETURNING created_at;
+RETURNING created_at, session_id;
 
 -- name: GetInvocation :one
 SELECT i.id, i.automation_id, i.created_at, i.scheduled_at, i.automation_snapshot, i.status, i.skip_reason, i.session_id, i.error_code, i.error_message

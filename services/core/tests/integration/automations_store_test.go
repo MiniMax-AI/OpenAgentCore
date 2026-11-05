@@ -74,7 +74,7 @@ func TestAutomationRecordingAndSettlement(t *testing.T) {
 
 	// An occurrence that finds a queued invocation is recorded as skipped, with the target Session.
 	session := uuid.NewString()
-	periodic, err := store.Create(t.Context(), automations.Automation{TenantID: tenant, Type: automations.Periodic, Name: "busy", Metadata: map[string]string{}, Status: automations.Active, Expression: "* * * * *", Timezone: "UTC", NextRunAt: &due,
+	periodic, err := store.Create(t.Context(), automations.Automation{TenantID: tenant, Type: automations.Periodic, Name: "busy", Metadata: map[string]string{}, Status: automations.Active, Expression: "0 0 1 1 *", Timezone: "UTC", NextRunAt: &due,
 		TargetType: "existing_session", Target: []byte(`{"type":"existing_session","session_id":"` + session + `"}`), Contents: []byte(`{}`)})
 	if err != nil {
 		t.Fatal(err)

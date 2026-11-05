@@ -130,6 +130,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Automations** ([Automations](./automations.md))
 
 - An empty `instructions` in an `existing_session` target returns 400 at create and update; the pinned schema allows 0 bytes, and Core cannot send an empty message.
+- A `run_at` above 253402300799 (year 9999) returns 400; the pinned schema sets no maximum.
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
@@ -203,7 +204,7 @@ Each item is Core's deliberate or native behavior where the official service beh
   - [Instructions delivery](./automations.md#targets) as one input message.
   - [Cron grammar and daylight saving](./automations.md#schedules).
   - [Downtime, skipping, completion and pause](./automations.md#invocations).
-  - [Conflict and rejection cases](./automations.md#state-changes), including the `run_at` limit.
+  - [Conflict and rejection cases](./automations.md#state-changes).
   - [Target validation and saved references](./automations.md#targets).
   - [Paging](./automations.md): `limit` clamping and unresolved `after`.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
