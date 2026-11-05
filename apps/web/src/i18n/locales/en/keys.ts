@@ -210,6 +210,8 @@ export const keys = {
       vault: "Vault",
       credential: "Credential",
       artifact: "Artifact",
+      automation: "Automation",
+      automation_invocation: "Automation invocation",
     },
   },
 } as const;

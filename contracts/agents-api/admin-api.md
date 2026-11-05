@@ -184,10 +184,12 @@ Core records which Project API key made each successful public write, in the sam
 | Source File upload, delete | `create`, `delete` | `file` |
 | Vault create, delete | `create`, `delete` | `vault` |
 | Credential create, replace, delete (static and OAuth) | `create`, `update`, `delete` | `credential` (`vault`) |
+| Automation create, update, pause, resume, delete | `create`, `update`, `delete` | `automation` |
+| Manual Automation invocation | `create` | `automation_invocation` (`automation`) |
 
 Both routes accept only the parameters listed; an unknown, repeated or empty parameter returns 400, and a missing Project 404.
 
-`GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` returns the creating key of 1–100 resources of one type, in request order. `resource_type` is `agent`, `session`, `environment`, `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential` or `artifact`.
+`GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` returns the creating key of 1–100 resources of one type, in request order. `resource_type` is `agent`, `session`, `environment`, `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential`, `artifact`, `automation` or `automation_invocation`.
 
 ```json
 {"data":[
