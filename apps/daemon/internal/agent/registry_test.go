@@ -105,12 +105,12 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	registry := agent.NewRegistry()
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Declaration{})
-	if _, err := registry.ResolveExecutor("native"); err == nil {
+	if _, _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("kind registration implied reusable execution")
 	}
 	expected := errors.New("executor factory")
 	registry.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, expected })
-	factory, err := registry.ResolveExecutor("native")
+	factory, _, err := registry.ResolveExecutor("native")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Declaration{})
-	if _, err := registry.ResolveExecutor("native"); err == nil {
+	if _, _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("replacing a kind retained its old executor capability")
 	}
 }
@@ -142,7 +142,7 @@ func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
 				}()
 				registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: false, Capabilities: missing}, harnessconfig.Declaration{})
 			}()
-			if _, err := registry.ResolveExecutor("fixture"); err != nil || !reflect.DeepEqual(registry.SupportedAgentKinds(), []proto.SupportedAgentKind{original}) {
+			if _, _, err := registry.ResolveExecutor("fixture"); err != nil || !reflect.DeepEqual(registry.SupportedAgentKinds(), []proto.SupportedAgentKind{original}) {
 				t.Fatal("failed declaration changed registry")
 			}
 		})

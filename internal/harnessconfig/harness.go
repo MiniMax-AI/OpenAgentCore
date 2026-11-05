@@ -446,19 +446,10 @@ func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	for _, check := range []struct {
 		field, value string
 		allowed      []string
-	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}} {
+	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}, {"review", turn.Review, o.Reviews}} {
 		if check.value != "" && !slices.Contains(check.allowed, check.value) {
 			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
 		}
-	}
-	return d.ValidateReview(turn.Review)
-}
-
-// ValidateReview rejects a review value the Harness does not declare. None is
-// always accepted.
-func (d Declaration) ValidateReview(review string) error {
-	if review != "" && review != "none" && !slices.Contains(d.Execution.Reviews, review) {
-		return fmt.Errorf("review %q is not supported by this Harness.", review)
 	}
 	return nil
 }

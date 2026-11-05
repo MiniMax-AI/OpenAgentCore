@@ -23,7 +23,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		return nil, expected
 	})
 	configuration.Providers[0].Protocol = "anthropic"
-	executor, _ := registry.ResolveExecutor("fixture")
+	executor, _, _ := registry.ResolveExecutor("fixture")
 	for _, request := range []proto.PromptRequestPayload{
 		{Turn: proto.TurnSettings{Model: " "}},
 		{Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}}},

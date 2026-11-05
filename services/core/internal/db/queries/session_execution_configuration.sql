@@ -11,4 +11,4 @@ WHERE s.tenant_id = @tenant_id AND s.id = @session_id AND s.deleted_at IS NULL;
 
 -- name: MarkSessionModelSource :exec
 UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model,source}', '"session"')
-WHERE session_id = $1;
+WHERE session_id = sqlc.arg(session_id) AND sqlc.arg(before)::jsonb #> '{agent,model}' IS DISTINCT FROM sqlc.arg(after)::jsonb #> '{agent,model}';

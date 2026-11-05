@@ -81,6 +81,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Claude Code runs a Skill's inline shell inside the Skill expansion, so the command produces no tool observation.
 - Claude Code with live search on `environment: none` has only `WebSearch`, so search yields `search` actions and no page opens ([web search](./execution-tools.md#web-search-and-programmatic-tool-calling)).
 - An omitted reasoning effort stays null instead of taking the model's default.
+- An empty or blank `agent.model` returns 400 at Session create and update; the pinned schema allows it.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - Codex rejects programmatic tool calling together with `multi_agent`.
 - Codex runs without its native goals (`create_goal`, `get_goal` and `update_goal`), because an active goal starts turns of its own after the Turn ends ([Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)).
@@ -151,7 +152,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools are saved but rejected at Session admission for every Harness, because none runs them natively ([Session admission](./wire-semantics.md#session-admission)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
-- A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns; Codex applies all but a reset of `agent.reasoning.effort` to null, and Claude Code and MiniMax Code apply none ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 
 **Execution and history**
 

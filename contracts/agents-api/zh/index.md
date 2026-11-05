@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: e582f32903a107871ee40c88d2a6858505f1eea4978a7ea1380d264ff2bbc058
+source_hash: a987657e50cfc2c7159bb7add066f2088352c7fcb9edd764cc7dd60050e705ff
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -84,6 +84,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Claude Code 在 Skill 展开时运行其内联 shell，因此该命令不产生工具观测。
 - Claude Code 在 `environment: none` 上启用 live 搜索时只有 `WebSearch`，因此搜索只产生 `search` 动作，不会打开页面（[网页搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)）。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
+- `agent.model` 为空或只含空白时，Session 创建和更新返回 400；固定版本 schema 允许这样的值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
 - Codex 不启用原生 goals（`create_goal`、`get_goal` 和 `update_goal`），因为处于活动状态的 goal 会在 Turn 结束后自行启动新的 turn（[Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)）。
@@ -154,7 +155,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `compaction.async: true`、`experimental.time_awareness: true` 以及 `automations` 和 `computer_use` 工具会被保存，但对所有 Harness 都在 Session 准入时被拒绝，因为没有 Harness 原生运行它们（[Session 准入](wire-semantics.md#session-admission)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
-- 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝；Codex 应用除将 `agent.reasoning.effort` 重置为 null 之外的全部更改，Claude Code 和 MiniMax Code 都不应用（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 
 **执行和历史**
 

@@ -54,7 +54,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if !available {
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
-	factory, err := r.registry.ResolveExecutor(req.AgentKind)
+	factory, declaration, err := r.registry.ResolveExecutor(req.AgentKind)
 	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
@@ -65,7 +65,6 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
-	declaration := r.registry.Declaration(req.AgentKind)
 	if declaration.ValidateTurnSettings(req.Turn) != nil {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}

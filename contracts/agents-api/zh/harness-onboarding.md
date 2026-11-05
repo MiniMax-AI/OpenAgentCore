@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 6137e6cc0e367f1db738bb6aeda733ed0386fb008319242eebd0b7961724be9a
+source_hash: bfbacab5d0653177ea0c440454f85e5ac68dbea374d58e5119c00010665620d6
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -114,7 +114,7 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。唯一例外是声明标为可变的 `turn` 设置（`SessionUpdates.Model`、`ReasoningEffort`、`ReasoningEffortReset`、`ServiceTier`，以及 `Execution.Reviews` 非空时的 `review`）：已保留的 Executor 接受 `turn` 在这些设置上不同的 prepare，`StartTurn` 会收到它。适配器要么在 Turn 输入之前以原生方式应用不同的 `turn`，要么不声明该变更。Core 不为 `review` 增加检查：声明了某个值的 Harness 对每个根 Turn 应用它，任何未声明的值都会使更新被拒绝。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
+**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。唯一例外是声明标为可变的 `turn` 设置（`SessionUpdates.Model`、`ReasoningEffort`、`ReasoningEffortReset`、`ServiceTier`，以及 `Execution.Reviews` 非空时的 `review`）：已保留的 Executor 接受 `turn` 在这些设置上不同的 prepare，`StartTurn` 会收到它。适配器要么在 Turn 输入之前以原生方式应用不同的 `turn`，要么不声明该变更。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
 
 **每 Turn 状态。** 每个 Turn 都会获得全新的包装器、输出通道和回执状态。引导和函数接口均属于该 Turn。原生回调必须在异步工作开始前捕获来源 Turn，因此迟到事件绝不会被归到当前活动的 Turn 上。原生进程、query 或传输连接、固定能力配置和原生 session 身份均属于 Executor。不要重置已完成的 `sync.Once` 值，也不要复用旧 Turn 对象。
 
@@ -190,7 +190,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 - `SessionUpdates`，即适配器是否在保留的 Executor 的根 Turn 之间原生应用 Session 更新：`Model`、`ReasoningEffort`、`ReasoningEffortReset`（null 强度）和 `ServiceTier`，各自为 `Supported` 或 `Unsupported`。Core 拒绝更改不支持设置的更新，对支持设置的更改会通过下一个 Turn 的设置到达适配器；
 - 可选的纯限制 `ValidateConfiguration`、`ValidateTools`、`ValidateMessageInput` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。`ValidateMessageInput` 仅对携带图像的消息运行，在 `MessageImages` 能力检查之后、任何存储之前执行，决定 Harness 接受哪些 `image_url`；Core 只检查引用不为空白。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程。配置限制最先执行，工具解码错误先于 `ValidateTools`。
 
-`harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。
+`harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`SessionUpdates` 的每个字段都必须声明，`Execution.Reviews` 只能包含 `auto_review`，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。
 
 `apps/daemon/internal/agent/<package>/declaration.go` 中的 Runtime 绑定内嵌同一份声明并添加 `Discover`；它负责原生可用性探测和工厂，并且只把声明的能力收窄到该安装已验证的范围。绑定测试 `TestDiscoveryOnlyNarrowsDeclaration` 检查发现结果不超出声明。`harnessconfig/harnesstest.Declaration` 为测试构造合成声明。
 
