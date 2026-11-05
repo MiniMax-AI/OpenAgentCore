@@ -24,18 +24,18 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	})
 	configuration.Providers[0].Protocol = "anthropic"
 	executor, _ := registry.ResolveExecutor("fixture")
-	for _, options := range []map[string]any{
-		{"model": nil},
-		{"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-		{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-		{"harness_config": map[string]any{"unknown": "private-sentinel"}},
+	for _, request := range []proto.PromptRequestPayload{
+		{Turn: proto.TurnSettings{Model: " "}},
+		{Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}}},
+		{AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}},
+		{AgentOptions: map[string]any{"harness_config": map[string]any{"unknown": "private-sentinel"}}},
 	} {
-		_, err := executor(t.Context(), proto.PromptRequestPayload{AgentOptions: options})
+		_, err := executor(t.Context(), request)
 		if err == nil || errors.Is(err, expected) || calls != 0 || strings.Contains(err.Error(), "private-sentinel") {
 			t.Fatal("invalid configuration reached native entry or leaked values")
 		}
 	}
-	if _, err := executor(t.Context(), proto.PromptRequestPayload{AgentOptions: map[string]any{"model": "fixture", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}}); !errors.Is(err, expected) || calls != 1 {
+	if _, err := executor(t.Context(), proto.PromptRequestPayload{Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}}); !errors.Is(err, expected) || calls != 1 {
 		t.Fatal("bound declaration was lost or mutated", err)
 	}
 }

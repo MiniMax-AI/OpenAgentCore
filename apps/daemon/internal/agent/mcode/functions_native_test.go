@@ -35,7 +35,7 @@ func TestNativeMCodePublicFunction(t *testing.T) {
 		t.Fatal("native Executor preparation failed")
 	}
 	out := make(chan proto.Envelope, 256)
-	turn, err := e.StartTurn(ctx, "turn", proto.TextInput("Call the lookup_code function to get the access code, then reply with only the code."), out)
+	turn, err := e.StartTurn(ctx, "turn", proto.TurnSettings{}, proto.TextInput("Call the lookup_code function to get the access code, then reply with only the code."), out)
 	if err != nil {
 		t.Fatal("native Turn admission failed")
 	}

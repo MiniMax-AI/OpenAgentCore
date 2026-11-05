@@ -111,7 +111,7 @@ func start(t *testing.T, ctx context.Context, f TextFixture, id string, input pr
 			}
 		}
 	}()
-	turn, err := f.Executor.StartTurn(ctx, id, input, out)
+	turn, err := f.Executor.StartTurn(ctx, id, proto.TurnSettings{}, input, out)
 	if turn == nil {
 		close(out)
 	}

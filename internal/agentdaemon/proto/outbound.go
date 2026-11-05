@@ -28,6 +28,11 @@ type PromptRequestPayload struct {
 	// Input preserves ordered user messages and content.
 	Input MessageInput `json:"input,omitempty"`
 
+	// Turn holds the root Turn's official settings. It is not part of the
+	// Executor identity: a retained Executor receives each Turn's settings at
+	// StartTurn.
+	Turn TurnSettings `json:"turn"`
+
 	// AgentOptions carries only the keys ValidateAgentOptions accepts. The
 	// daemon's agent interprets them; the gateway never inspects them.
 	AgentOptions map[string]any `json:"agent_options,omitempty"`
@@ -67,13 +72,21 @@ type PromptCancelPayload struct {
 type ExecutionControls struct {
 	WebSearch *WebSearchControl `json:"web_search,omitempty"`
 	// ProgrammaticToolCalling is the official programmatic_tool_calling.enabled value.
-	ProgrammaticToolCalling *bool  `json:"programmatic_tool_calling,omitempty"`
-	ReasoningEffort         string `json:"reasoning_effort,omitempty"`
-	ReasoningSummary        string `json:"reasoning_summary,omitempty"`
+	ProgrammaticToolCalling *bool         `json:"programmatic_tool_calling,omitempty"`
+	ReasoningSummary        string        `json:"reasoning_summary,omitempty"`
+	TextVerbosity           string        `json:"text_verbosity,omitempty"`
+	OutputFormat            *OutputFormat `json:"output_format,omitempty"`
+}
+
+// TurnSettings are the official settings a Session update may change for later
+// root Turns. An empty member means the native default.
+type TurnSettings struct {
+	Model           string `json:"model"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// ServiceTier is never "auto": auto means unset.
-	ServiceTier   string        `json:"service_tier,omitempty"`
-	TextVerbosity string        `json:"text_verbosity,omitempty"`
-	OutputFormat  *OutputFormat `json:"output_format,omitempty"`
+	ServiceTier string `json:"service_tier,omitempty"`
+	// Review is "auto_review"; empty is none.
+	Review string `json:"review,omitempty"`
 }
 
 // WebSearchControl is the resolved official web_search tool. A nil
@@ -99,12 +112,12 @@ type OutputFormat struct {
 	Schema json.RawMessage `json:"schema"`
 }
 
-// ValidateAgentOptions rejects any agent_options key other than model,
+// ValidateAgentOptions rejects any agent_options key other than
 // system_prompt, model_provider and harness_config.
 func (r PromptRequestPayload) ValidateAgentOptions() error {
 	for key := range r.AgentOptions {
 		switch key {
-		case "model", "system_prompt", "model_provider", "harness_config":
+		case "system_prompt", "model_provider", "harness_config":
 		default:
 			return errors.New("unsupported agent option")
 		}

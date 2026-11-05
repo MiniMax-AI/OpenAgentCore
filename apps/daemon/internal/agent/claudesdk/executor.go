@@ -179,7 +179,7 @@ func (e *executor) read() {
 	close(e.done)
 }
 
-func (e *executor) StartTurn(ctx context.Context, run string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *executor) StartTurn(ctx context.Context, run string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

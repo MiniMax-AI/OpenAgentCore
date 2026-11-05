@@ -162,7 +162,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 		run := fmt.Sprintf("run-%d", index)
 		request := noEnvironmentPreparation("native-functions", proto.PromptRequestPayload{AgentKind: "codex", AgentSessionID: nativeID,
 			FunctionTools: []proto.FunctionTool{{Name: "lookup_ticket", Description: "Read a synthetic ticket", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"type":"string"}},"required":["ticket"],"additionalProperties":false}`)}},
-			AgentOptions:  map[string]any{"model": "gpt-5.5", "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-local-token"}}})
+			Turn:          proto.TurnSettings{Model: "gpt-5.5"}, AgentOptions: map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-local-token"}}})
 		prepare, _ := proto.NewEnvelope(proto.TypeExecutionPrepare, run, request)
 		if err := router.Handle(ctx, prepare); err != nil {
 			t.Fatal(err)

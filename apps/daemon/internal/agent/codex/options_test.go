@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
-	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, nil)
+	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 }
 
 func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
-	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, nil)
+	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -43,11 +43,11 @@ func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
 
 func TestBuildSessionPlan_StableCodexHomeByStateKey(t *testing.T) {
 	stateKey := "conv-stable/agent-stable/codex"
-	planA, err := BuildSessionPlan(testStateRoot(t), stateKey, nil, nil)
+	planA, err := BuildSessionPlan(testStateRoot(t), stateKey, nil, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan A: %v", err)
 	}
-	planB, err := BuildSessionPlan(testStateRoot(t), stateKey, nil, nil)
+	planB, err := BuildSessionPlan(testStateRoot(t), stateKey, nil, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan B: %v", err)
 	}

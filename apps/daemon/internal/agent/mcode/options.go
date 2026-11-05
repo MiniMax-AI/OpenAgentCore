@@ -55,15 +55,11 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 		return result, err
 	}
 	config := map[string]any{}
-	effort := ""
-	if req.ExecutionControls != nil {
-		effort = req.ExecutionControls.ReasoningEffort
-	}
-	result.Model = optionString(opts, "model")
+	result.Model = req.Turn.Model
 	if result.Model == "" {
 		return result, fmt.Errorf("mcode: model is required")
 	}
-	provider, err := modelProviderConfig(opts["model_provider"], result.Model, effort)
+	provider, err := modelProviderConfig(opts["model_provider"], result.Model, req.Turn.ReasoningEffort)
 	if err != nil {
 		return result, err
 	}

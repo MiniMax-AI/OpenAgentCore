@@ -63,6 +63,9 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 	if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
 		return err
 	}
+	if err := declaration.ValidateTurnSettings(turnSettings(snapshot.Agent)); err != nil {
+		return err
+	}
 	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
 	if err := request.ValidateToolSearch(declaration.Capabilities.ToolSearch.IsSupported()); err != nil {
 		return err

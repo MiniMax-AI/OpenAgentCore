@@ -60,7 +60,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	run := func(id, prompt string) agent.Turn {
 		t.Helper()
 		out := make(chan proto.Envelope, 256)
-		turn, startErr := e.StartTurn(ctx, id, proto.TextInput(prompt), out)
+		turn, startErr := e.StartTurn(ctx, id, proto.TurnSettings{}, proto.TextInput(prompt), out)
 		if startErr != nil || turn == nil {
 			t.Fatal("native Turn admission failed")
 		}
@@ -96,7 +96,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	first := run("first", "Remember the exact marker ORCHID-72-BLUE for this conversation. Reply with only that marker.")
 	run("second", "What exact marker did I ask you to remember? Reply with only that marker.")
 	out := make(chan proto.Envelope, 256)
-	interrupted, err := e.StartTurn(ctx, "cancelled", proto.TextInput("Produce 2000 numbered lines now. Each line must contain a different sentence about rain. Start immediately at line 1 and continue without stopping or summarizing."), out)
+	interrupted, err := e.StartTurn(ctx, "cancelled", proto.TurnSettings{}, proto.TextInput("Produce 2000 numbered lines now. Each line must contain a different sentence about rain. Start immediately at line 1 and continue without stopping or summarizing."), out)
 	if err != nil || interrupted == nil {
 		t.Fatal("cancellation Turn admission failed")
 	}
@@ -141,7 +141,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	if !settlement.Reusable {
 		t.Log("Native cancellation cannot establish reusable settlement; successor must use recovery")
 		successor := make(chan proto.Envelope, 1)
-		next, nextErr := e.StartTurn(ctx, "unsafe-successor", proto.TextInput("must not execute"), successor)
+		next, nextErr := e.StartTurn(ctx, "unsafe-successor", proto.TurnSettings{}, proto.TextInput("must not execute"), successor)
 		if next != nil || nextErr == nil {
 			t.Fatal("unsettled native owner accepted a successor")
 		}

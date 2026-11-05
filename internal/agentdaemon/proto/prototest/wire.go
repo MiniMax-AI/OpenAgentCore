@@ -33,6 +33,10 @@ const (
 	CancelDeliveryID = "cancel"
 )
 
+// Turn is the root Turn's settings the scenarios prepare with. The Runtime's
+// Executor must receive them at StartTurn.
+var Turn = proto.TurnSettings{Model: "fixture-model", ReasoningEffort: "high"}
+
 // Placeholders for values the Runtime generates. Core's side sends them as
 // written; the Runtime's side binds each to the value its Runtime sends.
 const (
@@ -110,7 +114,7 @@ func WireScenarios() []WireScenario {
 	}
 	prepare := send(Core, proto.TypeExecutionPrepare, PreparationID, proto.ExecutionPreparePayload{
 		SessionID:     SessionID,
-		Configuration: proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, DisableExecutionEnvironment: true},
+		Configuration: proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, DisableExecutionEnvironment: true, Turn: Turn},
 	})
 	started := []Step{
 		prepare,

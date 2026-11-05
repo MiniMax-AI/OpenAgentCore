@@ -70,7 +70,7 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 func runExecutorFixtureTurn(t *testing.T, e *executor, id, text string) (*Session, []proto.Envelope) {
 	t.Helper()
 	out := make(chan proto.Envelope, 256)
-	turn, err := e.StartTurn(t.Context(), id, proto.TextInput(text), out)
+	turn, err := e.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput(text), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 				t.Setenv("OAC_RUNTIME_MCODE_COMPANION", dir)
 			}
 			out := make(chan proto.Envelope, 32)
-			second, err := e.StartTurn(t.Context(), "second", proto.TextInput("wait"), out)
+			second, err := e.StartTurn(t.Context(), "second", proto.TurnSettings{}, proto.TextInput("wait"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -193,7 +193,7 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			for range out {
 			}
 			thirdOut := make(chan proto.Envelope, 1)
-			third, err := e.StartTurn(t.Context(), "third", proto.TextInput("three"), thirdOut)
+			third, err := e.StartTurn(t.Context(), "third", proto.TurnSettings{}, proto.TextInput("three"), thirdOut)
 			if third != nil || err == nil {
 				t.Fatal("unproven native owner admitted a successor")
 			}
@@ -218,7 +218,7 @@ func TestExecutorStartFailureOwnership(t *testing.T) {
 			{"attachment", "does not support image input", proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}}},
 		} {
 			out := make(chan proto.Envelope, 1)
-			turn, err := e.StartTurn(t.Context(), invalid.id, invalid.input, out)
+			turn, err := e.StartTurn(t.Context(), invalid.id, proto.TurnSettings{}, invalid.input, out)
 			if err == nil || turn != nil || !strings.Contains(err.Error(), invalid.reason) {
 				t.Fatal("invalid Start acquired output", err)
 			}
@@ -233,7 +233,7 @@ func TestExecutorStartFailureOwnership(t *testing.T) {
 	t.Run("before input", func(t *testing.T) {
 		e, record := executorFixture(t, "executor-preexit", true)
 		out := make(chan proto.Envelope, 1)
-		turn, err := e.StartTurn(t.Context(), "run", proto.TextInput("input"), out)
+		turn, err := e.StartTurn(t.Context(), "run", proto.TurnSettings{}, proto.TextInput("input"), out)
 		if err == nil || turn != nil {
 			t.Fatal("failed readiness retained caller output")
 		}
@@ -246,7 +246,7 @@ func TestExecutorStartFailureOwnership(t *testing.T) {
 	t.Run("after submission", func(t *testing.T) {
 		e, record := executorFixture(t, "executor-exit", true)
 		out := make(chan proto.Envelope, 32)
-		turn, err := e.StartTurn(t.Context(), "run", proto.TextInput("input"), out)
+		turn, err := e.StartTurn(t.Context(), "run", proto.TurnSettings{}, proto.TextInput("input"), out)
 		if err != nil || turn == nil {
 			t.Fatal("submitted Turn lost ownership", err)
 		}
@@ -263,7 +263,7 @@ func TestExecutorStartFailureOwnership(t *testing.T) {
 			t.Fatal("uncertain input was replayed")
 		}
 		rejected := make(chan proto.Envelope)
-		again, err := e.StartTurn(t.Context(), "again", proto.TextInput("again"), rejected)
+		again, err := e.StartTurn(t.Context(), "again", proto.TurnSettings{}, proto.TextInput("again"), rejected)
 		if again != nil || err == nil {
 			t.Fatal("invalid owner accepted another Turn")
 		}

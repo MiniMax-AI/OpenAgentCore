@@ -63,7 +63,7 @@ type executor struct {
 	closed bool
 }
 
-func (e *executor) StartTurn(ctx context.Context, run string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *executor) StartTurn(ctx context.Context, run string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if ctx.Err() != nil || run == "" || out == nil {
 		return nil, errors.New("invalid fixture Start")
 	}

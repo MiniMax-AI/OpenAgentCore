@@ -19,6 +19,9 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	if err := declaration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
 		return err
 	}
+	if err := declaration.Declaration.ValidateTurnSettings(req.Turn); err != nil {
+		return err
+	}
 	if !req.DisableSubagents {
 		if req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1 {
 			return fmt.Errorf("mcode: Subagent concurrency limit is required")

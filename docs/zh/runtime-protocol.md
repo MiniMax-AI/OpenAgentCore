@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: ac10ed0c636be22b92802eeae3af6ded928239c637e24cafe748a62fa16174f0
+source_hash: 368945a521422e6ffbe03e1ff81a1e9fd54b935ca50c042f9afe740bdfb4643b
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -93,7 +93,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | --- | --- |
 | Device ID 和连接 | 经认证的 Runtime 路由与连接所有权 |
 | Session ID / Environment ID | Core 拥有的配置与工作区绑定；payload validator 要求时使用规范 UUID |
-| Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留 |
+| Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留；根 Turn 的 `turn` 设置不属于该身份 |
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
 | Run ID | 一次执行尝试；输出、取消、活动输入和 function 的 `Envelope.id` |
@@ -191,7 +191,7 @@ sequenceDiagram
 - 消费 Run 事件，直到原生终结结果或观测丢失。执行 error 后跟随 `done`，关闭流；之前的 error 仍属于结果的一部分。
 - start 前放弃时发送 `execution_release`。所有权转给 Run 后使用 `prompt_cancel`；释放旧 handle 不能取消后继 Turn。
 
-preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份和不可变配置，不包含模型输入或 Run ID。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。admission 按下列状态转移。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
+preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份、不可变配置和根 Turn 的设置（`turn`），不包含模型输入或 Run ID。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。admission 按下列状态转移。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
 
 ```mermaid
 stateDiagram-v2
@@ -222,8 +222,9 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 
 | 字段 | Core 设置方式 |
 | --- | --- |
-| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
-| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning effort 和 summary、非 `auto` 的 service tier，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验每个值；原生选项名称属于适配器 |
+| `turn` | 始终设置：根 Turn 的 `model`，以及 Agent 设置时的 `reasoning_effort` 和非 `auto` 的 `service_tier`。`review`（`auto_review`；为空表示 none）属于同一对象。保留的 Executor 接受不同的 `turn`，不会产生 `configuration_conflict`；Runtime 把每个 Turn 的设置传给 `StartTurn`，已结算 Executor 的下一个 Turn 使用其自身 `execution_prepare` 中的设置。只读工作区 preparation 发送空的 `turn` |
+| `agent_options` | 始终设置 Agent 的 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
+| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning summary，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验这些值和 `turn` 设置；原生选项名称属于适配器 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |

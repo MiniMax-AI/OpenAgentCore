@@ -15,9 +15,8 @@ import (
 func TestReasoningEffortAppliedWithoutChangingProvider(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	plan, err := BuildSessionPlan(testStateRoot(t), "native-config", map[string]any{
-		"model":          "fixture",
 		"model_provider": map[string]any{"base_url": "https://provider.invalid/v1", "protocol": "responses", "api_key": "test-key"},
-	}, &proto.ExecutionControls{ReasoningEffort: "max"})
+	}, proto.TurnSettings{Model: "fixture", ReasoningEffort: "max"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,14 +27,14 @@ func TestReasoningEffortAppliedWithoutChangingProvider(t *testing.T) {
 }
 
 func TestReasoningEffortHasNoHarnessConfigHome(t *testing.T) {
-	_, err := BuildSessionPlan(testStateRoot(t), "", map[string]any{"harness_config": map[string]any{"model_reasoning_effort": "high"}}, nil)
+	_, err := BuildSessionPlan(testStateRoot(t), "", map[string]any{"harness_config": map[string]any{"model_reasoning_effort": "high"}}, proto.TurnSettings{}, nil)
 	if err != harnessconfig.ErrHarnessConfig {
 		t.Fatalf("duplicate effort home accepted: %v", err)
 	}
 }
 
 func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
-	_, err := BuildSessionPlan(testStateRoot(t), "", map[string]any{"harness_config": map[string]any{"model_provider": "bypass"}}, nil)
+	_, err := BuildSessionPlan(testStateRoot(t), "", map[string]any{"harness_config": map[string]any{"model_provider": "bypass"}}, proto.TurnSettings{}, nil)
 	if err != harnessconfig.ErrHarnessConfig {
 		t.Fatalf("configuration must fail before filesystem preparation: %v", err)
 	}
@@ -47,8 +46,8 @@ func TestNativeTurnsCarryNoCollaborationMode(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
 			req.AgentSessionID = resumeID
-			controls := &proto.ExecutionControls{TextVerbosity: "medium", ReasoningEffort: "high"}
-			req.ExecutionControls = controls
+			req.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
+			req.Turn.ReasoningEffort = "high"
 			ownerCtx, cancelOwner := context.WithCancel(context.Background())
 			t.Cleanup(cancelOwner)
 			e, err := newExecutor(ownerCtx, req, cfg)
@@ -62,10 +61,10 @@ func TestNativeTurnsCarryNoCollaborationMode(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			controls.ReasoningEffort = "low"
+			req.Turn.ReasoningEffort = "low"
 			for _, id := range []string{"one", "two"} {
 				out := make(chan proto.Envelope, 20)
-				turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)
+				turn, err := e.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput("answer"), out)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -117,7 +116,7 @@ func TestOutputSchemaReachesEveryNativeTurn(t *testing.T) {
 			})
 			for _, id := range []string{"one", "two"} {
 				out := make(chan proto.Envelope, 20)
-				turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)
+				turn, err := e.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput("answer"), out)
 				if err != nil {
 					t.Fatal(err)
 				}

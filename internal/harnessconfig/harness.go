@@ -157,6 +157,9 @@ func (d Declaration) ValidateDeclaration() error {
 		(d.Capabilities.MCPHTTPBearerAuth.IsSupported() && len(d.MCPOrigins) == 0) {
 		return errors.New("harnessconfig: invalid MCP origins")
 	}
+	if !validChoices(d.Execution.Reviews, "auto_review") {
+		return errors.New("harnessconfig: invalid reviews")
+	}
 	// Core always sends the official default text verbosity.
 	if !slices.Contains(d.Execution.TextVerbosities, "medium") {
 		return errors.New("harnessconfig: execution must declare text verbosity medium")
@@ -196,15 +199,14 @@ func ValidateModel(value any) (string, error) {
 }
 
 // Prepare validates the current model/provider/native-parameter contract before
-// creating native resources. Other options belong to the execution contract.
-func (c Configuration) Prepare(options map[string]any) (PreparedConfiguration, error) {
-	var result PreparedConfiguration
-	if value, present := options["model"]; present {
-		model, err := ValidateModel(value)
-		if err != nil {
+// creating native resources. An empty model is absent. Other options belong to
+// the execution contract.
+func (c Configuration) Prepare(model string, options map[string]any) (PreparedConfiguration, error) {
+	result := PreparedConfiguration{Model: model}
+	if model != "" {
+		if _, err := ValidateModel(model); err != nil {
 			return PreparedConfiguration{}, err
 		}
-		result.Model = model
 	}
 	if value, present := options["model_provider"]; present {
 		if result.Model == "" {
@@ -373,6 +375,8 @@ type ExecutionOptions struct {
 	ReasoningEfforts, ReasoningSummaries []string
 	// ServiceTiers are the supported tiers other than auto.
 	ServiceTiers []string
+	// Reviews are the supported review values other than none.
+	Reviews []string
 	// ProgrammaticToolCalling lists the supported enabled values.
 	ProgrammaticToolCalling []bool
 	// TextVerbosities are the supported text verbosity levels.
@@ -384,6 +388,7 @@ func (o ExecutionOptions) Clone() ExecutionOptions {
 	o.ReasoningEfforts = slices.Clone(o.ReasoningEfforts)
 	o.ReasoningSummaries = slices.Clone(o.ReasoningSummaries)
 	o.ServiceTiers = slices.Clone(o.ServiceTiers)
+	o.Reviews = slices.Clone(o.Reviews)
 	o.ProgrammaticToolCalling = slices.Clone(o.ProgrammaticToolCalling)
 	o.TextVerbosities = slices.Clone(o.TextVerbosities)
 	return o
@@ -413,17 +418,26 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 	if enabled := controls.ProgrammaticToolCalling; enabled != nil && !slices.Contains(o.ProgrammaticToolCalling, *enabled) {
 		return fmt.Errorf("programmatic_tool_calling.enabled=%t is not supported by this Harness.", *enabled)
 	}
-	if v := controls.ReasoningEffort; v != "" && !slices.Contains(o.ReasoningEfforts, v) {
-		return reject("reasoning.effort", v)
-	}
 	if v := controls.ReasoningSummary; v != "" && !slices.Contains(o.ReasoningSummaries, v) {
 		return reject("reasoning.summary", v)
 	}
-	if v := controls.ServiceTier; v != "" && !slices.Contains(o.ServiceTiers, v) {
-		return reject("service_tier", v)
-	}
 	if v := controls.TextVerbosity; v != "" && !slices.Contains(o.TextVerbosities, v) {
 		return reject("text.verbosity", v)
+	}
+	return nil
+}
+
+// ValidateTurnSettings rejects an effort, tier or review the Harness does not
+// declare. Core admission and the Runtime call it with the same settings.
+func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
+	o := d.Execution
+	for _, check := range []struct {
+		field, value string
+		allowed      []string
+	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}, {"review", turn.Review, o.Reviews}} {
+		if check.value != "" && !slices.Contains(check.allowed, check.value) {
+			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
+		}
 	}
 	return nil
 }

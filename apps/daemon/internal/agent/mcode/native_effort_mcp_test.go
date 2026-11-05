@@ -94,7 +94,7 @@ func TestNativeMCodeEffortMCPAndPlainText(t *testing.T) {
 	}))
 	defer mcp.Close()
 
-	req.ExecutionControls.ReasoningEffort = "high"
+	req.Turn.ReasoningEffort = "high"
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: mcp.URL + "/mcp"}}
 	value, err := NewExecutorFactory(testStateRoot(t), nil)(ctx, req)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestNativeMCodeEffortMCPAndPlainText(t *testing.T) {
 		_ = e.Close(cleanup)
 	}()
 	out := make(chan proto.Envelope, 256)
-	turn, err := e.StartTurn(ctx, "turn", proto.TextInput("Use the MCP tool to get the access code, then reply with only the code."), out)
+	turn, err := e.StartTurn(ctx, "turn", proto.TurnSettings{}, proto.TextInput("Use the MCP tool to get the access code, then reply with only the code."), out)
 	if err != nil {
 		t.Fatal("native Turn admission failed")
 	}

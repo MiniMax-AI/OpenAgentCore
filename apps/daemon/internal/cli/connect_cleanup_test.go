@@ -73,7 +73,7 @@ type cleanupExecutor struct {
 	confirm chan struct{}
 }
 
-func (e *cleanupExecutor) StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
+func (e *cleanupExecutor) StartTurn(context.Context, string, proto.TurnSettings, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
 	return nil, errors.New("unexpected Turn")
 }
 func (e *cleanupExecutor) Close(context.Context) error {
