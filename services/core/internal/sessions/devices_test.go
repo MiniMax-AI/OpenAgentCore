@@ -197,7 +197,7 @@ func TestDeviceUseCases(t *testing.T) {
 }
 
 func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
-	environment := Environment{ID: "environment", SessionID: "session"}
+	environment := Environment{ID: "environment"}
 	authorized := returns(EnrollmentAuthority{KeyID: "key", WorkspaceDirectory: "/workspace"})
 	for _, test := range []struct {
 		name   string
