@@ -404,6 +404,9 @@ func automationEnvironment(input sessionRequest) *v1.AutomationEnvironment {
 	var supplied map[string]json.RawMessage
 	_ = json.Unmarshal(input.originalEnvironment, &supplied)
 	has := func(name string) bool { value, ok := supplied[name]; return ok && string(value) != "null" }
+	if input.environmentID != "" {
+		result.EnvironmentID = &input.environmentID
+	}
 	if has("environment_template_id") {
 		result.EnvironmentTemplateID = &input.templateID
 	}
