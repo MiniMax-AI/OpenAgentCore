@@ -670,7 +670,7 @@ export interface ResourceOwnerList {
   data: ResourceOwner[];
 }
 export const resourceOwnerListFields = ["data"] as const;
-export const resourceTypeValues = ["agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact"] as const;
+export const resourceTypeValues = ["agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact", "automation", "automation_invocation"] as const;
 export type ResourceType = (typeof resourceTypeValues)[number];
 export interface Rollout {
   nodes: RolloutNodes | null;

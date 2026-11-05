@@ -212,6 +212,8 @@ export const keys: TranslationShape<typeof english> = {
       vault: "Vault",
       credential: "Credential",
       artifact: "产物",
+      automation: "Automation",
+      automation_invocation: "Automation 调用",
     },
   },
 };
