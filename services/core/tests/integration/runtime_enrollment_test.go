@@ -47,7 +47,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 		}
 	}
 	bound, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token))
-	if err != nil || bound.SessionID != session.ID || bound.EnvironmentID != environment.ID || bound.WorkspaceDirectory != "/workspace" {
+	if err != nil || bound.EnvironmentID != environment.ID || bound.WorkspaceDirectory != "/workspace" {
 		t.Fatalf("enrollment: %+v %v", bound, err)
 	}
 	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token)); err != nil || again != bound {

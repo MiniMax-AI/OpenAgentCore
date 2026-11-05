@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 97ca1b4a9d8e7785afe6b3a84c9a56ff7bc08d24e2dfc31ed4e9a827eced9f6d
+source_hash: a039b464b2e68843f1612d295aa0e5ee628ffc7891b1bd283139c2924796780a
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -111,7 +111,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### 登记自托管 daemon {#enroll-a-self-hosted-daemon}
 
-`POST /api/v1/agent-daemon/enroll` 携带执行器凭据及精确正文 `{"environment_id": "…"}`（无查询），将一个专用设备绑定到 Environment 的 Session，返回 `device_id`、`session_id`、`environment_id` 和 `workspace_directory`。不返回其他凭据：执行器凭据成为该设备的 daemon 凭据。相同凭据重试返回相同绑定。成功响应包含 `Cache-Control: no-store`。
+`POST /api/v1/agent-daemon/enroll` 携带执行器凭据及精确正文 `{"environment_id": "…"}`（无查询），将一个专用设备绑定到 Environment，返回 `device_id`、`environment_id` 和 `workspace_directory`。不返回其他凭据：执行器凭据成为该设备的 daemon 凭据。相同凭据重试返回相同绑定。成功响应包含 `Cache-Control: no-store`。
 
 | HTTP | 时机 |
 | --- | --- |

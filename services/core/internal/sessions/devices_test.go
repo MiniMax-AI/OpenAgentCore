@@ -224,7 +224,7 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 			if test.want == nil && err != nil || test.want != nil && !errors.Is(err, test.want) {
 				t.Fatalf("got %v, want %v", err, test.want)
 			}
-			if want := (RuntimeEnrollment{DeviceID: "device", SessionID: "session", EnvironmentID: "environment", WorkspaceDirectory: "/workspace"}); test.want == nil && enrolled != want {
+			if want := (RuntimeEnrollment{DeviceID: "device", EnvironmentID: "environment", WorkspaceDirectory: "/workspace"}); test.want == nil && enrolled != want {
 				t.Fatalf("enrollment %+v", enrolled)
 			}
 			if test.want != nil && enrolled != (RuntimeEnrollment{}) {
