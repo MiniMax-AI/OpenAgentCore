@@ -357,13 +357,16 @@ class TemplateCheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             for name, text in files.items():
                 Path(root, name).write_text(text)
-            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, str(provider.RUNTIME_BOOTSTRAP_VERSION)]).returncode
+            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, str(provider.PROTOCOL_VERSION), str(provider.RUNTIME_BOOTSTRAP_VERSION)]).returncode
 
     def test_template_needs_startup_script_and_current_bootstrap_version(self):
-        current = 'RUNTIME_BOOTSTRAP_VERSION = %d' % provider.RUNTIME_BOOTSTRAP_VERSION
-        previous = 'RUNTIME_BOOTSTRAP_VERSION = %d' % (provider.RUNTIME_BOOTSTRAP_VERSION - 1)
+        def contract(protocol, bootstrap):
+            return 'PROTOCOL_VERSION = %d\nRUNTIME_BOOTSTRAP_VERSION = %d' % (protocol, bootstrap)
+        current = contract(provider.PROTOCOL_VERSION, provider.RUNTIME_BOOTSTRAP_VERSION)
         self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': current}), 0)
-        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': previous}), 78)
+        for previous in (contract(provider.PROTOCOL_VERSION - 1, provider.RUNTIME_BOOTSTRAP_VERSION),
+                         contract(provider.PROTOCOL_VERSION, provider.RUNTIME_BOOTSTRAP_VERSION - 1)):
+            self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': previous}), 78)
         self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': ''}), 78)
         self.assertEqual(self.exit_code({'helper_contract_generated.py': current}), 78)
 

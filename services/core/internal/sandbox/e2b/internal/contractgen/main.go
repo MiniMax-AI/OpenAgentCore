@@ -72,12 +72,10 @@ func main() {
 	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "SuspendControl" || s == "Egress" })
 	bootstrap = append(bootstrap, "InstallationID", "RuntimeBootstrap")
 	identity := fields(reflect.TypeFor[sandbox.Reference]())
-	for _, name := range []string{"DeviceID"} {
-		if !slices.Contains(bootstrap, name) {
-			panic("bootstrap identity field missing: " + name)
-		}
-		identity = append(identity, name)
+	if !slices.Contains(bootstrap, "DeviceID") {
+		panic("bootstrap identity field missing: DeviceID")
 	}
+	identity = append(identity, "DeviceID")
 	identity = append(identity, "InstallationID")
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
