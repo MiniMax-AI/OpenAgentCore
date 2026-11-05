@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -39,6 +41,9 @@ type sessionRequest struct {
 
 func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input := sessionRequest{CreateSessionRequest: request.CreateSessionRequest, Input: request.Input}
+	if request.AgentID != nil && utf8.RuneCountInString(*request.AgentID) > 64 {
+		return input, &fieldError{param: "agent_id", message: fmt.Sprintf("Invalid 'agent_id': string too long. Expected a string with maximum length 64, but got a string with length %d instead.", utf8.RuneCountInString(*request.AgentID))}
+	}
 	if len(request.Execution) > 0 && !bytes.Equal(bytes.TrimSpace(request.Execution), []byte("null")) {
 		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "harness_config", "environment") != nil {
 			return input, sessions.ErrInvalidInput

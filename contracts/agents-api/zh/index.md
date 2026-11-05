@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 198b4deb88832ac7cdb28e67a0781469e44621b1baa2cccc54b7a2b9bceea36e
+source_hash: 1bd8a9d1f30c1986d41a2f0dffe0dcd8bdf3570fbc62d777570ef6750c8a4022
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -43,7 +43,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth`，含 `metadata` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
-| Automations | 全部 10 个操作 | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
+| Automations 和 invocations | 创建、检索、更新、列出、删除、暂停、恢复；invocation 的创建、检索、列出 | 已实现；`created_by` 始终为 `developer` | [Automations](automations.md) |
 | Environment 集合 | create, list（`/agents/environments`） | 不支持：404 `unsupported_operation`；Core 的 Environment 以 Session 为范围 | [不支持的操作](wire-semantics.md#unsupported-operations) |
 | Session traces | list | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
 
@@ -130,6 +130,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 文件名长度为 1–1,024 字节；官方服务接受空文件名和更长的文件名。
 - `SKILL.md` front matter 中 `name`、`description`、`license`、`compatibility` 和 `metadata` 以外的键会被拒绝；官方服务接受未知键（[上传 bundle](source-files.md#upload-a-bundle)）。
 
+**Automations**（[Automations](automations.md)）
+
+- `existing_session` 目标的 `instructions` 为空时，创建和更新返回 400；固定版本 schema 允许 0 字节，而 Core 无法发送空消息。
+- `run_at` 大于 253402300799（9999 年）时返回 400；固定版本 schema 没有设上限。
+
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
 - MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
@@ -198,6 +203,13 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
+- Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：
+  - [指令投递](automations.md#targets)为一条输入消息。
+  - [cron 语法与夏令时](automations.md#schedules)。
+  - [停机、跳过、完成与暂停](automations.md#invocations)。
+  - [冲突与拒绝的情形](automations.md#state-changes)。
+  - [目标校验与保存的引用](automations.md#targets)。
+  - [分页](automations.md)：`limit` 截断与无法解析的 `after`。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。

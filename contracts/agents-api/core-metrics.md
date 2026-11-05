@@ -57,9 +57,10 @@ Core resolves its own cgroup, including nested and subtree mounts, and reports t
 
 ## Background jobs
 
-`jobs` lists `scheduler`, `runtime_sampler`, `history_cleanup` and `audit_cleanup`. Each has `status` (`unknown` before its first run, `ok`, `failing`, or `stopped` when its loop is disabled or ended), `last_run_at` (when the last pass finished), `processed` and `failed`, both describing the last pass.
+`jobs` lists `scheduler`, `runtime_sampler`, `automation_delivery`, `history_cleanup` and `audit_cleanup`. Each has `status` (`unknown` before its first run, `ok`, `failing`, or `stopped` when its loop is disabled or ended), `last_run_at` (when the last pass finished), `processed` and `failed`, both describing the last pass.
 
 - The scheduler's `processed` counts the Turn and Environment work it selected in its last poll.
 - The Runtime sampler's `processed` and `failed` count the targets its last sweep observed and failed to observe.
+- The Automation delivery job's `processed` counts the occurrences it recorded and the invocations it settled in its last pass; `failed` counts storage failures and panicked deliveries. An invocation that failed for good is a settled record and does not count.
 - A cleanup job's `processed` counts the rows it removed.
-- For the scheduler and the cleanup jobs, a failed pass sets `processed` to null and `failed` to 1; `failed` never estimates lost rows or failed Turns.
+- For the scheduler, the Automation delivery job and the cleanup jobs, a failed pass sets `processed` to null and `failed` to 1; `failed` never estimates lost rows or failed Turns.

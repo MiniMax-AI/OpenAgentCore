@@ -36,6 +36,37 @@ type AgentModelExecution struct {
 	EncryptedConfig []byte      `json:"encrypted_config"`
 }
 
+type Automation struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	Type           string             `json:"type"`
+	Name           string             `json:"name"`
+	Metadata       []byte             `json:"metadata"`
+	Status         string             `json:"status"`
+	RunAt          pgtype.Timestamptz `json:"run_at"`
+	Expression     pgtype.Text        `json:"expression"`
+	Timezone       pgtype.Text        `json:"timezone"`
+	NextRunAt      pgtype.Timestamptz `json:"next_run_at"`
+	Target         []byte             `json:"target"`
+	TargetContents []byte             `json:"target_contents"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AutomationInvocation struct {
+	ID                 pgtype.UUID        `json:"id"`
+	AutomationID       pgtype.UUID        `json:"automation_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ScheduledAt        pgtype.Timestamptz `json:"scheduled_at"`
+	AutomationSnapshot []byte             `json:"automation_snapshot"`
+	Status             string             `json:"status"`
+	SkipReason         pgtype.Text        `json:"skip_reason"`
+	SessionID          pgtype.UUID        `json:"session_id"`
+	ErrorCode          pgtype.Text        `json:"error_code"`
+	ErrorMessage       pgtype.Text        `json:"error_message"`
+	Delivery           []byte             `json:"delivery"`
+	AttemptedAt        pgtype.Timestamptz `json:"attempted_at"`
+}
+
 type DeploymentModelProvider struct {
 	Harness         string             `json:"harness"`
 	Protocol        string             `json:"protocol"`

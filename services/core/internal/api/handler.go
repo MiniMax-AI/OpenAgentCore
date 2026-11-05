@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 
@@ -118,14 +117,9 @@ func (h *Handler) routes() *chi.Mux {
 		r.Get("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", h.sessionArtifactContent)
 		r.Head("/agents/sessions/{session_id}/artifacts/{artifact_id}/content", methodNotAllowed)
 		r.Delete("/agents/sessions/{session_id}/artifacts/{artifact_id}", h.deleteSessionArtifact)
+		h.registerAutomationRoutes(r)
 		// Official operations Core does not run answer like an unknown route.
-		const automations = "/agents/automations"
 		for _, route := range []struct{ method, path string }{
-			{http.MethodPost, automations}, {http.MethodGet, automations},
-			{http.MethodGet, automations + "/{automation_id}"}, {http.MethodPost, automations + "/{automation_id}"}, {http.MethodDelete, automations + "/{automation_id}"},
-			{http.MethodPost, automations + "/{automation_id}/pause"}, {http.MethodPost, automations + "/{automation_id}/resume"},
-			{http.MethodPost, automations + "/{automation_id}/invocations"}, {http.MethodGet, automations + "/{automation_id}/invocations"},
-			{http.MethodGet, automations + "/{automation_id}/invocations/{invocation_id}"},
 			{http.MethodPost, "/agents/environments"}, {http.MethodGet, "/agents/environments"},
 			{http.MethodGet, "/agents/sessions/{session_id}/traces"},
 		} {
@@ -141,14 +135,12 @@ func unsupportedOperation(w http.ResponseWriter, _ *http.Request) {
 	writeError(w, http.StatusNotFound, "unsupported_operation", "This API operation is not supported.")
 }
 
-// createSession atomically reserves or admits initial text with the Session.
-func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONObjectLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
-	if !ok {
-		return
-	}
-	if writeFieldError(w, validateBody(raw, createAgentSessionParams)) {
-		return
+// parseSessionRequest validates a Session create body and decodes it with its
+// initial inputs. Every failure that is not a field error is a fieldError
+// without a param, so callers report one shape.
+func parseSessionRequest(raw []byte) (sessionRequest, []sessions.Input, error) {
+	if err := validateBody(raw, createAgentSessionParams); err != nil {
+		return sessionRequest{}, nil, err
 	}
 	var request decodedSessionRequest
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -156,32 +148,45 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	// An unknown member, including a case variant such as Metadata, is rejected
 	// before decoding; see inexactMember.
 	if inexactMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
-		return
+		return sessionRequest{}, nil, &fieldError{code: "invalid_request", message: "Request must be a JSON object containing supported fields."}
 	}
 	input, err := request.validated()
 	if err != nil {
+		var field *fieldError
+		if !errors.As(err, &field) {
+			err = &fieldError{code: "invalid_request", message: "Request fields have invalid types or null values."}
+		}
+		return input, nil, err
+	}
+	initialInputs, err := initialSessionInputs(input.Input)
+	if err != nil {
+		return input, nil, err
+	}
+	if input.Environment.Type == "none" && len(initialInputs) == 0 {
+		return input, nil, &fieldError{code: "invalid_request_error", message: "conversation-only sessions currently require initial input"}
+	}
+	if input.Stream && input.Environment.Type != "self_hosted" && len(initialInputs) == 0 {
+		return input, nil, &fieldError{code: "invalid_request_error", message: "streaming session creation requires initial input"}
+	}
+	return input, initialInputs, nil
+}
+
+// createSession atomically reserves or admits initial text with the Session.
+func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readJSONObjectLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
+	if !ok {
+		return
+	}
+	input, initialInputs, err := parseSessionRequest(raw)
+	if err != nil {
 		if !writeFieldError(w, err) {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Request fields have invalid types or null values.")
+			writeSessionsError(w, r, err)
 		}
 		return
 	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
 		key = uuid.NewString()
-	}
-	initialInputs, err := initialSessionInputs(input.Input)
-	if err != nil {
-		writeSessionsError(w, r, err)
-		return
-	}
-	if input.Environment.Type == "none" && len(initialInputs) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "conversation-only sessions currently require initial input")
-		return
-	}
-	if input.Stream && input.Environment.Type != "self_hosted" && len(initialInputs) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "streaming session creation requires initial input")
-		return
 	}
 	creationRequest, err := sessionCreationRequest(input, initialInputs)
 	if err != nil {
@@ -191,82 +196,21 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
 		return
 	}
-	if input.templateID != "" {
-		template, err := h.EnvironmentTemplatesReader.Resolve(r.Context(), tenantID(r), input.templateID)
-		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeEnvironmentTemplatesError(w, r, err)
-			}
-			return
-		}
-		if err := applyTemplateEnvironment(&input, template); err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) && !writeFieldError(w, err) {
-				writeSessionsError(w, r, err)
-			}
-			return
-		}
-	}
-	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
+	plan, report, err := h.planSession(r.Context(), tenantID(r), key, &input)
 	if err != nil {
 		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeAgentsError(w, r, err)
+			report(w, r, err)
 		}
 		return
 	}
-	err = h.prepareSessionModelConfiguration(r.Context(), &input, saved, inheritedProvider)
-	var configuration json.RawMessage
-	if err == nil {
-		configuration, err = resolve(input, tenantID(r), key, saved)
-	}
-	if err == nil {
-		configuration, err = freezeSessionHarnessConfig(configuration, input.resolvedHarnessConfig)
-	}
-	if err == nil {
-		configuration, err = h.bindSessionCredentials(r.Context(), tenantID(r), configuration)
-		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeVaultsError(w, r, err)
-			}
-			return
-		}
-	}
-	selectedEngine := h.Engine
-	var provider *v1.ModelProviderInput
-	var providerSource v1.ExecutionSource
-	var deploymentRevision uuid.UUID
-	if err == nil {
-		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)
-	}
-	if err == nil {
-		if invalid := h.Policy.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
-			err = fmt.Errorf("Harness %s does not support the requested Agent/environment configuration: %w", selectedEngine, invalid)
-		}
-	}
-	if err == nil {
-		err = validateSessionModelConfiguration(selectedEngine, provider, configuration)
-	}
-	if err != nil {
-		if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			return
-		}
-		var required *modelProviderRequiredError
-		switch {
-		case errors.As(err, &required):
-			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
-		case writeStoredDataError(w, r, err):
-		case !writeFieldError(w, err):
-			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
-		}
-		return
-	}
-	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
+	executionConfiguration := sessionExecutionProjection(input, plan.saved, plan.inheritedProvider, plan.provider, plan.engine, plan.configuration)
 	createInput := sessions.CreateSession{
 		ExecutionConfiguration:     &executionConfiguration,
-		ModelProvider:              provider,
-		ModelProviderSource:        providerSource,
-		DeploymentProviderRevision: deploymentRevision,
+		ModelProvider:              plan.provider,
+		ModelProviderSource:        plan.source,
+		DeploymentProviderRevision: plan.revision,
 		Creator:                    sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
-		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
+		Engine: plan.engine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: plan.configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
 	}
 	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {

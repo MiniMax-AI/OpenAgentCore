@@ -64,7 +64,7 @@ jobs:
         run: |
           python services/core/tests/official_schema_test.py
           python services/core/tests/official_client.py
-          go test ./services/core/tests/integration -run '^(TestFunctionStateOfficialClientReadsAndLiveEvents|TestSavedReferenceRetryOfficialClient|TestAgentUpdateOfficialClient|TestAgentDeletionOfficialClient|TestSessionAgentFilterOfficialClient|TestSessionDeletionOfficialClient|TestEnvironmentInitialFailureOfficialClient|TestSelfHostedInitialCreationOfficialClient|TestSelfHostedCancellationOfficialClient)$' -count=1
+          go test ./services/core/tests/integration -run '^(TestFunctionStateOfficialClientReadsAndLiveEvents|TestSavedReferenceRetryOfficialClient|TestAgentUpdateOfficialClient|TestAgentDeletionOfficialClient|TestAutomationsOfficialClient|TestSessionAgentFilterOfficialClient|TestSessionDeletionOfficialClient|TestEnvironmentInitialFailureOfficialClient|TestSelfHostedInitialCreationOfficialClient|TestSelfHostedCancellationOfficialClient)$' -count=1
       - uses: ./.github/actions/e2b-provider
         if: inputs.container
       - name: Verify the distribution's Core image

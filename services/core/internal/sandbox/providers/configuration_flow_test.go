@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -132,7 +133,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	}
 	// The flow reaches only the deployment setup; every other dependency
 	// panics if called.
-	h, err := api.NewHandler(api.Dependencies{
+	h, _, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: auth, InstallationBindings: service,
 		Projects: struct{ api.Projects }{}, ProjectsReader: struct{ api.ProjectsReader }{},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},
@@ -141,6 +142,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Skills: struct{ api.Skills }{}, SkillsReader: struct{ api.SkillsReader }{},
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
+		Automations: struct{ api.Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		Sessions:        struct{ api.Sessions }{},
 		SessionsReader:  struct{ api.SessionsReader }{},
 		SessionCreation: struct{ api.SessionCreation }{},

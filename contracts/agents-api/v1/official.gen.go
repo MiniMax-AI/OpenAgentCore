@@ -54,6 +54,309 @@ type AgentMessageItem struct {
 	Content          []AgentContent `json:"content" binding:"required"`
 }
 
+// Automation projects AutomationResource.
+type Automation struct {
+	Type       string              `json:"type" binding:"required" enums:"periodic,once"`
+	ID         string              `json:"id" binding:"required"`
+	Object     string              `json:"object" binding:"required" enums:"agent.automation"`
+	CreatedAt  int64               `json:"created_at" binding:"required"`
+	Name       string              `json:"name" binding:"required"`
+	Target     json.RawMessage     `json:"target" binding:"required" swaggertype:"object"`
+	Metadata   map[string]string   `json:"metadata" binding:"required"`
+	CreatedBy  AutomationCreatedBy `json:"created_by" binding:"required"`
+	Expression *string             `json:"expression,omitempty"`
+	Timezone   *string             `json:"timezone,omitempty"`
+	RunAt      *int64              `json:"run_at,omitempty"`
+	Status     string              `json:"status" binding:"required" enums:"active,paused,completed"`
+}
+
+func (value Automation) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "periodic":
+		return json.Marshal(struct {
+			Type       string              `json:"type"`
+			ID         string              `json:"id"`
+			Object     string              `json:"object"`
+			CreatedAt  int64               `json:"created_at"`
+			Name       string              `json:"name"`
+			Target     json.RawMessage     `json:"target"`
+			Metadata   map[string]string   `json:"metadata"`
+			CreatedBy  AutomationCreatedBy `json:"created_by"`
+			Expression *string             `json:"expression"`
+			Timezone   *string             `json:"timezone"`
+			Status     string              `json:"status"`
+		}{
+			Type:       value.Type,
+			ID:         value.ID,
+			Object:     value.Object,
+			CreatedAt:  value.CreatedAt,
+			Name:       value.Name,
+			Target:     value.Target,
+			Metadata:   value.Metadata,
+			CreatedBy:  value.CreatedBy,
+			Expression: value.Expression,
+			Timezone:   value.Timezone,
+			Status:     value.Status,
+		})
+	case "once":
+		return json.Marshal(struct {
+			Type      string              `json:"type"`
+			ID        string              `json:"id"`
+			Object    string              `json:"object"`
+			CreatedAt int64               `json:"created_at"`
+			Name      string              `json:"name"`
+			Target    json.RawMessage     `json:"target"`
+			Metadata  map[string]string   `json:"metadata"`
+			CreatedBy AutomationCreatedBy `json:"created_by"`
+			RunAt     *int64              `json:"run_at"`
+			Status    string              `json:"status"`
+		}{
+			Type:      value.Type,
+			ID:        value.ID,
+			Object:    value.Object,
+			CreatedAt: value.CreatedAt,
+			Name:      value.Name,
+			Target:    value.Target,
+			Metadata:  value.Metadata,
+			CreatedBy: value.CreatedBy,
+			RunAt:     value.RunAt,
+			Status:    value.Status,
+		})
+	default:
+		return nil, fmt.Errorf("invalid Automation type %q", value.Type)
+	}
+}
+
+// AutomationAgentConfig projects AutomationAgentConfigResource.
+type AutomationAgentConfig struct {
+	Model        string            `json:"model" binding:"required"`
+	Reasoning    ReasoningResource `json:"reasoning" binding:"required"`
+	Text         TextConfig        `json:"text" binding:"required"`
+	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast,ultrafast"`
+	Instructions *string           `json:"instructions" binding:"required" extensions:"x-nullable"`
+	Tools        []json.RawMessage `json:"tools" binding:"required" swaggertype:"array,object"`
+	MultiAgent   MultiAgentConfig  `json:"multi_agent" binding:"required"`
+	Compaction   json.RawMessage   `json:"compaction,omitempty" swaggertype:"object"`
+	Experimental json.RawMessage   `json:"experimental,omitempty" swaggertype:"object"`
+}
+
+// AutomationCreatedBy projects AutomationCreatedByResource.
+type AutomationCreatedBy struct {
+	Type       string  `json:"type" binding:"required" enums:"developer,agent"`
+	SessionID  *string `json:"session_id,omitempty"`
+	ToolCallID *string `json:"tool_call_id,omitempty"`
+}
+
+func (value AutomationCreatedBy) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "developer":
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			Type: value.Type,
+		})
+	case "agent":
+		return json.Marshal(struct {
+			Type       string  `json:"type"`
+			SessionID  *string `json:"session_id"`
+			ToolCallID *string `json:"tool_call_id"`
+		}{
+			Type:       value.Type,
+			SessionID:  value.SessionID,
+			ToolCallID: value.ToolCallID,
+		})
+	default:
+		return nil, fmt.Errorf("invalid AutomationCreatedBy type %q", value.Type)
+	}
+}
+
+// AutomationDeleted projects DeletedAutomationResource.
+type AutomationDeleted struct {
+	ID      string `json:"id" binding:"required"`
+	Object  string `json:"object" binding:"required" enums:"agent.automation.deleted"`
+	Deleted bool   `json:"deleted" binding:"required"`
+}
+
+// AutomationEnvironment projects AutomationEnvironmentResource.
+type AutomationEnvironment struct {
+	Type                  string                       `json:"type" binding:"required" enums:"none,openai_hosted,self_hosted"`
+	EnvironmentID         *string                      `json:"environment_id,omitempty" extensions:"x-nullable"`
+	EnvironmentTemplateID *string                      `json:"environment_template_id,omitempty" extensions:"x-nullable"`
+	ContainerSize         json.RawMessage              `json:"container_size,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	Packages              *EnvironmentPackagesResponse `json:"packages,omitempty" extensions:"x-nullable"`
+	Network               *EnvironmentNetwork          `json:"network,omitempty" extensions:"x-nullable"`
+	Desktop               json.RawMessage              `json:"desktop,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	CapabilityDirectories []string                     `json:"capability_directories,omitempty" extensions:"x-nullable"`
+	Skills                []json.RawMessage            `json:"skills,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	Plugins               []json.RawMessage            `json:"plugins,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	Files                 []json.RawMessage            `json:"files,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	WorkspaceDirectory    *string                      `json:"workspace_directory,omitempty"`
+}
+
+func (value AutomationEnvironment) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "none":
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			Type: value.Type,
+		})
+	case "openai_hosted":
+		return json.Marshal(struct {
+			Type                  string                       `json:"type"`
+			EnvironmentID         *string                      `json:"environment_id"`
+			EnvironmentTemplateID *string                      `json:"environment_template_id"`
+			ContainerSize         json.RawMessage              `json:"container_size"`
+			Packages              *EnvironmentPackagesResponse `json:"packages"`
+			Network               *EnvironmentNetwork          `json:"network"`
+			Desktop               json.RawMessage              `json:"desktop"`
+			CapabilityDirectories []string                     `json:"capability_directories"`
+			Skills                []json.RawMessage            `json:"skills"`
+			Plugins               []json.RawMessage            `json:"plugins"`
+			Files                 []json.RawMessage            `json:"files"`
+		}{
+			Type:                  value.Type,
+			EnvironmentID:         value.EnvironmentID,
+			EnvironmentTemplateID: value.EnvironmentTemplateID,
+			ContainerSize:         value.ContainerSize,
+			Packages:              value.Packages,
+			Network:               value.Network,
+			Desktop:               value.Desktop,
+			CapabilityDirectories: value.CapabilityDirectories,
+			Skills:                value.Skills,
+			Plugins:               value.Plugins,
+			Files:                 value.Files,
+		})
+	case "self_hosted":
+		return json.Marshal(struct {
+			Type                  string   `json:"type"`
+			EnvironmentID         *string  `json:"environment_id"`
+			WorkspaceDirectory    *string  `json:"workspace_directory"`
+			CapabilityDirectories []string `json:"capability_directories"`
+		}{
+			Type:                  value.Type,
+			EnvironmentID:         value.EnvironmentID,
+			WorkspaceDirectory:    value.WorkspaceDirectory,
+			CapabilityDirectories: value.CapabilityDirectories,
+		})
+	default:
+		return nil, fmt.Errorf("invalid AutomationEnvironment type %q", value.Type)
+	}
+}
+
+// AutomationInvocation projects AutomationInvocationResource.
+type AutomationInvocation struct {
+	ID           string                     `json:"id" binding:"required"`
+	Object       string                     `json:"object" binding:"required" enums:"agent.automation.invocation"`
+	AutomationID string                     `json:"automation_id" binding:"required"`
+	CreatedAt    int64                      `json:"created_at" binding:"required"`
+	Source       AutomationInvocationSource `json:"source" binding:"required"`
+	ScheduledAt  *int64                     `json:"scheduled_at" binding:"required" extensions:"x-nullable"`
+	SessionID    *string                    `json:"session_id" binding:"required" extensions:"x-nullable"`
+	Status       string                     `json:"status" binding:"required" enums:"queued,completed,failed,skipped"`
+	SkipReason   *string                    `json:"skip_reason" binding:"required" extensions:"x-nullable" enums:"pending_delivery"`
+	Error        *AutomationInvocationError `json:"error" binding:"required" extensions:"x-nullable"`
+}
+
+// AutomationInvocationError projects AutomationInvocationErrorResource.
+type AutomationInvocationError struct {
+	Code    string `json:"code" binding:"required"`
+	Message string `json:"message" binding:"required"`
+}
+
+// AutomationInvocationList projects schema.
+type AutomationInvocationList struct {
+	Object  string                 `json:"object" binding:"required" enums:"list"`
+	FirstID *string                `json:"first_id" binding:"required" extensions:"x-nullable"`
+	LastID  *string                `json:"last_id" binding:"required" extensions:"x-nullable"`
+	Data    []AutomationInvocation `json:"data" binding:"required"`
+	HasMore bool                   `json:"has_more" binding:"required"`
+}
+
+// AutomationInvocationSource projects AutomationInvocationSourceResource.
+type AutomationInvocationSource struct {
+	Type       string          `json:"type" binding:"required" enums:"manual,automation"`
+	Automation json.RawMessage `json:"automation,omitempty" swaggertype:"object"`
+}
+
+func (value AutomationInvocationSource) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "manual":
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			Type: value.Type,
+		})
+	case "automation":
+		return json.Marshal(struct {
+			Type       string          `json:"type"`
+			Automation json.RawMessage `json:"automation"`
+		}{
+			Type:       value.Type,
+			Automation: value.Automation,
+		})
+	default:
+		return nil, fmt.Errorf("invalid AutomationInvocationSource type %q", value.Type)
+	}
+}
+
+// AutomationList projects schema.
+type AutomationList struct {
+	Object  string       `json:"object" binding:"required" enums:"list"`
+	FirstID *string      `json:"first_id" binding:"required" extensions:"x-nullable"`
+	LastID  *string      `json:"last_id" binding:"required" extensions:"x-nullable"`
+	Data    []Automation `json:"data" binding:"required"`
+	HasMore bool         `json:"has_more" binding:"required"`
+}
+
+// AutomationTarget projects AutomationTargetResource.
+type AutomationTarget struct {
+	Type         string                 `json:"type" binding:"required" enums:"new_session,existing_session"`
+	AgentID      *string                `json:"agent_id,omitempty" extensions:"x-nullable"`
+	Agent        *AutomationAgentConfig `json:"agent,omitempty" extensions:"x-nullable"`
+	Environment  *AutomationEnvironment `json:"environment,omitempty"`
+	Input        []InputMessage         `json:"input,omitempty"`
+	VaultIDs     []string               `json:"vault_ids,omitempty"`
+	Metadata     map[string]string      `json:"metadata,omitempty"`
+	SessionID    *string                `json:"session_id,omitempty"`
+	Instructions *string                `json:"instructions,omitempty"`
+}
+
+func (value AutomationTarget) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "new_session":
+		return json.Marshal(struct {
+			Type        string                 `json:"type"`
+			AgentID     *string                `json:"agent_id"`
+			Agent       *AutomationAgentConfig `json:"agent"`
+			Environment *AutomationEnvironment `json:"environment"`
+			Input       []InputMessage         `json:"input"`
+			VaultIDs    []string               `json:"vault_ids"`
+			Metadata    map[string]string      `json:"metadata"`
+		}{
+			Type:        value.Type,
+			AgentID:     value.AgentID,
+			Agent:       value.Agent,
+			Environment: value.Environment,
+			Input:       value.Input,
+			VaultIDs:    value.VaultIDs,
+			Metadata:    value.Metadata,
+		})
+	case "existing_session":
+		return json.Marshal(struct {
+			Type         string  `json:"type"`
+			SessionID    *string `json:"session_id"`
+			Instructions *string `json:"instructions"`
+		}{
+			Type:         value.Type,
+			SessionID:    value.SessionID,
+			Instructions: value.Instructions,
+		})
+	default:
+		return nil, fmt.Errorf("invalid AutomationTarget type %q", value.Type)
+	}
+}
+
 // CreateAgentRequest projects CreateAgentParams.
 type CreateAgentRequest struct {
 	XAgentsCore  *SavedAgentCoreInput `json:"x_agents_core,omitempty"`
@@ -512,6 +815,12 @@ type ReasoningItem struct {
 	Type    string        `json:"type" binding:"required" enums:"reasoning"`
 	Status  *string       `json:"status" binding:"required" extensions:"x-nullable" enums:"in_progress,completed,incomplete"`
 	Summary []SummaryText `json:"summary" binding:"required"`
+}
+
+// ReasoningResource projects ReasoningResource.
+type ReasoningResource struct {
+	Effort  *string `json:"effort" binding:"required" extensions:"x-nullable" enums:"none,minimal,low,medium,high,xhigh,max"`
+	Summary *string `json:"summary" binding:"required" extensions:"x-nullable" enums:"concise,detailed,auto"`
 }
 
 // RequiredAction projects SessionRequiredActionResource.
