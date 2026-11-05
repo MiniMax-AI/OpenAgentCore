@@ -13,6 +13,7 @@ import (
 type configuration struct {
 	Agent          v1.Agent                      `json:"agent"`
 	Environment    v1.Environment                `json:"environment"`
+	Review         string                        `json:"review,omitempty"`
 	VaultIDs       []string                      `json:"vault_ids,omitempty"`
 	MCPCredentials []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
@@ -34,5 +35,9 @@ func resolve(input sessionRequest, tenant, key string, saved *v1.SavedAgent) (js
 	} else {
 		agent.ID = saved.ID
 	}
-	return json.Marshal(configuration{Agent: agent, Environment: *input.Environment, VaultIDs: input.VaultIDs})
+	stored := configuration{Agent: agent, Environment: *input.Environment, VaultIDs: input.VaultIDs}
+	if input.Review != nil && *input.Review == "auto_review" {
+		stored.Review = *input.Review
+	}
+	return json.Marshal(stored)
 }

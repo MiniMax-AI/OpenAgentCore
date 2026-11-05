@@ -95,8 +95,8 @@ func (s *fakeStorage) WithSessionDeletion(ctx context.Context, tenant, session s
 	return apply(ctx, s.locked, s.deletion)
 }
 
-func (s *fakeStorage) UpdateSessionMetadata(_ context.Context, tenant, session string, encoded []byte) (Session, error) {
-	s.record("UpdateSessionMetadata", s.updateMetadata != nil, tenant, session, string(encoded))
+func (s *fakeStorage) UpdateSession(_ context.Context, tenant, session string, encoded []byte, _ ConfigureSession) (Session, error) {
+	s.record("UpdateSession", s.updateMetadata != nil, tenant, session, string(encoded))
 	return s.updateMetadata(string(encoded))
 }
 

@@ -21,6 +21,7 @@ type Snapshot struct {
 	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
 	Agent                   v1.Agent                      `json:"agent"`
 	Environment             v1.Environment                `json:"environment"`
+	Review                  string                        `json:"review,omitempty"`
 	VaultIDs                []string                      `json:"vault_ids,omitempty"`
 	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
@@ -104,7 +105,11 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, text); err != nil {
 		return sessions.Turn{}, err
 	}
-	req, err := d.executionRequest(ctx, session, snapshot, caps, bound)
+	turn, err := d.SessionsReader.GetTurn(ctx, tenantID, sessionID, turnID)
+	if err != nil {
+		return sessions.Turn{}, err
+	}
+	req, err := d.executionRequest(ctx, session, snapshot, caps, bound, turn.Settings)
 	if err != nil {
 		return sessions.Turn{}, err
 	}

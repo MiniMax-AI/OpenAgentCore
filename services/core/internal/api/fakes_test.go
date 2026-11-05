@@ -845,16 +845,16 @@ func (f *fakeSessionEvents) SessionStreamSnapshot(a0 context.Context, a1 string,
 
 type fakeSessions struct {
 	t                     testing.TB
-	updateSessionMetadata func(context.Context, sessions.UpdateSessionMetadataCommand) (sessions.Session, error)
+	updateSession         func(context.Context, sessions.UpdateSessionCommand) (sessions.Session, error)
 	deleteSession         func(context.Context, sessions.DeleteSessionCommand) error
 	auditSessionOperation func(context.Context, sessions.AuditSessionOperationCommand) error
 }
 
-func (f *fakeSessions) UpdateSessionMetadata(a0 context.Context, a1 sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
-	if f.updateSessionMetadata == nil {
-		unexpectedCall(f.t, "UpdateSessionMetadata")
+func (f *fakeSessions) UpdateSession(a0 context.Context, a1 sessions.UpdateSessionCommand) (sessions.Session, error) {
+	if f.updateSession == nil {
+		unexpectedCall(f.t, "UpdateSession")
 	}
-	return f.updateSessionMetadata(a0, a1)
+	return f.updateSession(a0, a1)
 }
 
 func (f *fakeSessions) DeleteSession(a0 context.Context, a1 sessions.DeleteSessionCommand) error {

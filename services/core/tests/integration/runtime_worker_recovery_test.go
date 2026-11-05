@@ -142,7 +142,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	h, pool := runtimeWorkerHarness(t)
 	turn := uuid.NewString()
-	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, h.session.ID); err != nil {
+	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
 	worker, err := startWorkerErr(t, t.Context(), h.s, h.d)

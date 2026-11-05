@@ -91,10 +91,12 @@ type SessionStorage interface {
 	// when both succeed. A malformed tenant is ErrInvalidInput; a malformed or
 	// missing Session is ErrNotFound.
 	WithSessionDeletion(ctx context.Context, tenantID, sessionID string, apply func(context.Context, LockedSession, SessionDeletionTx) error) error
-	// UpdateSessionMetadata replaces the visible Session's metadata with the
-	// encoded object, records the write audit and reads the Session as
-	// GetSession does, in one transaction, or returns ErrNotFound.
-	UpdateSessionMetadata(ctx context.Context, tenantID, sessionID string, encoded []byte) (Session, error)
+	// UpdateSession locks the visible Session, replaces its configuration with
+	// the result of configure and, unless encoded is nil, its metadata with
+	// the encoded object, records the write audit and reads the Session as
+	// GetSession does, in one transaction. A failure of configure writes
+	// nothing. A missing Session is ErrNotFound.
+	UpdateSession(ctx context.Context, tenantID, sessionID string, encoded []byte, configure ConfigureSession) (Session, error)
 	// AuditSessionOperation records the write audit of action on the visible
 	// Session under its lock, or returns ErrNotFound.
 	AuditSessionOperation(ctx context.Context, tenantID, sessionID, action string) error
@@ -161,21 +163,30 @@ func (s *Service) DeleteSession(ctx context.Context, command DeleteSessionComman
 	})
 }
 
-// UpdateSessionMetadataCommand replaces a Session's metadata.
-type UpdateSessionMetadataCommand struct {
+// ConfigureSession computes a Session's updated configuration from the engine
+// and configuration the Session lock shows.
+type ConfigureSession func(engine string, configuration json.RawMessage) (json.RawMessage, error)
+
+// UpdateSessionCommand updates a Session.
+type UpdateSessionCommand struct {
 	TenantID  string
 	SessionID string
+	// Metadata replaces the Session's metadata; nil keeps it.
 	Metadata  map[string]string
+	Configure ConfigureSession
 }
 
-// UpdateSessionMetadata replaces the visible Session's metadata and returns
-// the Session. Invalid metadata is ErrInvalidInput.
-func (s *Service) UpdateSessionMetadata(ctx context.Context, command UpdateSessionMetadataCommand) (Session, error) {
-	encoded, err := metadata.Encode(command.Metadata)
-	if err != nil {
-		return Session{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+// UpdateSession applies the update under the Session lock and returns the
+// Session. Invalid metadata is ErrInvalidInput.
+func (s *Service) UpdateSession(ctx context.Context, command UpdateSessionCommand) (Session, error) {
+	var encoded []byte
+	if command.Metadata != nil {
+		var err error
+		if encoded, err = metadata.Encode(command.Metadata); err != nil {
+			return Session{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		}
 	}
-	return s.storage.UpdateSessionMetadata(ctx, command.TenantID, command.SessionID, encoded)
+	return s.storage.UpdateSession(ctx, command.TenantID, command.SessionID, encoded, command.Configure)
 }
 
 // AuditSessionOperationCommand records an authorized public operation that

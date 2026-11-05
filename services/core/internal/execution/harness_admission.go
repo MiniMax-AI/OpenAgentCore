@@ -63,7 +63,11 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 	if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
 		return err
 	}
-	if err := declaration.ValidateTurnSettings(turnSettings(snapshot.Agent)); err != nil {
+	bound := sessions.TurnSettings{Model: snapshot.Agent.Model, ReasoningEffort: snapshot.Agent.Reasoning.Effort, ServiceTier: snapshot.Agent.ServiceTier}
+	if err := declaration.ValidateTurnSettings(turnSettings(bound)); err != nil {
+		return err
+	}
+	if err := declaration.ValidateReview(snapshot.Review); err != nil {
 		return err
 	}
 	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}

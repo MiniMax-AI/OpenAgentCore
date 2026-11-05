@@ -34,7 +34,7 @@ type SessionAdmission interface {
 
 // Sessions updates and deletes Sessions, and records their public write audit.
 type Sessions interface {
-	UpdateSessionMetadata(context.Context, sessions.UpdateSessionMetadataCommand) (sessions.Session, error)
+	UpdateSession(context.Context, sessions.UpdateSessionCommand) (sessions.Session, error)
 	DeleteSession(context.Context, sessions.DeleteSessionCommand) error
 	AuditSessionOperation(context.Context, sessions.AuditSessionOperationCommand) error
 }

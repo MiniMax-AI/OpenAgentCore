@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -49,7 +50,7 @@ func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {
 	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, writeaudit.ActionDelete, writeaudit.ResourceSession, uuid.UUID(t.session.Bytes).String(), "")
 }
 
-func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID string, encoded []byte) (sessions.Session, error) {
+func (s *Store) UpdateSession(ctx context.Context, tenantID, sessionID string, encoded []byte, configure sessions.ConfigureSession) (sessions.Session, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return sessions.Session{}, err
@@ -57,9 +58,33 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 	var session sessions.Session
 	err = s.units.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		row, err := q.UpdateSessionMetadata(ctx, sqlc.UpdateSessionMetadataParams{TenantID: tenant, ID: pgunit.PathID(sessionID), Metadata: encoded})
+		current, err := q.LockVisibleSession(ctx, sqlc.LockVisibleSessionParams{TenantID: tenant, ID: pgunit.PathID(sessionID)})
 		if err != nil {
 			return err
+		}
+		configuration, err := configure(current.Engine, current.Configuration)
+		if err != nil {
+			return err
+		}
+		if encoded == nil {
+			encoded = current.Metadata
+		}
+		row, err := q.UpdateSession(ctx, sqlc.UpdateSessionParams{TenantID: tenant, ID: current.ID, Configuration: configuration, Metadata: encoded})
+		if err != nil {
+			return err
+		}
+		before, err := sessions.ExecutionModel(current.Configuration)
+		if err != nil {
+			return err
+		}
+		after, err := sessions.ExecutionModel(configuration)
+		if err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(before, after) {
+			if err := q.MarkSessionModelSource(ctx, row.ID); err != nil {
+				return err
+			}
 		}
 		if err := auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceSession, uuid.UUID(row.ID.Bytes).String(), ""); err != nil {
 			return err
@@ -74,7 +99,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 		return sessions.Session{}, sessions.ErrNotFound
 	}
 	if err != nil {
-		return sessions.Session{}, fmt.Errorf("update session metadata: %w", err)
+		return sessions.Session{}, fmt.Errorf("update session: %w", err)
 	}
 	return session, nil
 }

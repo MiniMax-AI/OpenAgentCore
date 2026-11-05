@@ -85,7 +85,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				if err != nil || replay.ID != session.ID {
 					t.Fatal("projection metadata changed retry identity", err)
 				}
-				if _, err := sessionService(t, s).UpdateSessionMetadata(t.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"edited": "yes"}}); err != nil {
+				if _, err := sessionService(t, s).UpdateSession(t.Context(), sessions.UpdateSessionCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"edited": "yes"}, Configure: keepConfiguration}); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := pool.Exec(t.Context(), "UPDATE session_model_execution SET encrypted_config='\\x00'::bytea WHERE session_id=$1", session.ID); err != nil {

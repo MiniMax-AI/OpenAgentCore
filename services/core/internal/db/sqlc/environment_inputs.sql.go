@@ -53,9 +53,9 @@ func (q *Queries) CheckEnvironmentInputGate(ctx context.Context, arg CheckEnviro
 
 const createEnvironmentInputReservation = `-- name: CreateEnvironmentInputReservation :one
 WITH accepted AS (SELECT clock_timestamp() AS at)
-INSERT INTO environment_input_reservations(id, session_id, idempotency_key, batch, is_initial, created_at, deadline)
-SELECT $1, $2, $3, $4, $5, at, at + interval '5 minutes' FROM accepted
-RETURNING id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code
+INSERT INTO environment_input_reservations(id, session_id, idempotency_key, batch, is_initial, settings, created_at, deadline)
+SELECT $1, $2, $3, $4, $5, $6, at, at + interval '5 minutes' FROM accepted
+RETURNING id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code, settings
 `
 
 type CreateEnvironmentInputReservationParams struct {
@@ -64,6 +64,7 @@ type CreateEnvironmentInputReservationParams struct {
 	IdempotencyKey string      `json:"idempotency_key"`
 	Batch          []byte      `json:"batch"`
 	IsInitial      bool        `json:"is_initial"`
+	Settings       []byte      `json:"settings"`
 }
 
 func (q *Queries) CreateEnvironmentInputReservation(ctx context.Context, arg CreateEnvironmentInputReservationParams) (EnvironmentInputReservation, error) {
@@ -73,6 +74,7 @@ func (q *Queries) CreateEnvironmentInputReservation(ctx context.Context, arg Cre
 		arg.IdempotencyKey,
 		arg.Batch,
 		arg.IsInitial,
+		arg.Settings,
 	)
 	var i EnvironmentInputReservation
 	err := row.Scan(
@@ -86,6 +88,7 @@ func (q *Queries) CreateEnvironmentInputReservation(ctx context.Context, arg Cre
 		&i.SettledAt,
 		&i.IsInitial,
 		&i.FailureCode,
+		&i.Settings,
 	)
 	return i, err
 }
@@ -136,7 +139,7 @@ func (q *Queries) FailSessionEnvironmentInput(ctx context.Context, sessionID pgt
 }
 
 const findEnvironmentInputReservation = `-- name: FindEnvironmentInputReservation :one
-SELECT r.id, r.session_id, r.idempotency_key, r.batch, r.state, r.created_at, r.deadline, r.settled_at, r.is_initial, r.failure_code, r.batch = $1::jsonb AS matches
+SELECT r.id, r.session_id, r.idempotency_key, r.batch, r.state, r.created_at, r.deadline, r.settled_at, r.is_initial, r.failure_code, r.settings, r.batch = $1::jsonb AS matches
 FROM environment_input_reservations r
 WHERE r.session_id = $2 AND r.idempotency_key = $3
 `
@@ -166,13 +169,14 @@ func (q *Queries) FindEnvironmentInputReservation(ctx context.Context, arg FindE
 		&i.EnvironmentInputReservation.SettledAt,
 		&i.EnvironmentInputReservation.IsInitial,
 		&i.EnvironmentInputReservation.FailureCode,
+		&i.EnvironmentInputReservation.Settings,
 		&i.Matches,
 	)
 	return i, err
 }
 
 const getEnvironmentInputReservation = `-- name: GetEnvironmentInputReservation :one
-SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code FROM environment_input_reservations
+SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code, settings FROM environment_input_reservations
 WHERE session_id = $1 AND id = $2
 `
 
@@ -195,6 +199,7 @@ func (q *Queries) GetEnvironmentInputReservation(ctx context.Context, arg GetEnv
 		&i.SettledAt,
 		&i.IsInitial,
 		&i.FailureCode,
+		&i.Settings,
 	)
 	return i, err
 }
@@ -202,7 +207,7 @@ func (q *Queries) GetEnvironmentInputReservation(ctx context.Context, arg GetEnv
 const settleEnvironmentInputReservation = `-- name: SettleEnvironmentInputReservation :one
 UPDATE environment_input_reservations SET state = $1, settled_at = clock_timestamp()
 WHERE session_id = $2 AND id = $3 AND state = 'pending'
-RETURNING id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code
+RETURNING id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code, settings
 `
 
 type SettleEnvironmentInputReservationParams struct {
@@ -225,6 +230,7 @@ func (q *Queries) SettleEnvironmentInputReservation(ctx context.Context, arg Set
 		&i.SettledAt,
 		&i.IsInitial,
 		&i.FailureCode,
+		&i.Settings,
 	)
 	return i, err
 }

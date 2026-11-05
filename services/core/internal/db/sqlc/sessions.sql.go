@@ -130,6 +130,17 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 	return i, err
 }
 
+const getSessionConfiguration = `-- name: GetSessionConfiguration :one
+SELECT configuration FROM sessions WHERE id = $1
+`
+
+func (q *Queries) GetSessionConfiguration(ctx context.Context, id pgtype.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getSessionConfiguration, id)
+	var configuration []byte
+	err := row.Scan(&configuration)
+	return configuration, err
+}
+
 const getSessionCursor = `-- name: GetSessionCursor :one
 SELECT created_at, id FROM sessions WHERE tenant_id = $1 AND id = $2
 `
@@ -219,6 +230,36 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 	return items, nil
 }
 
+const lockVisibleSession = `-- name: LockVisibleSession :one
+SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE
+`
+
+type LockVisibleSessionParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) LockVisibleSession(ctx context.Context, arg LockVisibleSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, lockVisibleSession, arg.TenantID, arg.ID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Engine,
+		&i.Metadata,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.CreatedAt,
+		&i.Configuration,
+		&i.EventSequence,
+		&i.CreationRequestHash,
+		&i.DeletedAt,
+		&i.CreatorKind,
+		&i.CreatorID,
+	)
+	return i, err
+}
+
 const markSessionDeleted = `-- name: MarkSessionDeleted :exec
 UPDATE sessions SET deleted_at = clock_timestamp() WHERE id = $1 AND deleted_at IS NULL
 `
@@ -228,18 +269,24 @@ func (q *Queries) MarkSessionDeleted(ctx context.Context, id pgtype.UUID) error 
 	return err
 }
 
-const updateSessionMetadata = `-- name: UpdateSessionMetadata :one
-UPDATE sessions SET metadata = $3 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
+const updateSession = `-- name: UpdateSession :one
+UPDATE sessions SET configuration = $3, metadata = $4 WHERE tenant_id = $1 AND id = $2 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
 `
 
-type UpdateSessionMetadataParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-	Metadata []byte      `json:"metadata"`
+type UpdateSessionParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	ID            pgtype.UUID `json:"id"`
+	Configuration []byte      `json:"configuration"`
+	Metadata      []byte      `json:"metadata"`
 }
 
-func (q *Queries) UpdateSessionMetadata(ctx context.Context, arg UpdateSessionMetadataParams) (Session, error) {
-	row := q.db.QueryRow(ctx, updateSessionMetadata, arg.TenantID, arg.ID, arg.Metadata)
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, updateSession,
+		arg.TenantID,
+		arg.ID,
+		arg.Configuration,
+		arg.Metadata,
+	)
 	var i Session
 	err := row.Scan(
 		&i.ID,

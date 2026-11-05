@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps proto.AgentKindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
+func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps proto.AgentKindCapabilities, bound sessions.ExecutionBinding, turn sessions.TurnSettings) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
 	if recoverNativeSession && !caps.NativeSessionRecovery.IsSupported() {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
@@ -35,7 +35,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		options["harness_config"] = native
 	}
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
-		Turn: turnSettings(snapshot.Agent), AgentOptions: options, ExecutionControls: executionControls(snapshot.Agent, tools), AgentStateKey: session.ID,
+		Turn: turnSettings(turn), AgentOptions: options, ExecutionControls: executionControls(snapshot.Agent, tools), AgentStateKey: session.ID,
 		AgentSessionID: bound.NativeSessionID, RequireExistingNativeSession: recoverNativeSession,
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,

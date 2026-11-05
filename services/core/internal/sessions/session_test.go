@@ -72,12 +72,12 @@ func TestUpdateSessionMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := service.UpdateSessionMetadata(t.Context(), UpdateSessionMetadataCommand{TenantID: "tenant", SessionID: "session", Metadata: map[string]string{"k": "v"}})
-	if err != nil || session.ID != "session" || strings.Join(storage.calls, "\n") != `UpdateSessionMetadata tenant session {"k":"v"}` {
+	session, err := service.UpdateSession(t.Context(), UpdateSessionCommand{TenantID: "tenant", SessionID: "session", Metadata: map[string]string{"k": "v"}})
+	if err != nil || session.ID != "session" || strings.Join(storage.calls, "\n") != `UpdateSession tenant session {"k":"v"}` {
 		t.Fatal(session, err, storage.calls)
 	}
 	invalid := map[string]string{"k": strings.Repeat("v", 64*1024)}
-	if _, err := service.UpdateSessionMetadata(t.Context(), UpdateSessionMetadataCommand{TenantID: "tenant", SessionID: "session", Metadata: invalid}); !errors.Is(err, ErrInvalidInput) || len(storage.calls) != 1 {
+	if _, err := service.UpdateSession(t.Context(), UpdateSessionCommand{TenantID: "tenant", SessionID: "session", Metadata: invalid}); !errors.Is(err, ErrInvalidInput) || len(storage.calls) != 1 {
 		t.Fatal("invalid metadata reached storage", err, storage.calls)
 	}
 }

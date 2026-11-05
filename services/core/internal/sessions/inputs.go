@@ -164,9 +164,9 @@ type InputAdmissionTx interface {
 	TurnCancellationTx
 	InputProjectionTx
 	ActiveTurnTx
-	// CreateTurn creates a queued Turn in the Session and returns it as
-	// stored.
-	CreateTurn(ctx context.Context) (Turn, error)
+	// CreateTurn creates a queued Turn in the Session bound to settings and
+	// returns it as stored.
+	CreateTurn(ctx context.Context, settings TurnSettings) (Turn, error)
 	// CreateTurnInput records input at position of the batch admitted under
 	// key, joined to turn, or to no Turn when turn is empty, and returns the
 	// Session sequence it allocates.
@@ -179,11 +179,11 @@ type InputAdmissionTx interface {
 // Session, starts a new Turn, which publishes turn.created, then the message's
 // Items, then the Session activity. A cancellation requests the cancellation
 // of the active Turn; on an idle Session it joins no Turn and keeps only its
-// retry identity.
-func AdmitInputs(ctx context.Context, tx InputAdmissionTx, key string, batch []Input) ([]InputReceipt, error) {
+// retry identity. A started Turn binds settings.
+func AdmitInputs(ctx context.Context, tx InputAdmissionTx, key string, batch []Input, settings TurnSettings) ([]InputReceipt, error) {
 	receipts := make([]InputReceipt, 0, len(batch))
 	for position, input := range batch {
-		receipt, err := admitInput(ctx, tx, key, int32(position), input)
+		receipt, err := admitInput(ctx, tx, key, int32(position), input, settings)
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +193,7 @@ func AdmitInputs(ctx context.Context, tx InputAdmissionTx, key string, batch []I
 }
 
 // admitInput admits the input at position of the batch under key.
-func admitInput(ctx context.Context, tx InputAdmissionTx, key string, position int32, input Input) (InputReceipt, error) {
+func admitInput(ctx context.Context, tx InputAdmissionTx, key string, position int32, input Input, settings TurnSettings) (InputReceipt, error) {
 	if input.Kind == "tool_result" {
 		result, err := ParseFunctionResultInput(input.Payload)
 		if err != nil {
@@ -215,7 +215,7 @@ func admitInput(ctx context.Context, tx InputAdmissionTx, key string, position i
 	}
 	placement := placeInput(input.Kind, active)
 	if placement == startsTurn {
-		if turn, err = tx.CreateTurn(ctx); err != nil {
+		if turn, err = tx.CreateTurn(ctx, settings); err != nil {
 			return InputReceipt{}, err
 		}
 		if err := tx.AppendChanges(ctx, TurnChanges(turn, true)...); err != nil {
@@ -259,6 +259,9 @@ type InputTx interface {
 	// LoadInputGate reads what the Session's Environment input reservations
 	// show about batch under key.
 	LoadInputGate(ctx context.Context, key string, batch json.RawMessage) (InputGate, error)
+	// LoadTurnSettings projects the Session's current configuration into the
+	// settings a Turn accepted now binds.
+	LoadTurnSettings(ctx context.Context) (TurnSettings, error)
 	// LoadEnvironment reads the Session's Environment; a Session without one
 	// is ErrNotFound.
 	LoadEnvironment(ctx context.Context) (Environment, error)
@@ -272,8 +275,8 @@ type InputTx interface {
 	LoadInputReservation(ctx context.Context, reservation string) (EnvironmentInputReservation, error)
 	// CreateInputReservation reserves batch under key until the deadline the
 	// database clock sets, marked initial when it is the Session's initial
-	// input, and returns the pending reservation as stored.
-	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool) (EnvironmentInputReservation, error)
+	// input, bound to settings, and returns the pending reservation as stored.
+	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool, settings TurnSettings) (EnvironmentInputReservation, error)
 	// ExpireInputReservation expires the reservation while it is pending and
 	// its deadline has passed by the database clock; otherwise it changes
 	// nothing.
@@ -361,7 +364,11 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 		if err := checkInputGate(gate); err != nil {
 			return err
 		}
-		if receipts, err = AdmitInputs(ctx, tx, key, batch); err != nil {
+		settings, err := tx.LoadTurnSettings(ctx)
+		if err != nil {
+			return err
+		}
+		if receipts, err = AdmitInputs(ctx, tx, key, batch, settings); err != nil {
 			return err
 		}
 		return tx.RecordInputAudit(ctx)

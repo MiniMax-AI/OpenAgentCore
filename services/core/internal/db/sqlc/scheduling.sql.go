@@ -12,7 +12,7 @@ import (
 )
 
 const getLatestSessionTurn = `-- name: GetLatestSessionTurn :one
-SELECT id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started FROM turns WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
+SELECT id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started, settings FROM turns WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
 `
 
 func (q *Queries) GetLatestSessionTurn(ctx context.Context, sessionID pgtype.UUID) (Turn, error) {
@@ -31,6 +31,7 @@ func (q *Queries) GetLatestSessionTurn(ctx context.Context, sessionID pgtype.UUI
 		&i.EventBytes,
 		&i.TokenUsage,
 		&i.ArtifactCaptureStarted,
+		&i.Settings,
 	)
 	return i, err
 }

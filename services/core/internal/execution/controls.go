@@ -3,6 +3,7 @@ package execution
 import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // executionControls assembles the official execution options for the Runtime.
@@ -24,15 +25,15 @@ func executionControls(agent v1.Agent, tools executionToolSet) *proto.ExecutionC
 	return controls
 }
 
-// turnSettings assembles the root Turn's settings from the Session snapshot.
-// Auto service tier means unset.
-func turnSettings(agent v1.Agent) proto.TurnSettings {
-	turn := proto.TurnSettings{Model: agent.Model}
-	if agent.Reasoning.Effort != nil {
-		turn.ReasoningEffort = *agent.Reasoning.Effort
+// turnSettings assembles the Runtime's settings from the settings a root Turn
+// bound. Auto service tier means unset.
+func turnSettings(bound sessions.TurnSettings) proto.TurnSettings {
+	turn := proto.TurnSettings{Model: bound.Model}
+	if bound.ReasoningEffort != nil {
+		turn.ReasoningEffort = *bound.ReasoningEffort
 	}
-	if agent.ServiceTier != "auto" {
-		turn.ServiceTier = agent.ServiceTier
+	if bound.ServiceTier != "auto" {
+		turn.ServiceTier = bound.ServiceTier
 	}
 	return turn
 }

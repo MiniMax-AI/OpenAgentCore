@@ -70,7 +70,7 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 		t.Run(skew.String(), func(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at) VALUES($1,$2,'in_progress',clock_timestamp())", turn, owner.SessionID)
+			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.SessionID)
 			events := []sessions.ExecutionEvent{diagnosticToolEvent("first", "before", "in_progress"), diagnosticToolEvent("second", "before", "in_progress")}
 			if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
 				t.Fatal(err)

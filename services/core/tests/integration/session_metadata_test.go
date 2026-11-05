@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -31,11 +32,8 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		return row
 	}
 	before := snapshot()
-	for _, metadata := range []map[string]string{{"new": "value"}, nil, {}, {"unicode": "中文🧪"}} {
-		updated, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: metadata})
-		if metadata == nil {
-			metadata = map[string]string{}
-		}
+	for _, metadata := range []map[string]string{{"new": "value"}, {}, {"unicode": "中文🧪"}} {
+		updated, err := sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: first.ID, Metadata: metadata, Configure: keepConfiguration})
 		if err != nil || !reflect.DeepEqual(updated.Metadata, metadata) {
 			t.Fatalf("update = %+v, %v", updated, err)
 		}
@@ -68,7 +66,7 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		{tenant, "invalid", nil, sessions.ErrNotFound},
 		{tenant, first.ID, map[string]string{"large": strings.Repeat("x", 64*1024)}, sessions.ErrInvalidInput},
 	} {
-		if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: test.tenant, SessionID: test.session, Metadata: test.metadata}); !errors.Is(err, test.want) {
+		if _, err := sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: test.tenant, SessionID: test.session, Metadata: test.metadata, Configure: keepConfiguration}); !errors.Is(err, test.want) {
 			t.Fatalf("rejected update error = %v, want %v", err, test.want)
 		}
 	}
@@ -92,7 +90,7 @@ func TestSessionMetadataConcurrentReplacement(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			key := fmt.Sprint(i)
-			got, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{key: key}})
+			got, err := sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{key: key}, Configure: keepConfiguration})
 			if err != nil || len(got.Metadata) != 1 || got.Metadata[key] != key {
 				t.Errorf("concurrent update = %+v, %v", got, err)
 			}
@@ -129,9 +127,14 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 			t.Fatal(err)
 		}
 		before.Metadata = map[string]string{"label": status}
-		updated, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: before.Metadata})
+		updated, err := sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: session.ID, Metadata: before.Metadata, Configure: keepConfiguration})
 		if err != nil || !reflect.DeepEqual(updated, before) {
 			t.Fatalf("metadata changed %s activity: %+v, %v", status, updated, err)
 		}
 	}
+}
+
+// keepConfiguration updates a Session without changing its configuration.
+func keepConfiguration(_ string, configuration json.RawMessage) (json.RawMessage, error) {
+	return configuration, nil
 }
