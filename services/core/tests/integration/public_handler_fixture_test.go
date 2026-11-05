@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
@@ -16,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/automationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -77,6 +79,7 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 		return nil, err
 	}
 	deployments := deploymentService(t, s)
+	automationStore, automationService := fixtureAutomations(t, s)
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: deployments,
 		Projects: projectService, ProjectsReader: fixtureProjectsReader{Store: projectStore, keys: keys},
@@ -86,6 +89,7 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
 		Skills: skillService, SkillsReader: skillStore,
 		Agents: agentService, AgentsReader: agentStore,
+		Automations: automationService, AutomationsReader: automationStore,
 		Sessions:        service,
 		SessionsReader:  sessionStore,
 		SessionCreation: service,
@@ -115,6 +119,17 @@ func fixtureAgents(t testing.TB, s *Store) (*agentpg.Store, *agents.Service) {
 		t.Fatal(err)
 	}
 	return agentStore, agentService
+}
+
+// fixtureAutomations builds the Automation adapter and service on s.
+func fixtureAutomations(t testing.TB, s *Store) (*automationpg.Store, *automations.Service) {
+	t.Helper()
+	store := automationpg.New(pgunit.NewPool(s.pool), s.credentialCipher)
+	service, err := automations.NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store, service
 }
 
 // fixtureFiles builds the File adapter and service on s.

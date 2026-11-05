@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -141,6 +142,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Skills: struct{ api.Skills }{}, SkillsReader: struct{ api.SkillsReader }{},
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
+		Automations: struct{ api.Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		Sessions:        struct{ api.Sessions }{},
 		SessionsReader:  struct{ api.SessionsReader }{},
 		SessionCreation: struct{ api.SessionCreation }{},

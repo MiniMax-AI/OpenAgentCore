@@ -556,4 +556,52 @@ var (
 			},
 		}}, required: true}},
 	}}
+	createAutomationParamsPeriodic = shape{kind: objectValue, members: []member{
+		{"type", shape{kind: enumValue, values: []string{"periodic"}, required: true}},
+		{"name", shape{kind: stringValue, required: true}},
+		{"target", shape{kind: openObject, required: true}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
+		{"expression", shape{kind: stringValue, required: true}},
+		{"timezone", shape{kind: stringValue, required: true}},
+	}}
+	createAutomationParamsOnce = shape{kind: objectValue, members: []member{
+		{"type", shape{kind: enumValue, values: []string{"once"}, required: true}},
+		{"name", shape{kind: stringValue, required: true}},
+		{"target", shape{kind: openObject, required: true}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
+		{"run_at", shape{kind: integerValue, minimum: 0, required: true}},
+	}}
+	updateAutomationParams = shape{kind: objectValue, members: []member{
+		{"name", shape{kind: stringValue}},
+		{"target", shape{kind: openObject}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
+		{"expression", shape{kind: stringValue}},
+		{"timezone", shape{kind: stringValue}},
+		{"run_at", shape{kind: integerValue, minimum: 0}},
+	}}
+	automationTargetParamNewSession = shape{kind: objectValue, members: []member{
+		{"type", shape{kind: enumValue, values: []string{"new_session"}, required: true}},
+		{"agent", shape{kind: openObject}},
+		{"agent_id", shape{kind: stringValue}},
+		{"environment", shape{kind: openObject, required: true}},
+		{"input", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
+			{"type", shape{kind: enumValue, values: []string{"message"}}},
+			{"role", shape{kind: enumValue, values: []string{"user"}, required: true}},
+			{"content", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"input_text", "input_image"}, variants: map[string][]member{
+				"input_text": {
+					{"text", shape{kind: stringValue, required: true}},
+				},
+				"input_image": {
+					{"image_url", shape{kind: stringValue, required: true}},
+				},
+			}}, required: true}},
+		}}, required: true}},
+		{"vault_ids", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+	}}
+	automationTargetParamExistingSession = shape{kind: objectValue, members: []member{
+		{"type", shape{kind: enumValue, values: []string{"existing_session"}, required: true}},
+		{"session_id", shape{kind: stringValue, required: true}},
+		{"instructions", shape{kind: stringValue, required: true}},
+	}}
 )

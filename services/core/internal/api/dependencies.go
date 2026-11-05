@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -43,6 +45,8 @@ type Dependencies struct {
 	EnvironmentTemplates EnvironmentTemplates
 	Agents               Agents
 	AgentsReader         AgentsReader
+	Automations          Automations
+	AutomationsReader    automations.Reader
 	Sessions             Sessions
 	SessionsReader       SessionsReader
 	SessionCreation      SessionCreation
@@ -102,6 +106,25 @@ type Handler struct {
 
 // NewHandler builds the HTTP handler from complete dependencies.
 func NewHandler(deps Dependencies) (http.Handler, error) {
+	h, err := newHandler(deps)
+	if err != nil {
+		return nil, err
+	}
+	return CanonicalPaths(h.routes()), nil
+}
+
+// NewAutomationDelivery returns the pass that records due Automation
+// occurrences and delivers queued invocations through the handler's Session
+// create and input paths.
+func NewAutomationDelivery(deps Dependencies) (func(context.Context) (*int64, int64, error), error) {
+	h, err := newHandler(deps)
+	if err != nil {
+		return nil, err
+	}
+	return h.deliverAutomations, nil
+}
+
+func newHandler(deps Dependencies) (*Handler, error) {
 	if err := deps.validate(); err != nil {
 		return nil, err
 	}
@@ -110,7 +133,7 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	for _, kind := range deps.Harnesses {
 		h.harnesses[kind] = true
 	}
-	return CanonicalPaths(h.routes()), nil
+	return h, nil
 }
 
 func (d Dependencies) validate() error {
@@ -130,6 +153,7 @@ func (d Dependencies) validate() error {
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
 		field{"Skills", d.Skills}, field{"SkillsReader", d.SkillsReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
+		field{"Automations", d.Automations}, field{"AutomationsReader", d.AutomationsReader},
 		field{"Sessions", d.Sessions}, field{"SessionsReader", d.SessionsReader},
 		field{"SessionCreation", d.SessionCreation},
 		field{"SessionEvents", d.SessionEvents},

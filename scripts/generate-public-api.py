@@ -25,6 +25,8 @@ REQUEST_SHAPES = {
     'CreateEnvironmentTemplateParams': ('network',),
     'UpdateEnvironmentTemplateParams': ('network',),
     'CreateSessionEventsParams': (),
+    'CreateAutomationParamsPeriodic': ('target',), 'CreateAutomationParamsOnce': ('target',), 'UpdateAutomationParams': ('target',),
+    'AutomationTargetParamNewSession': ('agent', 'environment'), 'AutomationTargetParamExistingSession': (),
 }
 HTTP_METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
 
@@ -231,7 +233,7 @@ def go_shape(document, schema, required=False):
     elif kind == 'array':
         fields = ['kind: arrayValue', 'items: &' + go_shape(document, value['items'])]
     elif kind == 'integer':
-        fields = ['kind: integerValue', f'minimum: {value["minimum"]}']
+        fields = ['kind: integerValue', f'minimum: {value.get("minimum", 0)}']
     else:
         fields = [{'string': 'kind: stringValue', 'boolean': 'kind: booleanValue'}[kind]]
     if required:

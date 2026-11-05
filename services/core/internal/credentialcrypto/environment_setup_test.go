@@ -29,3 +29,19 @@ func TestEnvironmentSetupResourceAndFieldBinding(t *testing.T) {
 		t.Fatal("modified ciphertext accepted")
 	}
 }
+
+func TestAutomationTargetBinding(t *testing.T) {
+	c := testCipher(t, bytes.Repeat([]byte{3}, 32))
+	encrypted, err := c.SealAutomationTarget([]byte("private"), "tenant", "automation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.OpenAutomationTarget(encrypted, "tenant", "automation"); err != nil || string(got) != "private" {
+		t.Fatal("round trip", err)
+	}
+	for _, other := range [][2]string{{"other", "automation"}, {"tenant", "other"}} {
+		if _, err := c.OpenAutomationTarget(encrypted, other[0], other[1]); err == nil {
+			t.Fatal("cross-boundary decryption")
+		}
+	}
+}

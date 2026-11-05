@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"net/http"
 	"strings"
 	"testing"
@@ -106,6 +107,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
 		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
+		Automations: struct{ Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		Sessions:        f.sessions,
 		SessionsReader:  f.sessionsReader,
 		SessionCreation: f.sessionCreation,

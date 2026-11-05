@@ -20,6 +20,74 @@
   "AgentMessageItem": {
     "sources": ["#/components/schemas/AgentMessageItemResource"]
   },
+  "Automation": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/AutomationResource"],
+    "fields": {
+      "target": {"type": "json.RawMessage"},
+      "created_by": {"type": "AutomationCreatedBy"}
+    },
+    "order": ["type", "id", "object", "created_at", "name", "target", "metadata", "created_by", "expression", "timezone", "run_at", "status"]
+  },
+  "AutomationAgentConfig": {
+    "sources": ["#/components/schemas/AutomationAgentConfigResource"],
+    "fields": {
+      "reasoning": {"type": "Reasoning"}
+    },
+    "order": ["model", "reasoning", "text", "service_tier", "instructions", "tools", "multi_agent", "compaction", "experimental"]
+  },
+  "AutomationCreatedBy": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/AutomationCreatedByResource"]
+  },
+  "AutomationDeleted": {
+    "sources": ["#/components/schemas/DeletedAutomationResource"]
+  },
+  "AutomationEnvironment": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/AutomationEnvironmentResource"],
+    "fields": {
+      "container_size": {"type": "json.RawMessage"},
+      "packages": {"type": "*EnvironmentPackagesResponse"},
+      "network": {"type": "*EnvironmentNetwork"},
+      "desktop": {"type": "json.RawMessage"}
+    },
+    "order": ["type", "environment_id", "environment_template_id", "container_size", "packages", "network", "desktop", "capability_directories", "skills", "plugins", "files", "workspace_directory"]
+  },
+  "AutomationInvocation": {
+    "sources": ["#/components/schemas/AutomationInvocationResource"],
+    "fields": {
+      "error": {"type": "*AutomationInvocationError"}
+    },
+    "order": ["id", "object", "automation_id", "created_at", "source", "scheduled_at", "session_id", "status", "skip_reason", "error"]
+  },
+  "AutomationInvocationError": {
+    "sources": ["#/components/schemas/AutomationInvocationErrorResource"]
+  },
+  "AutomationInvocationList": {
+    "sources": ["#/paths/~1agents~1automations~1{automation_id}~1invocations/get/responses/200/content/application~1json/schema"],
+    "order": ["object", "first_id", "last_id", "data", "has_more"]
+  },
+  "AutomationInvocationSource": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/AutomationInvocationSourceResource"],
+    "fields": {
+      "automation": {"type": "json.RawMessage"}
+    }
+  },
+  "AutomationList": {
+    "sources": ["#/paths/~1agents~1automations/get/responses/200/content/application~1json/schema"],
+    "order": ["object", "first_id", "last_id", "data", "has_more"]
+  },
+  "AutomationTarget": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/AutomationTargetResource"],
+    "fields": {
+      "agent": {"type": "*AutomationAgentConfig"},
+      "input": {"type": "[]InputMessage"}
+    },
+    "order": ["type", "agent_id", "agent", "environment", "input", "vault_ids", "metadata", "session_id", "instructions"]
+  },
   "CreateAgentRequest": {
     "sources": ["#/components/schemas/CreateAgentParams"],
     "fields": {

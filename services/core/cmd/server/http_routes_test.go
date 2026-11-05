@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"io"
 	"net"
 	"net/http"
@@ -95,6 +96,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Files: struct{ api.Files }{}, FilesReader: struct{ api.FilesReader }{},
 		Skills: struct{ api.Skills }{}, SkillsReader: struct{ api.SkillsReader }{},
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
+		Automations: struct{ api.Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Sessions:        struct{ api.Sessions }{},
 		SessionsReader:  struct{ api.SessionsReader }{},
