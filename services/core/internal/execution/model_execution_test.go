@@ -26,8 +26,8 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	instructions := "Keep this instruction."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: v1.Environment{Type: "none"}}
 	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{})
-	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
-		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
+	if err != nil || request.Turn.Model != "device-model" || !reflect.DeepEqual(request.AgentOptions, map[string]any{"system_prompt": &instructions}) {
+		t.Fatal("none Session received adapter options Core does not own", request.Turn, request.AgentOptions, err)
 	}
 }
 
