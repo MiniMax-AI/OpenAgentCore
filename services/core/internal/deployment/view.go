@@ -34,7 +34,9 @@ type View struct {
 	Configuration        json.RawMessage         `json:"configuration,omitempty" swaggertype:"object"`
 	Metadata             json.RawMessage         `json:"metadata,omitempty" swaggertype:"object"`
 	CredentialConfigured bool                    `json:"credential_configured" binding:"required"`
-	// Idle suspension policy; null unless the selected Provider declares checkpoint support.
+	// Idle timeout for every Provider. With checkpoint support an idle sandbox suspends; without it an idle unattached standalone Environment expires.
+	IdleSeconds int64 `json:"idle_seconds" binding:"required"`
+	// Snapshot retention; null unless the selected Provider declares checkpoint support.
 	Suspension     *Suspension `json:"suspension" extensions:"x-nullable" binding:"required"`
 	InstallationID string      `json:"installation_id" binding:"required"`
 	Provider       string      `json:"provider" binding:"required"`
@@ -52,10 +54,9 @@ type Resources struct {
 	Pending     int64 `json:"pending" binding:"required"`
 }
 
-// Suspension is Core's idle suspension policy, which applies to every Provider
-// that declares checkpoint support.
+// Suspension is Core's snapshot retention, which applies to every Provider that
+// declares checkpoint support.
 type Suspension struct {
-	IdleSeconds      int64 `json:"idle_seconds" binding:"required"`
 	RetentionSeconds int64 `json:"retention_seconds" binding:"required"`
 }
 

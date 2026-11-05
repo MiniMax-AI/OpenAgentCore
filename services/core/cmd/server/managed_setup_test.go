@@ -170,7 +170,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, runtimeAPI: "https://core.example/api/v1"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "microsandbox"}
 	s.publish(previous)
-	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
+	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{RetentionSeconds: 86400}})
 	if err != nil {
 		t.Fatal(err)
 	}

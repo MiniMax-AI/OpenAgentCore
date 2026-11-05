@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { SuspensionForm } from "./SuspensionSettings";
 
-const deployment = { suspension: { idle_seconds: 300, retention_seconds: 86400 } } as SandboxDeployment;
+const deployment = { idle_seconds: 300, suspension: { retention_seconds: 86400 } } as SandboxDeployment;
 describe("suspension settings", () => {
   it("edits the idle time and shows retention", () => {
     const html = renderToStaticMarkup(<SuspensionForm deployment={deployment} disabled={false} onSave={async () => true} />);
@@ -13,6 +13,9 @@ describe("suspension settings", () => {
     expect(html).toContain("24 hours");
     expect(html).toContain("Edit node");
     expect(renderToStaticMarkup(<SuspensionForm deployment={{ ...deployment, mode: "direct" }} disabled={false} onSave={async () => true} />)).not.toContain("Edit node");
-    expect(renderToStaticMarkup(<SuspensionForm deployment={{ ...deployment, suspension: null }} disabled onSave={async () => true} />)).toBe("");
+    const expiring = renderToStaticMarkup(<SuspensionForm deployment={{ ...deployment, suspension: null }} disabled onSave={async () => true} />);
+    expect(expiring).toContain("Idle timeout");
+    expect(expiring).toContain('value="300"');
+    expect(expiring).not.toContain("Snapshot retention");
   });
 });

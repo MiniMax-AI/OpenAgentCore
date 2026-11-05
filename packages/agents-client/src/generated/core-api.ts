@@ -223,6 +223,7 @@ export interface DeploymentView {
   core_url: string;
   credential_configured: boolean;
   generation: number;
+  idle_seconds: number;
   installation_id: string;
   metadata?: Record<string, unknown>;
   mode: DeploymentMode;
@@ -235,8 +236,8 @@ export interface DeploymentView {
   specification_digest?: string;
   suspension: Suspension | null;
 }
-export const deploymentViewFields = ["configuration", "core_url", "credential_configured", "generation", "installation_id", "metadata", "mode", "owner_epoch", "provider", "reset", "resources", "rollout", "specification", "specification_digest", "suspension"] as const;
-export const deploymentViewRequired = ["core_url", "credential_configured", "generation", "installation_id", "mode", "owner_epoch", "provider", "reset", "resources", "rollout", "suspension"] as const;
+export const deploymentViewFields = ["configuration", "core_url", "credential_configured", "generation", "idle_seconds", "installation_id", "metadata", "mode", "owner_epoch", "provider", "reset", "resources", "rollout", "specification", "specification_digest", "suspension"] as const;
+export const deploymentViewRequired = ["core_url", "credential_configured", "generation", "idle_seconds", "installation_id", "mode", "owner_epoch", "provider", "reset", "resources", "rollout", "suspension"] as const;
 export interface DiagnosticFailure {
   code: DiagnosticFailureCode;
   failed_at: string | null;
@@ -920,10 +921,9 @@ export interface SessionExecutionConfiguration {
 }
 export const sessionExecutionConfigurationFields = ["harness", "harness_config", "model", "model_provider", "object", "schema_version", "session_id"] as const;
 export interface Suspension {
-  idle_seconds: number;
   retention_seconds: number;
 }
-export const suspensionFields = ["idle_seconds", "retention_seconds"] as const;
+export const suspensionFields = ["retention_seconds"] as const;
 export interface TurnDiagnostics {
   failure: DiagnosticFailure | null;
   items: ItemDiagnosticTiming[];

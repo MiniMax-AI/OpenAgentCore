@@ -56,7 +56,7 @@ func TestSandboxIdlePolicyRequiresAdministratorAndStrictBody(t *testing.T) {
 		if seconds < 30 || seconds > 86400 {
 			return deployment.View{}, deployment.ErrInvalidInput
 		}
-		return deployment.View{Suspension: &deployment.Suspension{IdleSeconds: seconds, RetentionSeconds: 86400}}, nil
+		return deployment.View{IdleSeconds: seconds, Suspension: &deployment.Suspension{RetentionSeconds: 86400}}, nil
 	}
 	h := newTestHandler(t, deps)
 	for _, test := range []struct {

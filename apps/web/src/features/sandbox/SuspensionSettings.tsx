@@ -33,25 +33,26 @@ export function SuspensionSettings({ deployment, disabled }: { deployment: Sandb
   return <SuspensionForm deployment={deployment} disabled={disabled} onSave={save} />;
 }
 
-/** The idle time form and Core's read-only snapshot retention. */
+/** The idle time form for every Provider, and Core's read-only snapshot retention where the Provider suspends. */
 export function SuspensionForm({ deployment, disabled, onSave }: { deployment: SandboxDeployment; disabled: boolean; onSave: (seconds: number) => Promise<boolean> }) {
   const { t, i18n } = useTranslation("sandbox");
   const policy = deployment.suspension;
   const [draft, setDraft] = useState<string | null>(null);
-  if (!policy) return null;
-  const idle = draft ?? String(policy.idle_seconds);
+  const idle = draft ?? String(deployment.idle_seconds);
   const valid = /^\d+$/.test(idle) && Number(idle) >= 30 && Number(idle) <= 86400;
-  return <Section headingId="sandbox-lifecycle-heading" title={t("Automatic suspension")} help={t(deployment.mode === "direct" ? "The idle policy applies to the whole deployment." : "The idle policy applies to the whole deployment. Each node's active and retained limits are set on Nodes with Edit node.")}>
+  return <Section headingId="sandbox-lifecycle-heading" title={t(policy ? "Automatic suspension" : "Idle timeout")} help={t(deployment.mode === "direct" ? "The idle policy applies to the whole deployment." : "The idle policy applies to the whole deployment. Each node's active and retained limits are set on Nodes with Edit node.")}>
     <div className="settings-rows">
       <form className="settings-row" onSubmit={async (event) => { event.preventDefault(); if (valid && !disabled && await onSave(Number(idle))) setDraft(null); }}>
-        <div className="settings-row-label"><label htmlFor="sandbox-idle-seconds">{t("Idle before suspension (seconds)")}</label><HelpTip>{t("Deployment-wide: 30–86,400 seconds. Applies to existing and new running sandboxes without restarting them. Suspension already in progress and snapshot retention are unchanged.")}{deployment.mode === "direct" ? null : <> {t("Capacity pressure may suspend an idle sandbox after 15 seconds.")}</>}</HelpTip></div>
+        <div className="settings-row-label"><label htmlFor="sandbox-idle-seconds">{t(policy ? "Idle before suspension (seconds)" : "Idle before expiry (seconds)")}</label><HelpTip>{policy
+            ? <>{t("Deployment-wide: 30–86,400 seconds. Applies to existing and new running sandboxes without restarting them. Suspension already in progress and snapshot retention are unchanged.")}{deployment.mode === "direct" ? null : <> {t("Capacity pressure may suspend an idle sandbox after 15 seconds.")}</>}</>
+            : t("Deployment-wide: 30–86,400 seconds. This Provider does not suspend sandboxes. A standalone Environment with no Session attached expires after this idle time; sandboxes with a Session keep running.")}</HelpTip></div>
         <div className="settings-row-control field">
           <input id="sandbox-idle-seconds" inputMode="numeric" value={idle} disabled={disabled} onChange={(event) => setDraft(event.target.value)} aria-invalid={!valid} aria-describedby={!valid ? "sandbox-idle-error" : undefined} />
-          <button type="submit" className="button outline" disabled={disabled || !valid || Number(idle) === policy.idle_seconds}>{t("Save")}</button>
+          <button type="submit" className="button outline" disabled={disabled || !valid || Number(idle) === deployment.idle_seconds}>{t("Save")}</button>
           {!valid ? <span className="field-error" id="sandbox-idle-error">{t("Enter a whole number from 30 to 86,400.")}</span> : null}
         </div>
       </form>
-      <Fact label={t("Snapshot retention")} help={<RetentionHelp deployment={deployment} />}>{formatSpan(policy.retention_seconds, i18n.resolvedLanguage)}</Fact>
+      {policy ? <Fact label={t("Snapshot retention")} help={<RetentionHelp deployment={deployment} />}>{formatSpan(policy.retention_seconds, i18n.resolvedLanguage)}</Fact> : null}
     </div>
   </Section>;
 }
