@@ -36,7 +36,8 @@ WHERE e.tenant_id = $1 AND e.id = $2;
 SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
 
 -- name: GetStandaloneEnvironmentCursor :one
-SELECT created_at, id FROM environments WHERE tenant_id = $1 AND id = $2 AND NOT session_owned;
+SELECT created_at, id FROM environments
+WHERE tenant_id = $1 AND id = $2 AND NOT session_owned AND creator_kind = $3 AND creator_id = $4;
 
 -- name: ListStandaloneEnvironments :many
 SELECT sqlc.embed(e), s.id AS attached_session_id,

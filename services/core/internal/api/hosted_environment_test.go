@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -172,4 +173,32 @@ type hostedCreationRecorder struct {
 func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
 	return sessions.Creation{}, sessions.ErrInvalidInput
+}
+
+// attachExclusive is checked against the pinned schema's `not` constraint, its
+// one authored definition.
+func TestAttachExclusiveMatchesThePinnedSchema(t *testing.T) {
+	raw, err := os.ReadFile("../../../../contracts/agents-api/upstream/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pin struct {
+		Components struct {
+			Schemas map[string]struct {
+				Not struct {
+					AnyOf []struct{ Required []string } `json:"anyOf"`
+				} `json:"not"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(raw, &pin); err != nil {
+		t.Fatal(err)
+	}
+	var members []string
+	for _, choice := range pin.Components.Schemas["EnvironmentParamOpenaiHosted"].Not.AnyOf {
+		members = append(members, choice.Required...)
+	}
+	if !reflect.DeepEqual(members, attachExclusive) {
+		t.Fatal("the pinned not constraint", members)
+	}
 }

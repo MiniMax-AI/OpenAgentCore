@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -235,5 +236,31 @@ func TestInitializationStartsTheIdleClock(t *testing.T) {
 	}
 	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired as soon as it was ready", err)
+	}
+}
+
+// Detaching an Environment that ends for lack of compute also releases the
+// placement it held for new compute.
+func TestDetachReleasesTheHeldPlacementOfAnEndedEnvironment(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	f.connect(t, node.NodeID)
+	key := standaloneEnvironment(t, f)
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, key.EnvironmentID, node.NodeID, view.Generation); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET state='released', create_settled=true, released_at=clock_timestamp() WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleteSession(t, f, key, attachSession(t, f, key))
+	var held int
+	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_placements WHERE environment_id=$1 AND released_at IS NULL`, key.EnvironmentID).Scan(&held); err != nil || held != 0 || environmentStatus(t, f, key) != "expired" {
+		t.Fatal("the ended Environment kept its placement", held, err)
 	}
 }

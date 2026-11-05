@@ -122,7 +122,7 @@ func (s *Store) ListEnvironments(ctx context.Context, tenantID string, creator i
 	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
 		if cursor != "" {
-			after, err := q.GetStandaloneEnvironmentCursor(ctx, sqlc.GetStandaloneEnvironmentCursorParams{TenantID: tenant, ID: pgunit.PathID(cursor)})
+			after, err := q.GetStandaloneEnvironmentCursor(ctx, sqlc.GetStandaloneEnvironmentCursorParams{TenantID: tenant, ID: pgunit.PathID(cursor), CreatorKind: params.CreatorKind, CreatorID: params.CreatorID})
 			if err != nil {
 				return err
 			}

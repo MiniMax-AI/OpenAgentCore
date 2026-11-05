@@ -206,12 +206,15 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 }
 
 const getStandaloneEnvironmentCursor = `-- name: GetStandaloneEnvironmentCursor :one
-SELECT created_at, id FROM environments WHERE tenant_id = $1 AND id = $2 AND NOT session_owned
+SELECT created_at, id FROM environments
+WHERE tenant_id = $1 AND id = $2 AND NOT session_owned AND creator_kind = $3 AND creator_id = $4
 `
 
 type GetStandaloneEnvironmentCursorParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	ID          pgtype.UUID `json:"id"`
+	CreatorKind pgtype.Text `json:"creator_kind"`
+	CreatorID   pgtype.Text `json:"creator_id"`
 }
 
 type GetStandaloneEnvironmentCursorRow struct {
@@ -220,7 +223,12 @@ type GetStandaloneEnvironmentCursorRow struct {
 }
 
 func (q *Queries) GetStandaloneEnvironmentCursor(ctx context.Context, arg GetStandaloneEnvironmentCursorParams) (GetStandaloneEnvironmentCursorRow, error) {
-	row := q.db.QueryRow(ctx, getStandaloneEnvironmentCursor, arg.TenantID, arg.ID)
+	row := q.db.QueryRow(ctx, getStandaloneEnvironmentCursor,
+		arg.TenantID,
+		arg.ID,
+		arg.CreatorKind,
+		arg.CreatorID,
+	)
 	var i GetStandaloneEnvironmentCursorRow
 	err := row.Scan(&i.CreatedAt, &i.ID)
 	return i, err

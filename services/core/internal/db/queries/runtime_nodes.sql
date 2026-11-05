@@ -66,8 +66,10 @@ LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp()) WHERE environment_id=$1;
 
 -- name: ReleaseUnallocatedRuntimePlacement :exec
+-- The deleted Session's Environment gives up a placement it holds without
+-- compute when it is reclaimed with the Session or has ended.
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE environment_id IN(SELECT s.environment_id FROM sessions s JOIN environments e ON e.id=s.environment_id WHERE s.id=$1 AND e.session_owned)
+WHERE environment_id IN(SELECT s.environment_id FROM sessions s JOIN environments e ON e.id=s.environment_id WHERE s.id=$1 AND (e.session_owned OR e.status IN ('failed','expired')))
 AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released');
 
 -- name: ReleaseEnvironmentRuntimePlacement :exec

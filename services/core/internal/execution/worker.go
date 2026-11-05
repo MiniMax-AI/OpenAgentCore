@@ -241,6 +241,9 @@ func (w *Worker) CreateEnvironment(ctx context.Context, tenant string, input ses
 	if err := w.runtimes.validateNetworkAdmission(environment.Network); err != nil {
 		return "", err
 	}
+	if err := w.checkAdmissionOwnership(ctx); err != nil {
+		return "", err
+	}
 	id, err := w.dispatcher.Sessions.CreateEnvironment(ctx, tenant, input)
 	if err == nil {
 		w.wakeScheduler()
