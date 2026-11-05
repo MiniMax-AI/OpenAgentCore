@@ -18,6 +18,7 @@ CORE_CLIENT_TYPES = ROOT / 'packages/agents-client/src/generated/core-api.ts'
 REQUEST_SHAPES = {
     'CreateAgentParams': (), 'UpdateAgentParams': (), 'SessionAgentConfigParam': (),
     'CreateAgentSessionParams': ('agent', 'environment'),
+    'CreateAgentEnvironmentParams': ('environment',),
     'UpdateAgentSessionParams': (),
     'CreateVaultParams': (), 'UpdateVaultParams': (),
     'CreateVaultCredentialParams': (),

@@ -253,6 +253,10 @@ func (unavailableAdmission) CreateSession(context.Context, string, sessions.Crea
 	return sessions.Creation{}, execution.ErrExecutionUnavailable
 }
 
+func (unavailableAdmission) CreateEnvironment(context.Context, string, sessions.CreateEnvironment) (string, error) {
+	return "", execution.ErrExecutionUnavailable
+}
+
 func (unavailableAdmission) SubmitInputs(context.Context, string, string, string, []sessions.Input) ([]sessions.InputReceipt, error) {
 	return nil, execution.ErrExecutionUnavailable
 }

@@ -182,6 +182,9 @@
     "sources": ["#/components/schemas/PublicEnvironmentResource"],
     "order": ["id", "object", "type", "status", "files", "plugins", "skills"]
   },
+  "EnvironmentInfoList": {
+    "sources": ["#/components/schemas/AgentEnvironmentListResource"]
+  },
   "EnvironmentNetwork": {
     "sources": ["#/components/schemas/NetworkPolicyResource"]
   },

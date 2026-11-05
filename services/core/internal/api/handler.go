@@ -25,10 +25,12 @@ type SessionCreation interface {
 	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
 }
 
-// SessionAdmission creates Sessions that admit work through the execution
-// Worker, which validates execution support first.
+// SessionAdmission creates Sessions that admit work, and standalone
+// Environments, through the execution Worker, which validates execution
+// support first.
 type SessionAdmission interface {
 	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	CreateEnvironment(context.Context, string, sessions.CreateEnvironment) (string, error)
 }
 
 // Sessions updates and deletes Sessions, and records their public write audit.
@@ -95,6 +97,8 @@ func (h *Handler) routes() *chi.Mux {
 		r.Get("/agents/environments/templates/{environment_template_id}", h.getEnvironmentTemplate)
 		r.Post("/agents/environments/templates/{environment_template_id}", h.updateEnvironmentTemplate)
 		r.Delete("/agents/environments/templates/{environment_template_id}", h.deleteEnvironmentTemplate)
+		r.Post("/agents/environments", h.createEnvironment)
+		r.Get("/agents/environments", h.listEnvironments)
 		r.Get("/agents/environments/{environment_id}", h.getEnvironment)
 		r.Get("/agents/environments/{environment_id}/files", h.listEnvironmentFiles)
 		r.Head("/agents/environments/{environment_id}/files", methodNotAllowed)
@@ -120,7 +124,6 @@ func (h *Handler) routes() *chi.Mux {
 		h.registerAutomationRoutes(r)
 		// Official operations Core does not run answer like an unknown route.
 		for _, route := range []struct{ method, path string }{
-			{http.MethodPost, "/agents/environments"}, {http.MethodGet, "/agents/environments"},
 			{http.MethodGet, "/agents/sessions/{session_id}/traces"},
 		} {
 			r.MethodFunc(route.method, route.path, unsupportedOperation)

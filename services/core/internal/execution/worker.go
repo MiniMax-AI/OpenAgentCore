@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -174,6 +175,34 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 		w.wakeScheduler()
 	}
 	return creation, err
+}
+
+// CreateEnvironment validates that the deployment can host a standalone
+// Environment before the pooled creation, and wakes the scheduler once it
+// commits.
+func (w *Worker) CreateEnvironment(ctx context.Context, tenant string, input sessions.CreateEnvironment) (string, error) {
+	var environment v1.Environment
+	if err := json.Unmarshal(input.Configuration, &environment); err != nil {
+		return "", sessions.ErrInvalidInput
+	}
+	ready, err := w.runtimes.ensureDeployment(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !ready {
+		return "", ErrExecutionUnavailable
+	}
+	if err := w.runtimes.validateWorkspaceAdmission(ctx); err != nil {
+		return "", err
+	}
+	if err := w.runtimes.validateNetworkAdmission(environment.Network); err != nil {
+		return "", err
+	}
+	id, err := w.dispatcher.Sessions.CreateEnvironment(ctx, tenant, input)
+	if err == nil {
+		w.wakeScheduler()
+	}
+	return id, err
 }
 
 // Run retains queued work across restarts, but never replays an uncertain claim.

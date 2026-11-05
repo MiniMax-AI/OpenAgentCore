@@ -104,9 +104,6 @@ type EnvironmentCreationStorage interface {
 	// returns nil. CreateEnvironment stores the identity with the standalone
 	// Environment. A malformed tenant is ErrInvalidInput.
 	WithEnvironmentCreation(ctx context.Context, tenant string, identity EnvironmentIdentity, apply func(context.Context, StandaloneCreationTx) error) error
-	// FindEnvironmentCreation reads the tenant's Environment created under
-	// key, or ErrNotFound.
-	FindEnvironmentCreation(ctx context.Context, tenant, key string) (EnvironmentCreationRecord, error)
 }
 
 // EnvironmentIdentity is the retry identity of a standalone Environment.
@@ -145,11 +142,11 @@ type CreateEnvironment struct {
 	InitialFiles    []environmentconfig.InitialFile
 }
 
-func (s *Service) environmentIdentity(tenantKey string, creator identity.Subject, request json.RawMessage) (EnvironmentIdentity, error) {
+func (s *Service) environmentIdentity(key string, creator identity.Subject, request json.RawMessage) (EnvironmentIdentity, error) {
 	if err := creator.Validate(); err != nil {
 		return EnvironmentIdentity{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	if !validCreationKey(tenantKey) {
+	if !validCreationKey(key) {
 		return EnvironmentIdentity{}, ErrInvalidInput
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)
@@ -159,7 +156,7 @@ func (s *Service) environmentIdentity(tenantKey string, creator identity.Subject
 	if hash == nil {
 		return EnvironmentIdentity{}, ErrInvalidInput
 	}
-	return EnvironmentIdentity{Key: tenantKey, Hash: *hash, Creator: creator}, nil
+	return EnvironmentIdentity{Key: key, Hash: *hash, Creator: creator}, nil
 }
 
 // decide accepts a stored creation for the identity or reports a conflict.
@@ -168,21 +165,6 @@ func (i EnvironmentIdentity) decide(record EnvironmentCreationRecord) error {
 		return ErrIdempotencyConflict
 	}
 	return nil
-}
-
-// FindEnvironmentCreation recovers a standalone creation by its recorded
-// request, without resolving a mutable source. A different request or creator
-// under the key is ErrIdempotencyConflict.
-func (s *Service) FindEnvironmentCreation(ctx context.Context, tenant, key string, request json.RawMessage, creator identity.Subject) (string, error) {
-	ident, err := s.environmentIdentity(key, creator, request)
-	if err != nil {
-		return "", err
-	}
-	record, err := s.storage.FindEnvironmentCreation(ctx, tenant, key)
-	if err != nil {
-		return "", fmt.Errorf("find environment creation: %w", err)
-	}
-	return record.EnvironmentID, ident.decide(record)
 }
 
 // CreateEnvironment creates a standalone Environment under a tenant-scoped

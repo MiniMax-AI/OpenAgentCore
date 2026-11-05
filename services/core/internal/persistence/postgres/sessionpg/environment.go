@@ -106,3 +106,45 @@ func LoadEnvironmentInput(ctx context.Context, q *sqlc.Queries, session pgtype.U
 	}
 	return state, nil
 }
+
+// ListEnvironments reads a page of the tenant's standalone Environments,
+// whatever their status, after the cursor Environment in (created, ID) order.
+// It reports whether more follow. A missing cursor is sessions.ErrNotFound.
+func (s *Store) ListEnvironments(ctx context.Context, tenantID, cursor string, limit int, ascending bool) ([]sessions.Environment, bool, error) {
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return nil, false, err
+	}
+	params := sqlc.ListStandaloneEnvironmentsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
+	var page []sessions.Environment
+	more := false
+	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := sqlc.New(tx)
+		if cursor != "" {
+			after, err := q.GetStandaloneEnvironmentCursor(ctx, sqlc.GetStandaloneEnvironmentCursorParams{TenantID: tenant, ID: pgunit.PathID(cursor)})
+			if err != nil {
+				return err
+			}
+			params.AfterCreated, params.AfterID = after.CreatedAt, after.ID
+		}
+		rows, err := q.ListStandaloneEnvironments(ctx, params)
+		if err != nil {
+			return err
+		}
+		if more = len(rows) > limit; more {
+			rows = rows[:limit]
+		}
+		for _, row := range rows {
+			environment, err := environmentFromRow(row.Environment, row.AttachedSessionID, row.ExternalWorkspace, nil)
+			if err != nil {
+				return err
+			}
+			page = append(page, environment)
+		}
+		return nil
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, sessions.ErrNotFound
+	}
+	return page, more, err
+}

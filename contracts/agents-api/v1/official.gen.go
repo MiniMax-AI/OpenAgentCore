@@ -518,6 +518,15 @@ type EnvironmentInfo struct {
 	Skills  []json.RawMessage `json:"skills" binding:"required" swaggertype:"array,object"`
 }
 
+// EnvironmentInfoList projects AgentEnvironmentListResource.
+type EnvironmentInfoList struct {
+	Object  string            `json:"object" binding:"required" enums:"list"`
+	Data    []EnvironmentInfo `json:"data" binding:"required"`
+	FirstID *string           `json:"first_id" binding:"required" extensions:"x-nullable"`
+	LastID  *string           `json:"last_id" binding:"required" extensions:"x-nullable"`
+	HasMore bool              `json:"has_more" binding:"required"`
+}
+
 // EnvironmentNetwork projects NetworkPolicyResource.
 type EnvironmentNetwork struct {
 	Access         string   `json:"access" binding:"required" enums:"enabled,disabled,restricted"`

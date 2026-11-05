@@ -198,6 +198,101 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 	return i, err
 }
 
+const getStandaloneEnvironmentCursor = `-- name: GetStandaloneEnvironmentCursor :one
+SELECT created_at, id FROM environments WHERE tenant_id = $1 AND id = $2 AND NOT session_owned
+`
+
+type GetStandaloneEnvironmentCursorParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type GetStandaloneEnvironmentCursorRow struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) GetStandaloneEnvironmentCursor(ctx context.Context, arg GetStandaloneEnvironmentCursorParams) (GetStandaloneEnvironmentCursorRow, error) {
+	row := q.db.QueryRow(ctx, getStandaloneEnvironmentCursor, arg.TenantID, arg.ID)
+	var i GetStandaloneEnvironmentCursorRow
+	err := row.Scan(&i.CreatedAt, &i.ID)
+	return i, err
+}
+
+const listStandaloneEnvironments = `-- name: ListStandaloneEnvironments :many
+SELECT e.id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, e.tenant_id, e.configuration, e.session_owned, e.idempotency_key, e.request_hash, e.creator_kind, e.creator_id, s.id AS attached_session_id,
+       EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
+FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = $1 AND NOT e.session_owned
+  AND ($2::timestamptz IS NULL
+       OR (NOT $3::boolean AND (e.created_at, e.id) < ($2::timestamptz, $4::uuid))
+       OR ($3::boolean AND (e.created_at, e.id) > ($2::timestamptz, $4::uuid)))
+ORDER BY
+    CASE WHEN $3::boolean THEN e.created_at END ASC,
+    CASE WHEN $3::boolean THEN e.id END ASC,
+    CASE WHEN NOT $3::boolean THEN e.created_at END DESC,
+    CASE WHEN NOT $3::boolean THEN e.id END DESC
+LIMIT $5
+`
+
+type ListStandaloneEnvironmentsParams struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	AfterCreated pgtype.Timestamptz `json:"after_created"`
+	Ascending    bool               `json:"ascending"`
+	AfterID      pgtype.UUID        `json:"after_id"`
+	PageLimit    int32              `json:"page_limit"`
+}
+
+type ListStandaloneEnvironmentsRow struct {
+	Environment       Environment `json:"environment"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
+	ExternalWorkspace bool        `json:"external_workspace"`
+}
+
+func (q *Queries) ListStandaloneEnvironments(ctx context.Context, arg ListStandaloneEnvironmentsParams) ([]ListStandaloneEnvironmentsRow, error) {
+	rows, err := q.db.Query(ctx, listStandaloneEnvironments,
+		arg.TenantID,
+		arg.AfterCreated,
+		arg.Ascending,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStandaloneEnvironmentsRow{}
+	for rows.Next() {
+		var i ListStandaloneEnvironmentsRow
+		if err := rows.Scan(
+			&i.Environment.ID,
+			&i.Environment.Status,
+			&i.Environment.CreatedAt,
+			&i.Environment.FailureReason,
+			&i.Environment.FailedAt,
+			&i.Environment.FailureDetail,
+			&i.Environment.Initialization,
+			&i.Environment.InitializationSteps,
+			&i.Environment.TenantID,
+			&i.Environment.Configuration,
+			&i.Environment.SessionOwned,
+			&i.Environment.IdempotencyKey,
+			&i.Environment.RequestHash,
+			&i.Environment.CreatorKind,
+			&i.Environment.CreatorID,
+			&i.AttachedSessionID,
+			&i.ExternalWorkspace,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnvironment = `-- name: LockEnvironment :one
 SELECT e.session_owned, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS attached_session_id
 FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE

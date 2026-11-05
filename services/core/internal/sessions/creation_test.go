@@ -129,11 +129,6 @@ func (s *fakeStorage) WithEnvironmentCreation(context.Context, string, Environme
 	return nil
 }
 
-func (s *fakeStorage) FindEnvironmentCreation(context.Context, string, string) (EnvironmentCreationRecord, error) {
-	s.record("FindEnvironmentCreation", false)
-	return EnvironmentCreationRecord{}, nil
-}
-
 // fingerprints is a fake FingerprintProviderKey that keeps keys apart.
 func fingerprints(secret string) (string, error) { return "fp-" + secret, nil }
 

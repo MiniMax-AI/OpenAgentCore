@@ -35,3 +35,21 @@ WHERE e.tenant_id = $1 AND e.id = $2;
 -- name: LockEnvironment :one
 SELECT e.session_owned, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS attached_session_id
 FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
+
+-- name: GetStandaloneEnvironmentCursor :one
+SELECT created_at, id FROM environments WHERE tenant_id = $1 AND id = $2 AND NOT session_owned;
+
+-- name: ListStandaloneEnvironments :many
+SELECT sqlc.embed(e), s.id AS attached_session_id,
+       EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
+FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = sqlc.arg(tenant_id) AND NOT e.session_owned
+  AND (sqlc.narg(after_created)::timestamptz IS NULL
+       OR (NOT sqlc.arg(ascending)::boolean AND (e.created_at, e.id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid))
+       OR (sqlc.arg(ascending)::boolean AND (e.created_at, e.id) > (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid)))
+ORDER BY
+    CASE WHEN sqlc.arg(ascending)::boolean THEN e.created_at END ASC,
+    CASE WHEN sqlc.arg(ascending)::boolean THEN e.id END ASC,
+    CASE WHEN NOT sqlc.arg(ascending)::boolean THEN e.created_at END DESC,
+    CASE WHEN NOT sqlc.arg(ascending)::boolean THEN e.id END DESC
+LIMIT sqlc.arg(page_limit);

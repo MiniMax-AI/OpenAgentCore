@@ -28,14 +28,6 @@ func (s *Store) WithEnvironmentCreation(ctx context.Context, tenantID string, id
 	})
 }
 
-func (s *Store) FindEnvironmentCreation(ctx context.Context, tenantID, key string) (sessions.EnvironmentCreationRecord, error) {
-	tenant, err := parseID(tenantID)
-	if err != nil {
-		return sessions.EnvironmentCreationRecord{}, err
-	}
-	return findEnvironmentCreation(ctx, s.units.Queries(), tenant, key)
-}
-
 func findEnvironmentCreation(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, key string) (sessions.EnvironmentCreationRecord, error) {
 	row, err := q.FindEnvironmentCreation(ctx, sqlc.FindEnvironmentCreationParams{TenantID: tenant, IdempotencyKey: pgtype.Text{String: key, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
