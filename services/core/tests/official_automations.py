@@ -114,6 +114,8 @@ def main():
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"expression": "bad"}), "expression")
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"timezone": "Mars/Base"}), "timezone")
         fails(BadRequestError, lambda: automations.create(type="once", name="bad", run_at=int(time.time()) - 5, target=existing), "run_at")
+        fails(BadRequestError, lambda: automations.create(type="once", name="bad", run_at=253402300800, target=existing), "run_at")
+        fails(BadRequestError, lambda: automations.update(once.id, run_at=253402300800), "run_at")
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {**new_session, "environment": {"type": "openai_hosted", "environment_id": "env"}}}))
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {**new_session, "agent": {"model": "m"}}}), "target")
         inline_target = {k: v for k, v in new_session.items() if k != "agent_id"}

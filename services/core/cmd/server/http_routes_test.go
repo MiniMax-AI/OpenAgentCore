@@ -88,7 +88,7 @@ func daemonComposition(t testing.TB) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apiHandler, err := api.NewHandler(api.Dependencies{
+	apiHandler, _, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
 		Projects: struct{ api.Projects }{}, ProjectsReader: trapProjectsReader{keys: keys},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},

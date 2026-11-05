@@ -155,7 +155,7 @@ func coreKeys(t testing.TB, tokens ...string) *DeploymentAuthenticator {
 // NewHandler rejects them.
 func newTestHandler(t testing.TB, deps Dependencies) http.Handler {
 	t.Helper()
-	h, err := NewHandler(deps)
+	h, _, err := NewHandler(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,11 +169,11 @@ func noDeploymentModelProvider(context.Context, string) (*modelconfiguration.Sna
 
 func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {
 	deps, _ := testDependencies(t)
-	if _, err := NewHandler(deps); err != nil {
+	if _, _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
 	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/"}
-	if _, err := NewHandler(deps); err != nil {
+	if _, _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -202,7 +202,7 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		t.Run(test.missing, func(t *testing.T) {
 			deps, f := testDependencies(t)
 			test.change(&deps, f)
-			if h, err := NewHandler(deps); err == nil || h != nil || !strings.Contains(err.Error(), test.missing) {
+			if h, _, err := NewHandler(deps); err == nil || h != nil || !strings.Contains(err.Error(), test.missing) {
 				t.Fatalf("NewHandler = %v, %v", h, err)
 			}
 		})

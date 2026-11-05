@@ -18,7 +18,7 @@ func TestAutomationsOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := testStore(t)
+	s, _ := newManagedTestStore(t)
 	token, foreign, tenant, project := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: project, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -36,7 +36,7 @@ func TestAutomationsOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, deliver, err := api.NewHandlerWithDelivery(deps)
+	_, deliver, err := api.NewHandler(deps)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -200,19 +200,12 @@ Each item is Core's deliberate or native behavior where the official service beh
 - When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
 - The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
 - Automations, where the pinned sources are silent ([Automations](./automations.md)):
-  - A target `existing_session` delivers its `instructions` as one `agent.session.input.message` with one `input_text` part, since the schema defines no notification Item or event.
-  - The cron grammar is Vixie crontab beyond "standard five-field". A nonexistent daylight saving minute is skipped, and a repeated one fires once at its first instant.
-  - After downtime, only the latest due occurrence is recorded.
-  - `pending_delivery` skips an occurrence while any invocation of the Automation is queued.
-  - A `once` Automation completes when its scheduled invocation is terminal.
-  - Pause holds a queued scheduled invocation until resume; manual invocations still deliver, in every status.
-  - Pausing a paused Automation and resuming an active one return it unchanged. Pausing or resuming a completed one, resuming a `once` Automation whose past `run_at` has no pending invocation, and changing `run_at` after its scheduled invocation exists return 409 `conflict_error`.
-  - A past `run_at`, a timing field of the other type, a target of another type, an invalid cron expression or time zone, and an inline `agent` without `model` where no deployment default applies return 400 `invalid_request_error` with Core's own params and messages.
-  - A skipped `existing_session` invocation carries the target's `session_id`; a `new_session` invocation has null until its Session exists.
-  - A `limit` outside 1–100 is clamped, and an unresolved `after` returns 404.
-  - Create validates the target with the checks Session create runs before it creates anything (shape, Environment Template, saved Agent, model and provider, Vault bindings, Harness support) and that an `existing_session` target's Session exists. Deployment readiness, admission and leases are checked at each delivery.
-  - Saved references resolve at each invocation. A queued invocation delivers the target as it was when it was recorded or invoked; an update applies to later invocations.
-  - Invocations are kept until the Automation is deleted. A deleted target Session fails each delivery.
+  - [Instructions delivery](./automations.md#targets) as one input message.
+  - [Cron grammar and daylight saving](./automations.md#schedules).
+  - [Downtime, skipping, completion and pause](./automations.md#invocations).
+  - [Conflict and rejection cases](./automations.md#state-changes), including the `run_at` limit.
+  - [Target validation and saved references](./automations.md#targets).
+  - [Paging](./automations.md): `limit` clamping and unresolved `after`.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.

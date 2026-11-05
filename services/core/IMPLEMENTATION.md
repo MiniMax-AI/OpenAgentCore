@@ -29,7 +29,7 @@ Adapters' execution repositories require a `*pgunit.Lease` at construction, and 
 Domain owners, each with its PostgreSQL adapter under `internal/persistence/postgres`:
 
 - `agents` (`agentpg`): saved Agents, their configuration merge and bounds, and the encrypted model-provider bundle bound to each Agent.
-- `automations` (`automationpg`): Automations, schedules and invocation records, and the delivery pass; see [Automations](../../contracts/agents-api/automations.md).
+- `automations` (`automationpg`): Automations, schedules and invocation records; see [Automations](../../contracts/agents-api/automations.md).
 - `files` (`filepg`): source Files.
 - `projects` (`projectpg`): Projects, Project API keys and key resolution for authentication. `projects` validates Project and key names by rune count, separately from the byte limits on node names, and decides key issuance over the share-locked Project so an archive and an issuance never both commit.
 - `vaults` (`vaultpg`): Vaults and Credentials, the encryption of Credential secrets, OAuth access-token refresh, and the MCP credential selection that Session creation freezes and the Dispatcher's `Credentials` resolves into a bearer token.

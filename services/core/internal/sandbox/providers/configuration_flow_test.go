@@ -133,7 +133,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	}
 	// The flow reaches only the deployment setup; every other dependency
 	// panics if called.
-	h, err := api.NewHandler(api.Dependencies{
+	h, _, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: auth, InstallationBindings: service,
 		Projects: struct{ api.Projects }{}, ProjectsReader: struct{ api.ProjectsReader }{},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},

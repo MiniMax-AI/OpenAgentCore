@@ -87,11 +87,6 @@ func (s *Store) Update(ctx context.Context, tenantID, id string, change func(aut
 		if err != nil {
 			return err
 		}
-		flags, err := q.AutomationFlags(ctx, row.ID)
-		if err != nil {
-			return err
-		}
-		current.Pending, current.Queued = flags.Pending, flags.Queued
 		if result, err = change(current); err != nil {
 			return err
 		}
@@ -192,11 +187,6 @@ func (s *Store) record(ctx context.Context, tenant, id pgtype.UUID, now time.Tim
 		if a.Status != automations.Active || a.NextRunAt == nil || a.NextRunAt.After(now) {
 			return nil
 		}
-		flags, err := q.AutomationFlags(ctx, id)
-		if err != nil {
-			return err
-		}
-		a.Queued = flags.Queued
 		snapshot, err := json.Marshal(a.Resource())
 		if err != nil {
 			return err
@@ -205,12 +195,6 @@ func (s *Store) record(ctx context.Context, tenant, id pgtype.UUID, now time.Tim
 		invocation := sqlc.InsertScheduledInvocationParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, AutomationID: id, ScheduledAt: timestamp(&occurrence.ScheduledAt), AutomationSnapshot: snapshot, Status: "queued"}
 		if occurrence.Skipped {
 			invocation.Status, invocation.SkipReason = "skipped", text("pending_delivery")
-			var target struct {
-				SessionID string `json:"session_id"`
-			}
-			if json.Unmarshal(a.Target, &target) == nil {
-				invocation.SessionID, _ = pgunit.ParseID(target.SessionID)
-			}
 		}
 		if err := q.InsertScheduledInvocation(ctx, invocation); err != nil {
 			return err
@@ -362,7 +346,7 @@ func (s *Store) ListInvocations(ctx context.Context, tenantID, id string, query 
 
 func automation(row sqlc.GetAutomationRow) (automations.Automation, error) {
 	a := automations.Automation{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID), Type: row.Type, Name: row.Name, Status: row.Status, RunAt: timePtr(row.RunAt),
-		Expression: row.Expression.String, Timezone: row.Timezone.String, NextRunAt: timePtr(row.NextRunAt), Target: row.Target, CreatedAt: row.CreatedAt.Time}
+		Expression: row.Expression.String, Timezone: row.Timezone.String, NextRunAt: timePtr(row.NextRunAt), Target: row.Target, CreatedAt: row.CreatedAt.Time, Pending: row.Pending, Queued: row.Queued}
 	var target struct {
 		Type string `json:"type"`
 	}

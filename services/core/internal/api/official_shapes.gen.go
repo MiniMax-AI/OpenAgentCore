@@ -569,7 +569,7 @@ var (
 		{"name", shape{kind: stringValue, required: true}},
 		{"target", shape{kind: openObject, required: true}},
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
-		{"run_at", shape{kind: integerValue, required: true}},
+		{"run_at", shape{kind: integerValue, minimum: -1 << 63, required: true}},
 	}}
 	updateAutomationParams = shape{kind: objectValue, members: []member{
 		{"name", shape{kind: stringValue}},
@@ -577,7 +577,7 @@ var (
 		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}}},
 		{"expression", shape{kind: stringValue}},
 		{"timezone", shape{kind: stringValue}},
-		{"run_at", shape{kind: integerValue}},
+		{"run_at", shape{kind: integerValue, minimum: -1 << 63}},
 	}}
 	automationTargetParamNewSession = shape{kind: objectValue, members: []member{
 		{"type", shape{kind: enumValue, values: []string{"new_session"}, required: true}},

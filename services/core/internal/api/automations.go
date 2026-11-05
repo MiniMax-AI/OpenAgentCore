@@ -59,12 +59,18 @@ func (h *Handler) createAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var kind struct {
-		Type string `json:"type"`
+		Type json.RawMessage `json:"type"`
 	}
 	_ = json.Unmarshal(raw, &kind)
 	pinned := createAutomationParamsPeriodic
-	if kind.Type == automations.Once {
+	switch string(kind.Type) {
+	case `"once"`:
 		pinned = createAutomationParamsOnce
+	case `"periodic"`, "":
+	default:
+		if writeFieldError(w, checkValue("type", kind.Type, shape{kind: enumValue, values: []string{automations.Periodic, automations.Once}})) {
+			return
+		}
 	}
 	if writeFieldError(w, validateBody(raw, pinned)) {
 		return
@@ -90,7 +96,11 @@ func (h *Handler) createAutomation(w http.ResponseWriter, r *http.Request) {
 	}
 	a := automations.Automation{TenantID: tenantID(r), Type: body.Type, Name: body.Name, Metadata: metadataOrEmpty(body.Metadata), Expression: body.Expression, Timezone: body.Timezone, TargetType: target.kind, Target: target.projection, Contents: target.contents}
 	if body.Type == automations.Once {
-		runAt := time.Unix(body.RunAt, 0)
+		runAt, err := automations.RunAt(body.RunAt)
+		if err != nil {
+			writeAutomationsError(w, r, err)
+			return
+		}
 		a.RunAt = &runAt
 	}
 	created, err := h.Automations.Create(r.Context(), a)
@@ -121,7 +131,11 @@ func (h *Handler) updateAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.RunAt != nil {
-		runAt := time.Unix(*body.RunAt, 0)
+		runAt, err := automations.RunAt(*body.RunAt)
+		if err != nil {
+			writeAutomationsError(w, r, err)
+			return
+		}
 		patch.RunAt = &runAt
 	}
 	if body.Target != nil {
@@ -154,7 +168,12 @@ func (h *Handler) listAutomations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.AutomationsReader.List(r.Context(), tenantID(r), automations.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, SessionID: sessionFilter(r)})
+	// A supplied empty session_id matches no Automation, as an empty agent_id matches no Session.
+	var sessionID *string
+	if values, present := r.URL.Query()["session_id"]; present {
+		sessionID = &values[0]
+	}
+	page, err := h.AutomationsReader.List(r.Context(), tenantID(r), automations.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, SessionID: sessionID})
 	if err != nil {
 		writeAutomationsError(w, r, err)
 		return
@@ -233,31 +252,18 @@ func (h *Handler) listAutomationInvocations(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, response)
 }
 
-// sessionFilter reads the session_id filter. A supplied empty value matches no
-// Automation, as an empty agent_id matches no Session.
-func sessionFilter(r *http.Request) *string {
-	if values, present := r.URL.Query()["session_id"]; present {
-		return &values[0]
-	}
-	return nil
-}
-
 // automationFields checks the name and metadata of a request. A nil name is
 // not checked.
 func automationFields(name *string, values map[string]string) error {
 	if name != nil {
-		if err := boundedText("name", *name, 256); err != nil {
-			return err
+		switch n := utf8.RuneCountInString(*name); {
+		case n < 1:
+			return &fieldError{param: "name", message: "Invalid 'name': empty string. Expected a string with minimum length 1, but got an empty string instead."}
+		case n > 256:
+			return &fieldError{param: "name", message: fmt.Sprintf("Invalid 'name': string too long. Expected a string with maximum length 256, but got a string with length %d instead.", n)}
 		}
 	}
 	return metadataFieldError(metadata.Validate(values))
-}
-
-func boundedText(param, value string, limit int) error {
-	if n := utf8.RuneCountInString(value); n < 1 || n > limit {
-		return &fieldError{param: param, message: fmt.Sprintf("%s must contain 1 to %d characters.", param, limit)}
-	}
-	return nil
 }
 
 // prefixTarget names a Session create field error under the target.
@@ -313,12 +319,16 @@ func (h *Handler) existingSessionTarget(r *http.Request, raw json.RawMessage) (a
 	if utf8.RuneCountInString(target.Instructions) > maxInstructions {
 		return fail, &fieldError{param: "target.instructions", message: "instructions must not exceed 1048576 characters."}
 	}
-	if _, err := executionInputs([]json.RawMessage{instructionsEvent(target.Instructions)}); err != nil {
+	inputs, err := executionInputs([]json.RawMessage{instructionsEvent(target.Instructions)})
+	if err != nil {
 		return fail, &fieldError{param: "target.instructions", message: "instructions must be non-empty text this service can store."}
 	}
 	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), target.SessionID)
 	if err != nil {
 		return fail, err
+	}
+	if h.Policy.ValidateEngineInputs(session.Engine, session.Configuration, inputs) != nil {
+		return fail, &fieldError{param: "target.instructions", message: "The Session's Harness does not accept these instructions."}
 	}
 	// The saved target names the Session by its canonical id, whatever form the request used.
 	contents, _ := json.Marshal(map[string]string{"session_id": session.ID, "instructions": target.Instructions})
@@ -343,6 +353,9 @@ func (h *Handler) newSessionTarget(r *http.Request, raw json.RawMessage, fields 
 	if inline == saved {
 		return fail, &fieldError{param: "target", message: "Provide exactly one of agent and agent_id."}
 	}
+	if length := utf8.RuneCountInString(stringField(fields["agent_id"])); length > 64 {
+		return fail, &fieldError{param: "target.agent_id", message: fmt.Sprintf("Invalid 'target.agent_id': string too long. Expected a string with maximum length 64, but got a string with length %d instead.", length)}
+	}
 	if inline {
 		var agent map[string]json.RawMessage
 		_ = json.Unmarshal(fields["agent"], &agent)
@@ -363,6 +376,12 @@ func (h *Handler) newSessionTarget(r *http.Request, raw json.RawMessage, fields 
 	}
 	plan, report, err := h.planSession(r.Context(), tenantID(r), "", &input)
 	if err != nil {
+		var required *modelProviderRequiredError
+		if errors.As(err, &required) {
+			report = func(w http.ResponseWriter, _ *http.Request, _ error) {
+				writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "target.x_agents_core.model_provider")
+			}
+		}
 		return automationTarget{report: report}, prefixTarget(err)
 	}
 	if inline {
@@ -420,4 +439,11 @@ func automationEnvironment(input sessionRequest) *v1.AutomationEnvironment {
 		result.WorkspaceDirectory = &env.WorkspaceDirectory
 	}
 	return result
+}
+
+// stringField reads a JSON string, or "" for anything else.
+func stringField(raw json.RawMessage) string {
+	var value string
+	_ = json.Unmarshal(raw, &value)
+	return value
 }

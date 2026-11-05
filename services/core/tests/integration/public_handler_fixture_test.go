@@ -107,7 +107,8 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 	for _, c := range configure {
 		c(&deps)
 	}
-	return api.NewHandler(deps)
+	h, _, err := api.NewHandler(deps)
+	return h, err
 }
 
 // fixtureAgents builds the Agent adapter and service on s.

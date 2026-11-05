@@ -7,7 +7,7 @@ An Automation saves a schedule and a target. When the schedule fires, Core deliv
 | Operation | Result |
 | --- | --- |
 | `POST /agents/automations` | 201, an active Automation; nothing is delivered |
-| `GET /agents/automations` | A page; `session_id` keeps Automations whose target is that Session |
+| `GET /agents/automations` | A page; `session_id` keeps Automations whose target is that Session. Lists clamp `limit` to 1–100, and an unresolved `after` returns 404 |
 | `GET /agents/automations/{automation_id}` | The Automation |
 | `POST /agents/automations/{automation_id}` | Replaces the fields in the body; `target` and `metadata` replace the whole field |
 | `DELETE /agents/automations/{automation_id}` | `agent.automation.deleted`; the target Session and the Sessions it created stay |
@@ -20,7 +20,7 @@ An Automation saves a schedule and a target. When the schedule fires, Core deliv
 `type` is `periodic` or `once`.
 
 - `periodic` has `expression` and `timezone`. Status is `active` or `paused`.
-- `once` has `run_at`, a Unix timestamp in seconds. Status is `active`, `paused` or `completed`; completed means the schedule has finished, not that the agent's work has.
+- `once` has `run_at`, a Unix timestamp in seconds, at most 253402300799. Status is `active`, `paused` or `completed`; completed means the schedule has finished, not that the agent's work has.
 - `name` holds 1–256 characters, `expression` 1–256, `timezone` 1–128. `metadata` follows the [validation errors](./wire-semantics.md#validation-errors).
 - `created_by` is always `{"type": "developer"}`: the `automations` agent tool is not supported, so an agent cannot create one ([Session admission](./wire-semantics.md#session-admission)).
 
@@ -28,7 +28,10 @@ An Automation saves a schedule and a target. When the schedule fires, Core deliv
 
 `expression` is a five-field crontab: minute, hour, day of month, month and day of week. A field is `*` or a comma list of `n`, `a-b`, `*/s` and `a-b/s`; months and weekdays also take three-letter names, and weekday 7 is Sunday. When neither day field starts with `*`, a day matches either. Descriptors such as `@daily`, a seconds field, `Local` and an empty zone are rejected, and so is an expression with no occurrence in the next five years.
 
-`timezone` is an IANA name, resolved from the tzdata Core embeds. A wall-clock minute that does not exist on a daylight saving change is skipped; a minute that occurs twice fires once, at its first instant.
+`timezone` is an IANA name, resolved from the system zoneinfo (or the directory in `ZONEINFO`) first and from the tzdata Core embeds otherwise. A job whose minute and hour fields both start with something other than `*` is fixed-time. On a daylight saving change:
+
+- Spring forward: a fixed-time job whose time falls in the gap runs at the first instant after the gap. A job with a `*` minute or hour runs only at wall times that exist.
+- Fall back: a fixed-time job in the repeated hour runs once, at its first instant. A job with a `*` minute or hour runs on both passes.
 
 If Core was down when occurrences were due, it records only the latest one.
 

@@ -104,16 +104,10 @@ type Handler struct {
 	requestLogs *requestLogs
 }
 
-// NewHandler builds the HTTP handler from complete dependencies.
-func NewHandler(deps Dependencies) (http.Handler, error) {
-	handler, _, err := NewHandlerWithDelivery(deps)
-	return handler, err
-}
-
-// NewHandlerWithDelivery builds the HTTP handler and the pass that records due
+// NewHandler builds the HTTP handler and the pass that records due
 // Automation occurrences and delivers queued invocations through the handler's
 // Session create and input paths.
-func NewHandlerWithDelivery(deps Dependencies) (http.Handler, func(context.Context) (*int64, int64, error), error) {
+func NewHandler(deps Dependencies) (http.Handler, func(context.Context) (*int64, int64, error), error) {
 	if err := deps.validate(); err != nil {
 		return nil, nil, err
 	}

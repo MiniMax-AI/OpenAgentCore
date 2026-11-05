@@ -61,6 +61,6 @@ Core resolves its own cgroup, including nested and subtree mounts, and reports t
 
 - The scheduler's `processed` counts the Turn and Environment work it selected in its last poll.
 - The Runtime sampler's `processed` and `failed` count the targets its last sweep observed and failed to observe.
-- The Automation delivery job's `processed` counts the occurrences it recorded and the invocations it settled in its last pass; `failed` counts storage failures. An invocation that failed for good is a settled record and does not count.
+- The Automation delivery job's `processed` counts the occurrences it recorded and the invocations it settled in its last pass; `failed` counts storage failures and panicked deliveries. An invocation that failed for good is a settled record and does not count.
 - A cleanup job's `processed` counts the rows it removed.
 - For the scheduler, the Automation delivery job and the cleanup jobs, a failed pass sets `processed` to null and `failed` to 1; `failed` never estimates lost rows or failed Turns.

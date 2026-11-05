@@ -13,7 +13,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -38,13 +37,19 @@ func (h *Handler) deliverAutomations(ctx context.Context) (*int64, int64, error)
 	}
 	deliveries, err := h.Automations.Deliverable(ctx, automationBatch)
 	if err != nil {
-		return nil, failed.Load() + 1, err
+		return nil, 1, err
 	}
 	var wg sync.WaitGroup
 	for _, d := range deliveries {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if p := recover(); p != nil {
+					log.Ctx(ctx).Error("Automation delivery panicked", "invocation_id", d.InvocationID, "panic", p)
+					failed.Add(1)
+				}
+			}()
 			outcome, done := h.deliverAutomation(ctx, d)
 			if !done {
 				return
@@ -101,10 +106,14 @@ func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery)
 			outcome.SessionID = target.SessionID
 			return outcome, true
 		}
-		if errors.Is(err, sessions.ErrTurnConflict) || errors.Is(err, execution.ErrExecutionUnavailable) || ctx.Err() != nil {
+		if errors.Is(err, sessions.ErrTurnConflict) {
 			return outcome, false
 		}
 		writeInputError(response, request, err)
+	}
+	// A server error, a busy Turn or a timeout is temporary; only a client error is permanent.
+	if response.Code >= 500 || ctx.Err() != nil {
+		return outcome, false
 	}
 	var envelope struct {
 		Error struct {
@@ -114,14 +123,10 @@ func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery)
 		} `json:"error"`
 	}
 	_ = json.Unmarshal(response.Body.Bytes(), &envelope)
-	code := envelope.Error.Type
+	outcome.Status, outcome.Code, outcome.Message = "failed", envelope.Error.Type, envelope.Error.Message
 	if envelope.Error.Code != nil {
-		code = *envelope.Error.Code
+		outcome.Code = *envelope.Error.Code
 	}
-	if response.Code == http.StatusServiceUnavailable && (code == "execution_unavailable" || code == "sandbox_reset_in_progress") || ctx.Err() != nil {
-		return outcome, false
-	}
-	outcome.Status, outcome.Code, outcome.Message = "failed", code, envelope.Error.Message
 	if outcome.Code == "" {
 		outcome.Code, outcome.Message = "internal_error", "The delivery could not be completed."
 	}

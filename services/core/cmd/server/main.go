@@ -383,7 +383,7 @@ func run(config processconfig.Config) error {
 			ConfigurationDiscovery: managedNodes.setup,
 		},
 	}
-	apiHandler, deliverAutomations, err := api.NewHandlerWithDelivery(deps)
+	apiHandler, deliverAutomations, err := api.NewHandler(deps)
 	if err != nil {
 		return err
 	}

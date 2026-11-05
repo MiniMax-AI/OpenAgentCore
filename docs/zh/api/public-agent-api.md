@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: a54b7abdac172ce02ed09ad501f33eff155278236a188a4897117eca35fb4055
+source_hash: 8846a755d119bc752f903715629d7be7c6aefef4498766c00889a714ac11d4b5
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -562,8 +562,6 @@ template = client.beta.agents.environments.templates.create(
 Session 启动时会冻结模板。详细信息请参阅 [Environment 模板](../../../contracts/agents-api/zh/environments.md#templates)。
 
 ## Automations {#automations}
-
-Automation 保存一个计划和一个目标。`periodic` Automation 按 IANA `timezone` 中的五字段 cron `expression` 触发；`once` Automation 在 `run_at` 触发。目标要么创建新 Session（`new_session`，即 Session 创建的请求体），要么向已有 Session 发送 `instructions`（`existing_session`）：
 
 ```python
 automation = client.beta.agents.automations.create(

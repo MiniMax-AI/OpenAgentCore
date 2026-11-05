@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 198b4deb88832ac7cdb28e67a0781469e44621b1baa2cccc54b7a2b9bceea36e
+source_hash: cc7259f262c8aad57eb45516d738dcc94dc38dfbd80011bb7a68d0c7f4458a3e
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -203,19 +203,12 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
 - Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：
-  - `existing_session` 目标把 `instructions` 作为一条 `agent.session.input.message` 投递，其中只有一个 `input_text` 部分，因为 schema 没有定义通知 Item 或事件。
-  - cron 语法在“标准五字段”之外采用 Vixie crontab。夏令时切换中不存在的分钟会被跳过，重复出现的分钟只在其第一个时刻触发一次。
-  - 停机之后，只记录最近一次到期的触发。
-  - Automation 已有排队中的 invocation 时，`pending_delivery` 会跳过新的触发。
-  - `once` Automation 在其计划 invocation 到达终态时完成。
-  - 暂停会保留排队中的计划 invocation 直到恢复；手动 invocation 在任何状态下仍会投递。
-  - 暂停已暂停的 Automation、恢复已激活的 Automation，会原样返回。暂停或恢复已完成的 Automation、恢复过去 `run_at` 且没有待处理 invocation 的 `once` Automation，以及在计划 invocation 产生后修改 `run_at`，均返回 409 `conflict_error`。
-  - 过去的 `run_at`、另一类型的时间字段、另一类型的目标、无效的 cron 表达式或时区、没有适用部署默认值而缺少 `model` 的内联 `agent`，返回 400 `invalid_request_error`，param 和消息为 Core 自己的内容。
-  - 被跳过的 `existing_session` invocation 带有目标的 `session_id`；`new_session` invocation 在其 Session 存在之前为 null。
-  - 超出 1–100 的 `limit` 会被截断，无法解析的 `after` 返回 404。
-  - 创建时用 Session 创建在创建任何东西之前执行的检查校验目标（形状、Environment Template、已保存的 Agent、模型和 provider、Vault 绑定、Harness 支持），并校验 `existing_session` 目标的 Session 是否存在。部署就绪、准入和租约在每次投递时检查。
-  - 目标中保存的引用在每次 invocation 时解析。排队中的 invocation 投递的是它被记录或触发时的目标；更新只作用于之后的 invocation。
-  - invocation 保留到 Automation 被删除。目标 Session 被删除后，每次投递都会失败。
+  - [指令投递](automations.md#targets)为一条输入消息。
+  - [cron 语法与夏令时](automations.md#schedules)。
+  - [停机、跳过、完成与暂停](automations.md#invocations)。
+  - [冲突与拒绝的情形](automations.md#state-changes)，包括 `run_at` 上限。
+  - [目标校验与保存的引用](automations.md#targets)。
+  - [分页](automations.md)：`limit` 截断与无法解析的 `after`。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。

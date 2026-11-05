@@ -1,7 +1,7 @@
 ---
 title: "Automations"
 source: contracts/agents-api/automations.md
-source_hash: d3bb3c4b1edc5d475c01a2c1e36c6bfbf83af0a90a7289791146d344d1d30ec0
+source_hash: 7973306d7ac27b5cb7aedc164368760a133f2e75663acfe8a401c3d09e8433b3
 ---
 
 Automation 保存一个计划和一个目标。计划触发时，Core 投递目标：创建新 Session，或向已有 Session 发送指令。锁定版本 SDK 的全部十个操作都在 `/v1/agents/automations` 下实现，并与其他 Beta 路由一样需要项目身份验证和 `OpenAI-Beta: agents=v1`。Automation 属于其密钥所在的项目；不存在的 ID 与其他项目的 ID 都返回 404。
@@ -9,7 +9,7 @@ Automation 保存一个计划和一个目标。计划触发时，Core 投递目�
 | 操作 | 结果 |
 | --- | --- |
 | `POST /agents/automations` | 201，一个 active 的 Automation；不会投递任何内容 |
-| `GET /agents/automations` | 一页结果；`session_id` 只保留目标为该 Session 的 Automation |
+| `GET /agents/automations` | 一页结果；`session_id` 只保留目标为该 Session 的 Automation。列表把 `limit` 截断到 1–100，无法解析的 `after` 返回 404 |
 | `GET /agents/automations/{automation_id}` | 该 Automation |
 | `POST /agents/automations/{automation_id}` | 替换请求体中的字段；`target` 和 `metadata` 整体替换 |
 | `DELETE /agents/automations/{automation_id}` | `agent.automation.deleted`；目标 Session 和它创建的 Session 保留 |
@@ -22,7 +22,7 @@ Automation 保存一个计划和一个目标。计划触发时，Core 投递目�
 `type` 为 `periodic` 或 `once`。
 
 - `periodic` 带有 `expression` 和 `timezone`。状态为 `active` 或 `paused`。
-- `once` 带有 `run_at`，即以秒为单位的 Unix 时间戳。状态为 `active`、`paused` 或 `completed`；completed 表示计划已结束，而不是 agent 的工作已结束。
+- `once` 带有 `run_at`，即以秒为单位的 Unix 时间戳，最大为 253402300799。状态为 `active`、`paused` 或 `completed`；completed 表示计划已结束，而不是 agent 的工作已结束。
 - `name` 为 1–256 个字符，`expression` 为 1–256，`timezone` 为 1–128。`metadata` 遵循[校验错误](wire-semantics.md#validation-errors)中的规则。
 - `created_by` 始终为 `{"type": "developer"}`：不支持 `automations` agent 工具，因此 agent 无法创建 Automation（[Session 准入](wire-semantics.md#session-admission)）。
 
@@ -30,7 +30,10 @@ Automation 保存一个计划和一个目标。计划触发时，Core 投递目�
 
 `expression` 是五字段 crontab：分钟、小时、日、月和星期。每个字段为 `*`，或由 `n`、`a-b`、`*/s` 和 `a-b/s` 组成的逗号列表；月和星期还接受三字母名称，星期 7 表示周日。日和星期两个字段都不以 `*` 开头时，满足任一个即匹配该日。`@daily` 这类描述符、秒字段、`Local` 和空时区会被拒绝，未来五年内没有触发时间的表达式也会被拒绝。
 
-`timezone` 是 IANA 名称，由 Core 内嵌的 tzdata 解析。夏令时切换中不存在的墙上时钟分钟会被跳过；出现两次的分钟只触发一次，在其第一个时刻。
+`timezone` 是 IANA 名称，先由系统 zoneinfo（或 `ZONEINFO` 指向的目录）解析，找不到时再用 Core 内嵌的 tzdata。分钟和小时字段都不以 `*` 开头的任务是定点任务。夏令时切换时：
+
+- 向前拨：落在空档里的定点任务在空档结束后的第一个时刻运行。分钟或小时字段为 `*` 的任务只在存在的墙上时间运行。
+- 向后拨：落在重复小时里的定点任务只在第一个时刻运行一次。分钟或小时字段为 `*` 的任务在两遍中都运行。
 
 如果 Core 停机期间有多次触发到期，它只记录最近一次。
 

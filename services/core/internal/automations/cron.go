@@ -12,9 +12,10 @@ import (
 type Schedule struct {
 	minutes, hours, days, months, weekdays uint64
 	// anyDay and anyWeekday report a day field that starts with "*". When
-	// neither does, a day matches either field.
-	anyDay, anyWeekday bool
-	location           *time.Location
+	// neither does, a day matches either field. fixed reports a minute and an
+	// hour field that both do not.
+	anyDay, anyWeekday, fixed bool
+	location                  *time.Location
 }
 
 var (
@@ -39,7 +40,7 @@ func ParseSchedule(expression, timezone string) (*Schedule, error) {
 	if err != nil {
 		return nil, &InvalidError{"timezone", "timezone must be an IANA time zone name."}
 	}
-	s := &Schedule{location: location, anyDay: strings.HasPrefix(fields[2], "*"), anyWeekday: strings.HasPrefix(fields[4], "*")}
+	s := &Schedule{location: location, anyDay: strings.HasPrefix(fields[2], "*"), anyWeekday: strings.HasPrefix(fields[4], "*"), fixed: !strings.HasPrefix(fields[0], "*") && !strings.HasPrefix(fields[1], "*")}
 	for i, target := range []struct {
 		mask     *uint64
 		min, max int
@@ -108,43 +109,61 @@ func parseValue(text string, names []string, first int) (int, error) {
 }
 
 // Next returns the first occurrence after the given time, or false when there
-// is none in the next five years. It walks wall-clock minutes in the Schedule's
-// zone. A wall-clock minute that does not exist is skipped, and one that occurs
-// twice fires once, at its first instant.
+// is none in the next five years. It follows crontab(5) around daylight saving
+// changes. A fixed-time Schedule, whose minute and hour fields do not start
+// with "*", runs a wall-clock time in a gap at the first instant after the gap
+// and a repeated one only at its first instant. Any other Schedule runs at
+// every instant whose wall-clock time matches: never in a gap, on both passes
+// of a repeated hour.
 func (s *Schedule) Next(after time.Time) (time.Time, bool) {
-	a := after.In(s.location)
-	civil := time.Date(a.Year(), a.Month(), a.Day(), a.Hour(), a.Minute()+1, 0, 0, time.UTC)
-	limit := civil.AddDate(5, 0, 0)
-	for civil.Before(limit) {
-		year, month, day := civil.Date()
+	t := after.Truncate(time.Minute).Add(time.Minute)
+	limit := t.AddDate(5, 0, 0)
+	for t.Before(limit) {
+		w := t.In(s.location)
 		switch {
-		case s.months&(1<<month) == 0:
-			civil = time.Date(year, month+1, 1, 0, 0, 0, 0, time.UTC)
-		case !s.dayMatches(civil):
-			civil = time.Date(year, month, day+1, 0, 0, 0, 0, time.UTC)
-		case s.hours&(1<<civil.Hour()) == 0:
-			civil = time.Date(year, month, day, civil.Hour()+1, 0, 0, 0, time.UTC)
-		case s.minutes&(1<<civil.Minute()) == 0:
-			civil = civil.Add(time.Minute)
+		case s.months&(1<<w.Month()) == 0:
+			t = time.Date(w.Year(), w.Month()+1, 1, 0, 0, 0, 0, s.location)
+		case !s.dayMatches(w):
+			t = time.Date(w.Year(), w.Month(), w.Day()+1, 0, 0, 0, 0, s.location)
+		case s.hours&(1<<w.Hour()) == 0:
+			t = t.Add(time.Duration(60-w.Minute()) * time.Minute)
+		case s.minutes&(1<<w.Minute()) == 0 || s.fixed && s.repeated(t):
+			t = t.Add(time.Minute)
 		default:
-			t := time.Date(year, month, day, civil.Hour(), civil.Minute(), 0, 0, s.location)
-			// Date may return either instant of a repeated minute; the earlier one is the occurrence.
-			_, before := t.Add(-24 * time.Hour).Zone()
-			if u := civil.Add(-time.Duration(before) * time.Second); u.Before(t) && s.atWall(u, civil) {
-				t = u
-			}
-			if s.atWall(t, civil) && t.After(after) {
-				return t, true
-			}
-			civil = civil.Add(time.Minute)
+			return s.gapBefore(after, t), true
 		}
 	}
 	return time.Time{}, false
 }
 
-// atWall reports whether the instant shows the wall-clock minute of civil in the Schedule's zone.
-func (s *Schedule) atWall(t, civil time.Time) bool {
-	return t.In(s.location).Format("2006-01-02 15:04") == civil.Format("2006-01-02 15:04")
+// repeated reports whether t is the later instant of a wall-clock minute that
+// a daylight saving change repeats.
+func (s *Schedule) repeated(t time.Time) bool {
+	t = t.In(s.location)
+	_, was := t.Add(-24 * time.Hour).Zone()
+	_, is := t.Zone()
+	u := t.Add(time.Duration(is-was) * time.Second)
+	return u.Before(t) && u.In(s.location).Format(time.DateTime) == t.Format(time.DateTime)
+}
+
+// gapBefore returns the first instant after a daylight saving gap that holds a
+// wall-clock minute a fixed-time Schedule matches, when it comes before t; else t.
+func (s *Schedule) gapBefore(after, t time.Time) time.Time {
+	for z := after.In(s.location); s.fixed; {
+		_, end := z.ZoneBounds()
+		if end.IsZero() || !end.Before(t) {
+			break
+		}
+		_, was := end.Add(-time.Second).In(s.location).Zone()
+		_, is := end.In(s.location).Zone()
+		for c := end.UTC().Add(time.Duration(was) * time.Second); c.Before(end.UTC().Add(time.Duration(is) * time.Second)); c = c.Add(time.Minute) {
+			if s.months&(1<<c.Month()) != 0 && s.dayMatches(c) && s.hours&(1<<c.Hour()) != 0 && s.minutes&(1<<c.Minute()) != 0 {
+				return end
+			}
+		}
+		z = end.In(s.location)
+	}
+	return t
 }
 
 func (s *Schedule) dayMatches(civil time.Time) bool {

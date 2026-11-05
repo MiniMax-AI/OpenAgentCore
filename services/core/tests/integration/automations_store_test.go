@@ -13,12 +13,8 @@ import (
 // Concurrent recording makes one invocation per occurrence, and settling is
 // idempotent: the first outcome stays and completes the one-time Automation.
 func TestAutomationRecordingAndSettlement(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := newManagedTestStore(t)
 	store, _ := fixtureAutomations(t, s)
-	// Record covers every tenant, so start from none.
-	if _, err := s.pool.Exec(t.Context(), "DELETE FROM automations"); err != nil {
-		t.Fatal(err)
-	}
 	newTenant := func() (string, string) {
 		tenant, project := uuid.NewString(), uuid.NewString()
 		if _, err := s.pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'test-org',$2)", tenant, project); err != nil {
@@ -94,11 +90,10 @@ func TestAutomationRecordingAndSettlement(t *testing.T) {
 		t.Fatalf("skipped occurrence: %+v %v", page, err)
 	}
 
-	// An occurrence whose stored target names its Session in a non-canonical form, or whose sealed
-	// target cannot be opened, stops no other Automation.
+	// A sealed target that cannot be opened stops no other Automation.
 	other, _ := newTenant()
 	odd, err := store.Create(t.Context(), automations.Automation{TenantID: other, Type: automations.Periodic, Name: "odd", Metadata: map[string]string{}, Status: automations.Active, Expression: "* * * * *", Timezone: "UTC", NextRunAt: &due,
-		TargetType: "existing_session", Target: []byte(`{"type":"existing_session","session_id":"urn:uuid:` + session + `"}`), Contents: []byte(`{}`)})
+		TargetType: "existing_session", Target: []byte(`{"type":"existing_session","session_id":"` + session + `"}`), Contents: []byte(`{}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

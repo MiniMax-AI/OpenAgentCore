@@ -41,7 +41,7 @@ type Automation struct {
 	Contents   json.RawMessage
 	CreatedAt  time.Time
 	// Pending and Queued report a queued scheduled invocation and a queued
-	// invocation of any source. Only locked reads fill them.
+	// invocation of any source.
 	Pending, Queued bool
 }
 
@@ -78,6 +78,17 @@ type Patch struct {
 	Target, Contents     json.RawMessage
 	Expression, Timezone *string
 	RunAt                *time.Time
+}
+
+// maxRunAt is the last second of year 9999, the last a stored timestamp holds.
+const maxRunAt = 253402300799
+
+// RunAt converts a Unix timestamp in seconds, which must not pass year 9999.
+func RunAt(unix int64) (time.Time, error) {
+	if unix > maxRunAt {
+		return time.Time{}, &InvalidError{"run_at", "run_at must not be later than 253402300799."}
+	}
+	return time.Unix(unix, 0), nil
 }
 
 // Occurrence is what a due Automation records.

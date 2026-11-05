@@ -561,8 +561,6 @@ A Session freezes the template when it starts. Details: [Environment Templates](
 
 ## Automations
 
-An Automation saves a schedule and a target. A `periodic` Automation fires on a five-field cron `expression` in an IANA `timezone`; a `once` Automation fires at `run_at`. The target either creates a new Session (`new_session`, the body of Session create) or sends `instructions` to an existing one (`existing_session`):
-
 ```python
 automation = client.beta.agents.automations.create(
     type="periodic",
