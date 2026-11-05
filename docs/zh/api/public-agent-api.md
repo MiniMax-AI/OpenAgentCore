@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 8c09bb8ae2cc51057298e4f6524e2145d897fcaaa7155a15c233a5267fe2768b
+source_hash: 8846a755d119bc752f903715629d7be7c6aefef4498766c00889a714ac11d4b5
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -53,6 +53,7 @@ agents /agents
 | [Files](#files) | `/files`、`/agents/environments/{id}/files`、`/agents/sessions/{id}/artifacts` | 上传内容、工作区文件和输出 |
 | [Skills](#skills) | `/skills` | 带版本的能力捆绑包 |
 | [Environment 模板](#environment-templates) | `/agents/environments/templates` | 可复用的工作区设置 |
+| [Automations](#automations) | `/agents/automations` | 按计划创建 Session 或发送指令 |
 | [Vaults](#vaults) | `/vaults` | MCP 服务器的只写凭据 |
 | Subagents | `/agents/sessions/{id}/subagents` | 只读的子任务；请参阅 [子 Agent](../../../contracts/agents-api/zh/subagents.md) |
 
@@ -67,6 +68,7 @@ Core 的路由与固定版本 SDK 中的路由一致，完整列表见 [upstream
 | 停止当前 Turn，或在响应丢失后恢复 | [取消](#cancel)、[幂等性](#idempotency) |
 | 从 Agent 调用你自己的代码 | [函数工具](#function-tools) |
 | 为 Agent 提供 Skills、软件包、文件和设置命令 | [Skills](#skills)、[Environment 模板](#environment-templates) |
+| 按计划启动 Session 或发送指令 | [Automations](#automations) |
 | 连接需要凭据的 MCP 服务器 | [Vaults](#vaults) 和 [执行工具](../../../contracts/agents-api/zh/execution-tools.md) |
 | 在自己的计算机上使用 Skill 或 Plugin 目录 | [本地能力目录](../getting-started/self-hosted.md#local-capability-directories) |
 | 将文件放入工作区，或下载 Agent 生成的内容 | [Files](#files) |
@@ -558,6 +560,26 @@ template = client.beta.agents.environments.templates.create(
 | `files`、`skills`、`plugins` | 初始内容。最多 50 个文件，内联数据总计最多 10 MiB |
 
 Session 启动时会冻结模板。详细信息请参阅 [Environment 模板](../../../contracts/agents-api/zh/environments.md#templates)。
+
+## Automations {#automations}
+
+```python
+automation = client.beta.agents.automations.create(
+    type="periodic",
+    name="Weekday report",
+    expression="0 9 * * 1-5",
+    timezone="Asia/Shanghai",
+    target={
+        "type": "new_session",
+        "agent_id": agent.id,
+        "environment": {"type": "none"},
+        "input": [{"role": "user", "content": [{"type": "input_text", "text": "Write the daily report."}]}],
+    },
+)
+invocation = client.beta.agents.automations.invocations.create(automation.id)  # deliver once now
+```
+
+暂停、恢复和删除只会停止或结束计划，不影响 Session。每次投递都是一条 invocation 记录，其 `status` 从 `queued` 变为 `completed` 或 `failed`；`session_id` 是它到达的 Session。详细信息和限制：[Automations](../../../contracts/agents-api/zh/automations.md)。
 
 ## Vaults {#vaults}
 

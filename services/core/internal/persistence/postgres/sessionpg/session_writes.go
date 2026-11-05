@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -75,18 +74,8 @@ func (s *Store) UpdateSession(ctx context.Context, tenantID, sessionID string, e
 		if err != nil {
 			return err
 		}
-		before, err := sessions.ExecutionModel(current.Configuration)
-		if err != nil {
+		if err := q.MarkSessionModelSource(ctx, sqlc.MarkSessionModelSourceParams{SessionID: row.ID, Before: current.Configuration, After: configuration}); err != nil {
 			return err
-		}
-		after, err := sessions.ExecutionModel(configuration)
-		if err != nil {
-			return err
-		}
-		if !reflect.DeepEqual(before, after) {
-			if err := q.MarkSessionModelSource(ctx, row.ID); err != nil {
-				return err
-			}
 		}
 		if err := auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceSession, uuid.UUID(row.ID.Bytes).String(), ""); err != nil {
 			return err

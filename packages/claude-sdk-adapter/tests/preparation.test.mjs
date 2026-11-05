@@ -126,7 +126,7 @@ async function launch(t, mode) {
     } finally { clearTimeout(timer); notify = () => {}; }
   };
   const send = value => child.stdin.write(JSON.stringify(value) + "\n");
-  const turn = text => send({ type: "turn_start", turn_id: "run", input: [{ content: [{ type: "input_text", text }] }] });
+  const turn = text => send({ type: "turn_start", turn_id: "run", input: [{ content: [{ type: "input_text", text }] }], settings: { model: "fixed-model", effort: null, review: "" } });
   const ready = () => wait(() => events.some(event => event.type === "executor_ready"));
   const finish = async code => {
     await wait(() => events.some(event => event.type === "turn_settled"));

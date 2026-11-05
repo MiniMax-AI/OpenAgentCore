@@ -211,3 +211,21 @@ func TestEndedChildTurnWithdrawsItsPendingCall(t *testing.T) {
 	default:
 	}
 }
+
+func TestApprovalEscalationsAreDeniedWithMethodNotFound(t *testing.T) {
+	tc, srv, cleanup := NewTestClient()
+	defer cleanup()
+	newFunctionTestSession(tc.JSONRPCClient)
+	if err := SendServerRequest(srv, "approval", "item/commandExecution/requestApproval", map[string]any{"threadId": "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		ID    string `json:"id"`
+		Error struct {
+			Code int `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(srv.FromClient).Decode(&reply); err != nil || reply.ID != "approval" || reply.Error.Code != -32601 {
+		t.Fatal(reply, err)
+	}
+}

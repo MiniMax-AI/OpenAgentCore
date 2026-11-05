@@ -195,7 +195,7 @@ An allocation moves to `cleanup_pending` when its Session is deleted or archived
 
 A Provider declares `DeploymentPolicy.Network`: `Restrict` means it can refuse public addresses and allow named public domains, and Core admits `disabled` and `restricted` Environments only then; `PrivateDomains` means it can allow the private addresses that named hosts resolve to. Core validates the deployment's [network cap](../contracts/agents-api/sandbox-deployment.md#network) against the declaration when the selection is saved and never substitutes another behavior.
 
-Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derived from the allocation's deployment generation, its Session's frozen Environment `network` policy and its frozen model provider. `disabled` leaves only `Endpoints`; `restricted` clears `Public` and lists the allowed domains in `PrivateDomains` when the cap names them and in `Domains` otherwise ([policy](../contracts/agents-api/environments.md#restricted-network)):
+Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derived from the allocation's deployment generation, the Environment's frozen `network` policy and, for a Session-owned Environment, its Session's model provider. `disabled` leaves only `Endpoints`; `restricted` clears `Public` and lists the allowed domains in `PrivateDomains` when the cap names them and in `Domains` otherwise ([policy](../contracts/agents-api/environments.md#restricted-network)):
 
 - `Public`: public addresses are allowed.
 - `PrivateDomains`: exact host names, or `*.example.com` for its subdomains but not `example.com` itself, whose resolved addresses, private ones included, are allowed.

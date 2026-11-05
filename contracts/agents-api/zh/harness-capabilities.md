@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 97c83c3295b7150e81118d5fa302463b7781689e533d8906ce1b85baa26b54af
+source_hash: c7b4dae594607c91790c8d7d5d346bff1f0f57cd75147ab520bcf016174b68d4
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -29,7 +29,7 @@ source_hash: 97c83c3295b7150e81118d5fa302463b7781689e533d8906ce1b85baa26b54af
 | `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | `auto`：已准入 | 已拒绝 |
 | 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`、`fast`：已准入；`ultrafast` 已拒绝 | 已拒绝 | 已拒绝 |
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
-| Session 更新 `agent.model`、`reasoning.effort`（含 null）、`service_tier` 和 `review: auto_review` | 已拒绝 | 已拒绝 | 已拒绝 |
+| Session 更新 `agent.model`、`reasoning.effort`（含 null）、`service_tier` 和 `review: auto_review` | 在下一个根 Turn 应用；`reasoning.effort` 不能重置为 null | 在下一个根 Turn 应用，但 `service_tier` 已拒绝 | 已拒绝 |
 | Session 更新 `agent.tools` | 已拒绝 | 已拒绝 | 已拒绝 |
 | `compaction.async: true`、`experimental.time_awareness: true`，以及 `automations` 和 `computer_use` 工具 | 已拒绝 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |

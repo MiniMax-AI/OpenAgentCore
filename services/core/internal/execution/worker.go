@@ -117,7 +117,7 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	if err != nil {
 		return nil, err
 	}
-	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
+	if err := w.dispatcher.ValidateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
 		return nil, err
 	}
 	if err := w.checkInputCredentials(ctx, value, key, inputs); err != nil {

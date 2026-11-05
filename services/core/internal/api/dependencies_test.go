@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
@@ -106,6 +107,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
 		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
+		Automations: struct{ Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		Sessions:        f.sessions,
 		SessionsReader:  f.sessionsReader,
 		SessionCreation: f.sessionCreation,
@@ -153,7 +155,7 @@ func coreKeys(t testing.TB, tokens ...string) *DeploymentAuthenticator {
 // NewHandler rejects them.
 func newTestHandler(t testing.TB, deps Dependencies) http.Handler {
 	t.Helper()
-	h, err := NewHandler(deps)
+	h, _, err := NewHandler(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,11 +169,11 @@ func noDeploymentModelProvider(context.Context, string) (*modelconfiguration.Sna
 
 func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {
 	deps, _ := testDependencies(t)
-	if _, err := NewHandler(deps); err != nil {
+	if _, _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
 	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/"}
-	if _, err := NewHandler(deps); err != nil {
+	if _, _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -200,7 +202,7 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		t.Run(test.missing, func(t *testing.T) {
 			deps, f := testDependencies(t)
 			test.change(&deps, f)
-			if h, err := NewHandler(deps); err == nil || h != nil || !strings.Contains(err.Error(), test.missing) {
+			if h, _, err := NewHandler(deps); err == nil || h != nil || !strings.Contains(err.Error(), test.missing) {
 				t.Fatalf("NewHandler = %v, %v", h, err)
 			}
 		})

@@ -162,6 +162,14 @@ type TurnStartParams struct {
 	Input    []UserInput `json:"input"`
 	// OutputSchema constrains this Turn's final assistant message natively.
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+	// The settings below apply to this and later Turns. Every Turn sends them,
+	// because a cold thread/resume restores the persisted values.
+	Model          string `json:"model,omitempty"`
+	Effort         string `json:"effort,omitempty"`
+	ServiceTier    any    `json:"serviceTier"` // a tier, or null for auto
+	ApprovalPolicy string `json:"approvalPolicy"`
+	// ApprovalsReviewer is "user" or "auto_review".
+	ApprovalsReviewer string `json:"approvalsReviewer"`
 }
 
 type TurnInterruptParams struct {

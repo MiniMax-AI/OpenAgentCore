@@ -17,7 +17,6 @@ import (
 
 var testIdentity = Identity{
 	EnvironmentID: "a1000000-0000-4000-8000-000000000001",
-	SessionID:     "a1000000-0000-4000-8000-000000000002",
 }
 
 // The fixture maps declared managed paths; Finalize knows nothing about it.
@@ -142,15 +141,11 @@ func TestSnapshotIdentityAndSourceLifetime(t *testing.T) {
 	if content, err := first.ReadFile("directories/0/resource.txt"); err != nil || string(content) != "first" {
 		t.Fatal("old snapshot followed source edit")
 	}
-	next := testIdentity
-	next.SessionID = "a1000000-0000-4000-8000-000000000003"
-	for _, scenario := range []string{"session", "environment", "selection"} {
+	for _, scenario := range []string{"environment", "selection"} {
 		identity, selection := testIdentity, input
 		switch scenario {
-		case "session":
-			identity = next
 		case "environment":
-			identity.EnvironmentID = next.SessionID
+			identity.EnvironmentID = "a1000000-0000-4000-8000-000000000003"
 		case "selection":
 			selection.Directories = []string{"/caller/other"}
 		}
@@ -158,11 +153,11 @@ func TestSnapshotIdentityAndSourceLifetime(t *testing.T) {
 			t.Fatalf("%s mismatch accepted", scenario)
 		}
 	}
-	if err := Finalize(second, input, next, resolve); err != nil {
+	if err := Finalize(second, input, testIdentity, resolve); err != nil {
 		t.Fatal(err)
 	}
 	if content, err := second.ReadFile("directories/0/resource.txt"); err != nil || string(content) != "second" {
-		t.Fatal("new Session did not capture new source bytes")
+		t.Fatal("new snapshot did not capture new source bytes")
 	}
 }
 

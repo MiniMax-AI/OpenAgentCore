@@ -14,7 +14,7 @@ const windows = process.platform === 'win32';
 const bundle = join(root, 'native-installer');
 const manifest = JSON.parse(await readFile(join(bundle, 'bundle.json'), 'utf8'));
 const protocol = (await readFile('internal/agentdaemon/proto/version.go', 'utf8')).match(/const Version = "([^"]+)"/)[1];
-const environment = randomUUID(), session = randomUUID(), device = randomUUID();
+const environment = randomUUID(), device = randomUUID();
 const workspace = join(root, 'onboarding-workspace');
 const installation = join(root, 'onboarding-installation');
 // Core serves the base archive and one archive per component, as the release publishes them.
@@ -54,7 +54,7 @@ const server = createServer(async (request, response) => {
     response.writeHead(204); return response.end();
   }
   if (!secret || request.headers.authorization !== `Bearer ${secret}`) return json(401, {});
-  if (url.pathname.endsWith('/enroll')) return json(200, { device_id: device, session_id: session, environment_id: environment, workspace_directory: workspace });
+  if (url.pathname.endsWith('/enroll')) return json(200, { device_id: device, environment_id: environment, workspace_directory: workspace });
   if (url.pathname.endsWith('/bootstrap')) return json(200, { device_id: device, ws_url: remote, heartbeat_seconds: 15 });
   if (url.pathname.endsWith('/connection')) return json(200, { environment_id: environment, status: connected ? 'connected' : 'disconnected' });
   return json(404, {});

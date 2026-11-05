@@ -109,7 +109,7 @@ The bootstrap and WebSocket routes share one error body, `{"error": code, "detai
 
 ### Enroll a self-hosted daemon
 
-`POST /api/v1/agent-daemon/enroll` with the executor credential and exactly `{"environment_id": "…"}` (no query) binds one dedicated device to the Environment's Session and returns `device_id`, `session_id`, `environment_id` and `workspace_directory`. It never returns another credential: the executor credential becomes the daemon credential of that device. A retry with the same credential returns the same binding. A successful response carries `Cache-Control: no-store`.
+`POST /api/v1/agent-daemon/enroll` with the executor credential and exactly `{"environment_id": "…"}` (no query) binds one dedicated device to the Environment and returns `device_id`, `environment_id` and `workspace_directory`. It never returns another credential: the executor credential becomes the daemon credential of that device. A retry with the same credential returns the same binding. A successful response carries `Cache-Control: no-store`.
 
 | HTTP | When |
 | --- | --- |

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
@@ -13,9 +14,12 @@ import (
 type Config struct {
 	Node       string
 	Entrypoint string
-	StateDir   string
-	Env        []string
-	Workspace  *WorkspaceConfig
+	// StateRoot and RuntimeRoot hold each Session's native state, derived from its state key.
+	StateRoot   string
+	RuntimeRoot string
+	Env         []string
+	// Workspace is the trusted workspace directory; empty means environment:none.
+	Workspace string
 }
 
 type subagentOptions struct {
@@ -50,9 +54,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return startRequest{}, nil, err
 	}
 	if err := harnessconfiguration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
-		return fail(err.Error())
-	}
-	if err := harnessconfiguration.Declaration.ValidateTurnSettings(req.Turn); err != nil {
 		return fail(err.Error())
 	}
 	start.Model = req.Turn.Model
@@ -126,29 +127,31 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return fail("SDK entrypoint must be absolute")
 	}
 	config.Env = withProvider(config.Env, provider)
-	if config.Workspace != nil {
-		profile, env, err := prepareWorkspace(config, req)
+	state, err := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
+	if err != nil {
+		return fail(err.Error())
+	}
+	if config.Workspace != "" {
+		profile, env, err := prepareWorkspace(config, req, state)
 		if err != nil {
 			return startRequest{}, nil, err
 		}
 		start.Workspace = profile
-		start.Cwd = config.Workspace.Directory
+		start.Cwd = config.Workspace
 		return start, env, nil
 	}
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
 		return fail("local execution and history recovery require a dedicated workspace")
 	}
-	if !filepath.IsAbs(config.StateDir) || filepath.Clean(config.StateDir) != config.StateDir || filepath.Dir(config.StateDir) == config.StateDir {
-		return fail("SDK state must be an explicit private absolute directory")
-	}
-	start.Cwd = filepath.Join(config.StateDir, "work")
-	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {
+	start.Cwd = filepath.Join(state, "work")
+	configDir, home, tmp := filepath.Join(state, "config"), filepath.Join(state, "home"), filepath.Join(state, "tmp")
+	for _, dir := range []string{start.Cwd, configDir, home, tmp} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return startRequest{}, nil, err
 		}
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"))
+	env = append(env, "CLAUDE_CONFIG_DIR="+configDir, "HOME="+home, "TMPDIR="+tmp)
 	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err

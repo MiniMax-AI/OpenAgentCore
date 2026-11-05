@@ -23,6 +23,7 @@ type reusableExecutor struct {
 	mu       sync.Mutex
 	closeErr error
 	startErr error
+	turn     proto.TurnSettings
 }
 
 func (e *reusableExecutor) Close(context.Context) error {
@@ -31,11 +32,12 @@ func (e *reusableExecutor) Close(context.Context) error {
 	defer e.mu.Unlock()
 	return e.closeErr
 }
-func (e *reusableExecutor) StartTurn(_ context.Context, id string, _ proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *reusableExecutor) StartTurn(_ context.Context, id string, turn proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if e.startErr != nil {
 		return nil, e.startErr
 	}
 	t := &reusableTurn{id: id, out: out, settled: make(chan struct{})}
+	e.turn = turn
 	e.starts <- t
 	return t, nil
 }
@@ -84,7 +86,7 @@ func executorRequest() proto.ExecutionPreparePayload {
 
 // registerExecutorKind registers info for prepared execution only.
 func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
-	reg.RegisterKind(info, harnessconfig.Configuration{})
+	reg.RegisterKind(info, harnessconfig.Declaration{Execution: harnessconfig.ExecutionOptions{ReasoningEfforts: []string{"low", "high"}}, SessionUpdates: harnessconfig.SessionUpdates{ReasoningEffort: proto.CapabilitySupported}})
 	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
@@ -155,6 +157,32 @@ func TestExecutorRetainsOwnerAcrossIndependentTurns(t *testing.T) {
 	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "second Turn settled")
 	if owner.closes.Load() != 0 {
 		t.Fatal("executor closed between Turns")
+	}
+}
+func TestExecutorAcceptsDeclaredTurnChangesAndStartsWithThem(t *testing.T) {
+	owner := &reusableExecutor{starts: make(chan *reusableTurn, 2)}
+	r, s, calls := executorRouter(t, owner, time.Minute)
+	first := executorAdmission(t, r, s, "first", executorRequest())
+	startExecutorTurn(t, r, s, "first", "one", first)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "first Turn settled")
+	req := executorRequest()
+	req.Configuration.AgentSessionID = "native-session"
+	req.Configuration.Turn.ReasoningEffort = "high"
+	second := executorAdmission(t, r, s, "second", req)
+	startExecutorTurn(t, r, s, "second", "two", second)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "second Turn settled")
+	req.Configuration.Turn.ReasoningEffort = ""
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "reset", req)); err == nil {
+		t.Fatal("accepted an undeclared reset of effort")
+	}
+	req.Configuration.Turn.ReasoningEffort = "max"
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "undeclared", req)); err == nil {
+		t.Fatal("accepted an undeclared effort")
+	}
+	if !second.Reused || calls.Load() != 1 || owner.turn.ReasoningEffort != "high" {
+		t.Fatalf("reused=%t calls=%d turn=%+v", second.Reused, calls.Load(), owner.turn)
 	}
 }
 func TestExecutorCancelSettlesTurnWithoutClosingOwner(t *testing.T) {
@@ -232,7 +260,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Declaration{})
 	registry.RegisterExecutor("reusable", factory)
 	sender := &recSender{}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, IdleTimeout: time.Minute})
@@ -301,6 +329,16 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatal("mismatched session invoked native preparation")
+	}
+}
+
+func TestUnboundRuntimeKeepsSessionsSideBySide(t *testing.T) {
+	owner := &reusableExecutor{}
+	r, s, calls := executorRouter(t, owner, time.Minute)
+	executorAdmission(t, r, s, "first", executorRequest())
+	executorAdmission(t, r, s, "second", noEnvironmentPreparation("next", proto.PromptRequestPayload{AgentKind: "reusable"}))
+	if owner.closes.Load() != 0 || calls.Load() != 2 {
+		t.Fatalf("unbound Runtime closes=%d prepares=%d, want 0 and 2", owner.closes.Load(), calls.Load())
 	}
 }
 

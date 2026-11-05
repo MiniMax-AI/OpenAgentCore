@@ -30,10 +30,10 @@ func (s *capabilitiesTestSender) Send(ctx context.Context, env proto.Envelope) e
 	}
 }
 
-func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
+func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string) {
 	t.Helper()
-	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
+	environment := uuid.NewString()
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	return router, sender, environment, session
+	return router, sender, environment
 }
 
 func capabilityEnvelope(t *testing.T, id string, request proto.RuntimePreparePayload) proto.Envelope {
@@ -54,10 +54,10 @@ func capabilityEnvelope(t *testing.T, id string, request proto.RuntimePreparePay
 	return env
 }
 
-func capabilityBegin(environment, session string, body []byte) proto.RuntimePreparePayload {
+func capabilityBegin(environment string, body []byte) proto.RuntimePreparePayload {
 	digest := sha256.Sum256(body)
 	return proto.RuntimePreparePayload{
-		BudgetMS: 300000, Step: "begin", Action: "skill", EnvironmentID: environment, SessionID: session,
+		BudgetMS: 300000, Step: "begin", Action: "skill", EnvironmentID: environment,
 		Skill:     &proto.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."},
 		SizeBytes: len(body), SHA256: hex.EncodeToString(digest[:]),
 	}
@@ -90,10 +90,10 @@ func shutdownCapabilitiesRouter(t *testing.T, router *Router) {
 func TestRuntimePreparationTransferValidatesCompleteBodyBeforeMutation(t *testing.T) {
 	for _, mode := range []string{"offset", "digest", "short", "oversized-chunk"} {
 		t.Run(mode, func(t *testing.T) {
-			r, sender, environment, session := capabilitiesTestRouter(t)
+			r, sender, environment := capabilitiesTestRouter(t)
 			defer shutdownCapabilitiesRouter(t, r)
 			body := bytes.Repeat([]byte("a"), proto.RuntimePrepareChunkBytes+1)
-			request := capabilityBegin(environment, session, body)
+			request := capabilityBegin(environment, body)
 			if mode == "digest" {
 				request.SHA256 = stringsOfZeroDigest()
 			}
@@ -143,15 +143,13 @@ func TestRuntimePreparationTransferValidatesCompleteBodyBeforeMutation(t *testin
 func stringsOfZeroDigest() string { return hex.EncodeToString(make([]byte, sha256.Size)) }
 
 func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
-	r, sender, environment, session := capabilitiesTestRouter(t)
+	r, sender, environment := capabilitiesTestRouter(t)
 	defer shutdownCapabilitiesRouter(t, r)
-	for _, mode := range []string{"environment", "session", "size", "nil-binding"} {
-		request := capabilityBegin(environment, session, []byte("abc"))
+	for _, mode := range []string{"environment", "size", "nil-binding"} {
+		request := capabilityBegin(environment, []byte("abc"))
 		switch mode {
 		case "environment":
 			request.EnvironmentID = uuid.NewString()
-		case "session":
-			request.SessionID = uuid.NewString()
 		case "size":
 			request.SizeBytes = proto.RuntimePrepareMaxBytes + 1
 		case "nil-binding":
@@ -171,7 +169,7 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation"} {
 		t.Run(mode, func(t *testing.T) {
-			r, sender, environment, session := capabilitiesTestRouter(t)
+			r, sender, environment := capabilitiesTestRouter(t)
 			switch mode {
 			case "write":
 				r.workspaceWrite = &workspaceUpload{}
@@ -182,12 +180,12 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			case "run":
 				r.sessions["run"] = &sessionState{}
 			case "executor":
-				r.executors[session] = &executorState{}
+				r.executors["session"] = &executorState{}
 			case "preparation":
 				r.preparations["p"] = &preparationState{owns: true}
 			}
 			id := uuid.NewString()
-			if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
+			if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, []byte("abc")))); err != nil {
 				t.Fatal(err)
 			}
 			if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
@@ -208,9 +206,9 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 }
 
 func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T) {
-	r, sender, environment, session := capabilitiesTestRouter(t)
+	r, sender, environment := capabilitiesTestRouter(t)
 	id := uuid.NewString()
-	if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, []byte("abc")))); err != nil {
 		t.Fatal(err)
 	}
 	capabilitiesReceipt(t, sender, id, "ready")
@@ -218,7 +216,7 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte("abc"))
-	write, err := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: session, Path: "proof", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])})
+	write, err := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, Path: "proof", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,11 +242,11 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 }
 
 func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.T) {
-	r, sender, environment, session := capabilitiesTestRouter(t)
+	r, sender, environment := capabilitiesTestRouter(t)
 	sender.frames = make(chan proto.Envelope)
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
-	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &proto.CapabilitySources{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, Sources: &proto.CapabilitySources{}}
 	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
@@ -337,10 +335,10 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 			t.Fatalf("unsafe result: %+v", got)
 		}
 	}
-	r, sender, environment, session := capabilitiesTestRouter(t)
+	r, sender, environment := capabilitiesTestRouter(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
-	request := capabilityBegin(environment, session, []byte("abc"))
+	request := capabilityBegin(environment, []byte("abc"))
 	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
@@ -368,9 +366,9 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 
 func TestRuntimePreparationStagingDeadlineRejectsWithoutApplying(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r, sender, environment, session := capabilitiesTestRouter(t)
+		r, sender, environment := capabilitiesTestRouter(t)
 		id := uuid.NewString()
-		request := capabilityBegin(environment, session, []byte("abc"))
+		request := capabilityBegin(environment, []byte("abc"))
 		if err := r.Handle(t.Context(), capabilityEnvelope(t, id, request)); err != nil {
 			t.Fatal(err)
 		}
@@ -390,10 +388,10 @@ func TestRuntimePreparationStagingDeadlineRejectsWithoutApplying(t *testing.T) {
 
 func TestRuntimePreparationApplyOutlivesStagingAndHonorsBudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r, sender, environment, session := capabilitiesTestRouter(t)
+		r, sender, environment := capabilitiesTestRouter(t)
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		id := uuid.NewString()
-		request := capabilityBegin(environment, session, []byte("abc"))
+		request := capabilityBegin(environment, []byte("abc"))
 		owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true, transferDeadline: time.Now().Add(2 * time.Minute)}
 		close(owner.ready)
 		r.runtimePreparation = owner
@@ -427,9 +425,9 @@ func TestRuntimePreparationApplyOutlivesStagingAndHonorsBudget(t *testing.T) {
 
 func TestRuntimePreparationHonorsBeginBudgetDuringStaging(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r, sender, environment, session := capabilitiesTestRouter(t)
+		r, sender, environment := capabilitiesTestRouter(t)
 		id := uuid.NewString()
-		request := capabilityBegin(environment, session, []byte("abc"))
+		request := capabilityBegin(environment, []byte("abc"))
 		request.BudgetMS = 10
 		if err := r.Handle(t.Context(), capabilityEnvelope(t, id, request)); err != nil {
 			t.Fatal(err)
@@ -444,10 +442,10 @@ func TestRuntimePreparationHonorsBeginBudgetDuringStaging(t *testing.T) {
 
 func TestRuntimePreparationReportsApplyDuration(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		r, sender, environment, session := capabilitiesTestRouter(t)
+		r, sender, environment := capabilitiesTestRouter(t)
 		_, cancel := context.WithCancel(t.Context())
 		id := uuid.NewString()
-		request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &proto.CapabilitySources{}}
+		request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, Sources: &proto.CapabilitySources{}}
 		owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 		close(owner.ready)
 		r.runtimePreparation = owner

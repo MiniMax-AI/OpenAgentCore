@@ -342,7 +342,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	environment, session := uuid.NewString(), uuid.NewString()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
-	if err := localworkspace.Bind(environment, session, t.TempDir(), t.TempDir()); err != nil {
+	if err := localworkspace.Bind(environment, t.TempDir(), t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(localworkspace.Unbind)
@@ -368,7 +368,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		}
 	}()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Declaration{})
 	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return native, nil })
 	control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: environment}, signal: make(chan os.Signal, 1)}
 	finished := make(chan error, 1)

@@ -27,7 +27,7 @@ func markerBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 }
 func markerPath(b *Binding) string {
 	identity := b.capabilityIdentity()
-	return filepath.Join(b.stateRoot, "daemon", "capability-installations", identity.EnvironmentID+"-"+identity.SessionID+".json")
+	return filepath.Join(b.stateRoot, "daemon", "capability-installations", identity.EnvironmentID+".json")
 }
 func TestSnapshotMarkerRoundTrip(t *testing.T) {
 	b, _ := markerBinding(t)
@@ -185,7 +185,7 @@ func TestSnapshotMarkerRefusesDamagedState(t *testing.T) {
 func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T) {
 	b, _ := markerBinding(t)
 	identity := b.capabilityIdentity()
-	finalize := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &proto.CapabilitySources{}}
+	finalize := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, Action: "finalize", Sources: &proto.CapabilitySources{}}
 	if err := b.ApplyRuntimePreparation(t.Context(), finalize, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T)
 	if err := os.RemoveAll(b.capabilityRoot); err != nil {
 		t.Fatal(err)
 	}
-	skill := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	skill := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, Action: "skill", Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 	if err := b.ApplyRuntimePreparation(t.Context(), skill, []byte("x")); err == nil {
 		t.Fatal("completed identity accepted import")
 	}
@@ -237,7 +237,7 @@ func TestCapabilityMarkerSurvivesComputeReplacement(t *testing.T) {
 	marker.close()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	identity := b.capabilityIdentity()
-	replacement, err := NewWithCapabilityDirectory(identity.EnvironmentID, identity.SessionID, b.workspace, b.capabilityRoot)
+	replacement, err := NewWithCapabilityDirectory(identity.EnvironmentID, b.workspace, b.capabilityRoot)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Version = 3
+const Version = 4
 const MaxBytes = 16 * 1024
 
 // PublicWorkspace is the workspace path applications and Core use for a hosted Environment.
@@ -35,7 +35,7 @@ var ErrInvalid = errors.New("invalid Runtime bootstrap input")
 // Connection is a current-version launch input, not Runtime's private auth store.
 // CoreURL includes the machine API base path. The provider owns delivery and
 // file permissions; Runtime owns validation and its authentication representation.
-// EnvironmentID, SessionID and Workspace bind the Runtime to its Environment.
+// EnvironmentID and Workspace bind the Runtime to its Environment.
 // SuspendControl is true exactly when the Provider declares checkpoint support.
 type Connection struct {
 	Version        int    `json:"version"`
@@ -43,7 +43,6 @@ type Connection struct {
 	DeviceID       string `json:"device_id"`
 	Credential     string `json:"credential"`
 	EnvironmentID  string `json:"environment_id"`
-	SessionID      string `json:"session_id"`
 	Workspace      string `json:"workspace"`
 	SuspendControl bool   `json:"suspend_control"`
 }
@@ -59,7 +58,7 @@ func (c Connection) Validate() error {
 		u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
 		u.RawPath != "" || u.Path != "/api/v1" ||
 		strings.ContainsAny(c.CoreURL, "?#") || strings.ContainsFunc(c.CoreURL, unicode.IsSpace) ||
-		!canonicalUUID(c.DeviceID) || !canonicalUUID(c.EnvironmentID) || !canonicalUUID(c.SessionID) ||
+		!canonicalUUID(c.DeviceID) || !canonicalUUID(c.EnvironmentID) ||
 		!filepath.IsAbs(c.Workspace) || filepath.Clean(c.Workspace) != c.Workspace || c.Workspace == "/" ||
 		c.Credential == "" || strings.ContainsFunc(c.Credential, func(r rune) bool { return r == 0 || unicode.IsSpace(r) }) {
 		return ErrInvalid
@@ -109,8 +108,6 @@ func Decode(raw []byte) (Connection, error) {
 			err = d.Decode(&c.Credential)
 		case "environment_id":
 			err = d.Decode(&c.EnvironmentID)
-		case "session_id":
-			err = d.Decode(&c.SessionID)
 		case "workspace":
 			err = d.Decode(&c.Workspace)
 		case "suspend_control":
@@ -131,7 +128,7 @@ func Decode(raw []byte) (Connection, error) {
 	if token, err = d.Token(); err != nil || token != json.Delim('}') {
 		return Connection{}, ErrInvalid
 	}
-	if len(seen) != 8 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
+	if len(seen) != 7 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
 		return Connection{}, ErrInvalid
 	}
 	return c, nil

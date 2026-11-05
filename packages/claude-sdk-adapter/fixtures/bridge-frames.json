@@ -50,13 +50,13 @@
         "env_names": ["ANTHROPIC_API_KEY"]
       }
     },
-    { "type": "turn_start", "turn_id": "run-1", "input": [{ "content": [{ "type": "input_text", "text": "Hello" }] }] },
+    { "type": "turn_start", "turn_id": "run-1", "input": [{ "content": [{ "type": "input_text", "text": "Hello" }] }], "settings": { "model": "claude-fixture", "effort": "high", "review": "auto_review" } },
     { "type": "turn_cancel", "turn_id": "run-1" },
     { "type": "steer", "turn_id": "run-1", "input_id": "input-1", "input": [{ "content": [{ "type": "input_text", "text": "Also this" }] }] },
     { "type": "function_result", "turn_id": "run-1", "call_id": "call-1", "delivery_id": "delivery-1", "success": true, "content": [{ "type": "input_text", "text": "42" }] }
   ],
   "from_bridge": [
-    { "type": "executor_ready", "protocol": 3 },
+    { "type": "executor_ready", "protocol": 4 },
     { "type": "turn_started", "turn_id": "run-1" },
     { "type": "turn_settled", "turn_id": "run-1", "confirmed": true, "reusable": false, "reason": "native_error" },
     { "type": "input_ready", "turn_id": "run-1", "session_id": "native-session" },

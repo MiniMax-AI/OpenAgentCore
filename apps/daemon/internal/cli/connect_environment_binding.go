@@ -62,7 +62,7 @@ func bindEnvironmentRuntime(remote string, bound machineapi.Enrollment, workspac
 	if bound.WorkspaceDirectory != runtimebootstrap.PublicWorkspace && bound.WorkspaceDirectory != workspace {
 		return errors.New("connect: enrollment does not match the Runtime workspace")
 	}
-	if err := localworkspace.Bind(bound.EnvironmentID, bound.SessionID, workspace, capabilityDirectory); err != nil {
+	if err := localworkspace.Bind(bound.EnvironmentID, workspace, capabilityDirectory); err != nil {
 		return errors.New("connect: local Runtime layout unavailable")
 	}
 	return saveEnvironmentBinding(root, environmentBinding{RemoteURL: remote, Enrollment: bound, LocalWorkspace: workspace, CapabilityDirectory: capabilityDirectory})
@@ -94,7 +94,7 @@ func saveEnvironmentBinding(root string, want environmentBinding) error {
 		}
 	} else if errors.Is(err, os.ErrNotExist) {
 		// Unlabelled native state cannot safely be adopted by a new enrollment.
-		for _, native := range []string{"runtime", "sessions", "daemon/agent-sessions"} {
+		for _, native := range []string{"runtime", "sessions"} {
 			if _, e := os.Lstat(filepath.Join(root, native)); !errors.Is(e, os.ErrNotExist) {
 				return errors.New("connect: existing Runtime history has no Environment binding")
 			}
@@ -105,7 +105,7 @@ func saveEnvironmentBinding(root string, want environmentBinding) error {
 		}
 		for _, entry := range profiles {
 			if entry.IsDir() {
-				for _, name := range []string{"auth.json", "sessions.json", "runtime"} {
+				for _, name := range []string{"auth.json", "sessions.json"} {
 					if _, e := os.Lstat(filepath.Join(dir, entry.Name(), name)); !errors.Is(e, os.ErrNotExist) {
 						return errors.New("connect: existing profile has no Environment binding")
 					}

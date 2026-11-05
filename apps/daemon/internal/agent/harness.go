@@ -78,7 +78,6 @@ func Narrow(capability *proto.CapabilitySupport, provided bool) {
 
 // DiscoveryOptions provides process context without naming an implementation.
 type DiscoveryOptions struct {
-	Profile string
 	// StateRoot holds private history retained with the Environment filesystem.
 	StateRoot string
 	// RuntimeRoot holds instance-private configuration and process files.
@@ -105,7 +104,7 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	if widened := Widened(declaration.Capabilities, advertised); len(widened) > 0 {
 		panic("agent.Registry.Register: discovery widened " + strings.Join(widened, ", "))
 	}
-	r.RegisterKind(runtime.Info, declaration.Configuration)
+	r.RegisterKind(runtime.Info, declaration.Declaration)
 	if runtime.Executor != nil {
 		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
 	}
@@ -225,21 +224,21 @@ type Installation struct {
 // RegisterKind installs the heartbeat descriptor and model configuration for an
 // agent_kind. Callers may set Available=false when an adapter exists but its
 // underlying CLI is not usable.
-func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration harnessconfig.Configuration) {
+func (r *Registry) RegisterKind(info proto.SupportedAgentKind, declaration harnessconfig.Declaration) {
 	kind := info.Kind
 	if kind == "" {
 		panic("agent.Registry.Register: empty kind")
 	}
-	if err := configuration.ValidateDeclaration(); err != nil {
+	if err := declaration.Configuration.ValidateDeclaration(); err != nil {
 		panic(err)
 	}
 	if err := info.ValidateDeclaration(); err != nil {
 		panic(err)
 	}
-	configuration = configuration.Clone()
+	declaration.Configuration = declaration.Configuration.Clone()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.configurations[kind] = configuration
+	r.declarations[kind] = declaration
 	delete(r.executors, kind)
 	info.Capabilities.Preparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
@@ -254,12 +253,12 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	if !exists || factory == nil {
 		panic("agent.Registry.RegisterExecutor: registered kind and factory required")
 	}
-	configuration, declared := r.configurations[kind]
+	declaration, declared := r.declarations[kind]
 	if !declared {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
 	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
-		if _, err := configuration.Prepare(req.Turn.Model, req.AgentOptions); err != nil {
+		if _, err := declaration.Configuration.Prepare(req.Turn.Model, req.AgentOptions); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req)

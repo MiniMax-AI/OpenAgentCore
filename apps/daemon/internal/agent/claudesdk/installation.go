@@ -3,10 +3,11 @@ package claudesdk
 import (
 	"context"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 	"path/filepath"
 	"runtime"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 func Installation() agent.Installation {

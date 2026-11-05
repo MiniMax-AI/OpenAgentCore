@@ -23,7 +23,7 @@ The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/Open
 
 ### Unsupported operations
 
-The Automations routes (all 10), `POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no Automations or trace store.
+`POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no trace store.
 
 Creating an Agent, Vault, Credential, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
 
@@ -59,7 +59,7 @@ Every `/v1` JSON route passes one body gate before route decoding, validation or
 | Order | Case | Response |
 | --- | --- | --- |
 | 1 | `Content-Type` missing, not JSON or malformed, including a bodyless `POST`. `application/json` and `application/*+json` are accepted case-insensitively, with parameters | "expected request with Content-Type: application/json" |
-| 2 | Body over the route limit: 16 MiB for Session create and Environment Templates, the [Environment file](./environment-files.md) bound for file create, 1 MiB elsewhere | 413, code `request_too_large` |
+| 2 | Body over the route limit: 16 MiB for Session create, Environment Templates and Automation create and update, the [Environment file](./environment-files.md) bound for file create, 1 MiB elsewhere | 413, code `request_too_large` |
 | 3 | Invalid UTF-8 | "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode." |
 | 4 | Malformed JSON, trailing data, two values, a byte order mark, a whitespace-only body, or an escape that forms a lone UTF-16 surrogate | "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)" |
 | 5 | A key repeated in one object, at any depth | `"Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported."` The path joins object keys with `.` and omits array indices, such as `metadata.k` or `tools.type`. Keys compare after unescaping and case-sensitively. The first repeat in document order is reported. |
@@ -123,7 +123,7 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 
 | Lists | Default | Accepted | Other values |
 | --- | --- | --- | --- |
-| Agents, Sessions, Items, Turn Items, Environment Templates, Vaults, Credentials, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
+| Agents, Sessions, Items, Turn Items, Environment Templates, Automations, Automation invocations, Vaults, Credentials, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
 | Turns, Subagents, Subagent Turns, Artifacts | 20 | 1–100 | 400 `invalid_request_error`, "limit must be between 1 and 100" |
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |

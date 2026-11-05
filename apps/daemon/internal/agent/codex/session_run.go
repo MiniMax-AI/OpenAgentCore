@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (s *Session) startNative(ctx context.Context, plan SessionPlan, req proto.PromptRequestPayload) error {
+func (s *Session) startNative(ctx context.Context, plan SessionPlan, turn proto.TurnSettings, req proto.PromptRequestPayload) error {
 	if s.currentThreadID() == "" {
 		if err := s.resolveThread(req, plan); err != nil {
 			return err
@@ -20,9 +20,21 @@ func (s *Session) startNative(ctx context.Context, plan SessionPlan, req proto.P
 		return err
 	}
 	turnParams := TurnStartParams{
-		ThreadID:     s.currentThreadID(),
-		Input:        input,
-		OutputSchema: plan.OutputSchema,
+		ThreadID:       s.currentThreadID(),
+		Input:          input,
+		OutputSchema:   plan.OutputSchema,
+		Model:          turn.Model,
+		Effort:         turn.ReasoningEffort,
+		ApprovalPolicy: approvalPolicyNever, ApprovalsReviewer: approvalsReviewerUser,
+	}
+	if turn.ServiceTier != "" {
+		turnParams.ServiceTier = turn.ServiceTier
+	}
+	if turn.Review == "auto_review" {
+		turnParams.ApprovalPolicy, turnParams.ApprovalsReviewer = approvalPolicyOnRequest, turn.Review
+	}
+	if turn.Model != "" {
+		s.resolvedModel = turn.Model
 	}
 	turnCtx, turnCancel := context.WithTimeout(ctx, 10*time.Second)
 	_, ackErr := s.rpc.requestWithResult(turnCtx, "turn/start", turnParams, s.bindTurnResult)

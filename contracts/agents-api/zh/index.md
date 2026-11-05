@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 2f4a3eee5be0bb45e2deede4692ffd4191ca5d5a82ff98d9cbc0bdb27903b32b
+source_hash: c143e73c7a804fbb28b6afa4c73be766bdfb5f1a71d7b3b4b20c7fe627d35f74
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -43,7 +43,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth`，含 `metadata` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
-| Automations | 全部 10 个操作 | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
+| Automations 和 invocations | 创建、检索、更新、列出、删除、暂停、恢复；invocation 的创建、检索、列出 | 已实现；`created_by` 始终为 `developer` | [Automations](automations.md) |
 | Environment 集合 | create, list（`/agents/environments`） | 不支持：404 `unsupported_operation`；Core 的 Environment 以 Session 为范围 | [不支持的操作](wire-semantics.md#unsupported-operations) |
 | Session traces | list | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
 
@@ -84,8 +84,10 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Claude Code 在 Skill 展开时运行其内联 shell，因此该命令不产生工具观测。
 - Claude Code 在 `environment: none` 上启用 live 搜索时只有 `WebSearch`，因此搜索只产生 `search` 动作，不会打开页面（[网页搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)）。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
+- `agent.model` 为空或只含空白时，Session 创建和更新返回 400；固定版本 schema 允许这样的值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
+- Codex 的 `review: auto_review` 只审查 Codex 自己升级的操作，例如强制 `rm` 或需要审批的 MCP 工具调用；Codex 在沙箱内拥有完整的文件系统权限，其他命令和文件修改不经审查。其原生 reviewer 通过 Session 的模型提供方调用 `codex-auto-review` 模型，不提供该模型的提供方会以自己的错误拒绝每个升级的操作。
 - Codex 不启用原生 goals（`create_goal`、`get_goal` 和 `update_goal`），因为处于活动状态的 goal 会在 Turn 结束后自行启动新的 turn（[Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)）。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
@@ -130,6 +132,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 在已有常规文件上创建 Environment file 会返回 "must not traverse symlinks or overwrite existing files" 消息。若父级符号链接仍位于工作区内，则会跟随该链接；若父级逸出工作区或父级本身是常规文件，则会返回通用 400；官方服务会拒绝父级符号链接。
 - 文件名长度为 1–1,024 字节；官方服务接受空文件名和更长的文件名。
 - `SKILL.md` front matter 中 `name`、`description`、`license`、`compatibility` 和 `metadata` 以外的键会被拒绝；官方服务接受未知键（[上传 bundle](source-files.md#upload-a-bundle)）。
+
+**Automations**（[Automations](automations.md)）
+
+- `existing_session` 目标的 `instructions` 为空时，创建和更新返回 400；固定版本 schema 允许 0 字节，而 Core 无法发送空消息。
+- `run_at` 大于 253402300799（9999 年）时返回 400；固定版本 schema 没有设上限。
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
@@ -199,6 +206,14 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
+- Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：
+  - [指令投递](automations.md#targets)为一条输入消息。
+  - [cron 语法与夏令时](automations.md#schedules)。
+  - [停机、跳过、完成与暂停](automations.md#invocations)。
+  - [冲突与拒绝的情形](automations.md#state-changes)。
+  - [目标校验与保存的引用](automations.md#targets)。
+  - [分页](automations.md)：`limit` 截断与无法解析的 `after`。
+- Claude Code 中，由 `SendMessage` 恢复的早先 Turn 的 Subagent 是否按当前 Turn 的权限模式运行，而不是按其启动时的模式：原生模式作用于整个 Session，适配器假定其为当前模式。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。

@@ -439,14 +439,14 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 	return nil
 }
 
-// ValidateTurnSettings rejects an effort or tier the Harness does not
+// ValidateTurnSettings rejects an effort, tier or review the Harness does not
 // declare. Core admission and the Runtime call it with the same settings.
 func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	o := d.Execution
 	for _, check := range []struct {
 		field, value string
 		allowed      []string
-	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}} {
+	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}, {"review", turn.Review, o.Reviews}} {
 		if check.value != "" && !slices.Contains(check.allowed, check.value) {
 			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
 		}
@@ -454,31 +454,22 @@ func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	return nil
 }
 
-// ValidateReview rejects a review value the Harness does not declare. None is
-// always accepted.
-func (d Declaration) ValidateReview(review string) error {
-	if review != "" && review != "none" && !slices.Contains(d.Execution.Reviews, review) {
-		return fmt.Errorf("review %q is not supported by this Harness.", review)
-	}
-	return nil
-}
-
-// ValidateSessionUpdate rejects a change of model, effort or tier that the
-// Harness does not declare it applies natively between root Turns. Unchanged
+// ValidateSessionUpdate rejects a change of model, effort, tier or review that
+// the Harness does not declare it applies natively between root Turns. Unchanged
 // settings pass.
 func (d Declaration) ValidateSessionUpdate(before, after proto.TurnSettings) error {
 	u := d.SessionUpdates
-	effort := u.ReasoningEffort
+	effort, effortChange := u.ReasoningEffort, "changed"
 	if after.ReasoningEffort == "" {
-		effort = u.ReasoningEffortReset
+		effort, effortChange = u.ReasoningEffortReset, "reset to null"
 	}
 	for _, check := range []struct {
-		field   string
-		changed bool
-		support proto.CapabilitySupport
-	}{{"agent.model", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", before.ServiceTier != after.ServiceTier, u.ServiceTier}} {
+		field, change string
+		changed       bool
+		support       proto.CapabilitySupport
+	}{{"agent.model", "changed", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", effortChange, before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", "changed", before.ServiceTier != after.ServiceTier, u.ServiceTier}, {"review", "changed", before.Review != after.Review, proto.CapabilityFromBool(len(d.Execution.Reviews) > 0)}} {
 		if check.changed && !check.support.IsSupported() {
-			return fmt.Errorf("%s cannot be changed on this Harness.", check.field)
+			return fmt.Errorf("%s cannot be %s on this Harness.", check.field, check.change)
 		}
 	}
 	return nil

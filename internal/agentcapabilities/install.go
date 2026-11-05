@@ -110,7 +110,7 @@ func Finalize(installed *os.Root, input proto.CapabilitySources, identity Identi
 }
 
 // Rebind gives an installation restored from an earlier preparation the identity
-// of this Session. The earlier preparation must have had the identical selection.
+// of this Environment. The earlier preparation must have had the identical selection.
 func Rebind(installed *os.Root, manifest *Manifest, input proto.CapabilitySources, identity Identity) error {
 	digest, err := selectionHash(input)
 	if err != nil || validateIdentity(identity) != nil || manifest.Version != 1 || manifest.SelectionSHA256 != digest {

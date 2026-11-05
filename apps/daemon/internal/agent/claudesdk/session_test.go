@@ -21,8 +21,8 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Turn: proto.TurnSettings{Model: "fake-model"}, AgentOptions: map[string]any{"system_prompt": "instructions"}}
+			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateRoot: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
+			request := proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Turn: proto.TurnSettings{Model: "fake-model"}, AgentOptions: map[string]any{"system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -55,7 +55,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 						if payload.Content != "final" || payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || deltas != "partial" {
 							t.Fatalf("bad completion: %+v, deltas %q", payload, deltas)
 						}
-						if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {
+						if _, err := os.Stat(filepath.Join(testState(config), "released")); err != nil {
 							t.Fatal("Done preceded process release")
 						}
 					} else if payload.Metadata[proto.DoneMetaAgentSessionID] != nil {
@@ -75,15 +75,15 @@ func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), Turn: proto.TurnSettings{Model: "fake"}, AgentOptions: map[string]any{}}
+			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateRoot: filepath.Join(root, "state")}
+			request := proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), Turn: proto.TurnSettings{Model: "fake"}, AgentOptions: map[string]any{}}
 			switch kind {
 			case "execution-controls":
 				request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "low"}
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "outside":
-				config.StateDir = "relative-state"
+				config.StateRoot = "relative-state"
 			}
 			_, err := startSingleTurn(context.Background(), config, request, make(chan proto.Envelope, 1))
 			if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {

@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: d2353e23d1424b76a2e8f9d171bcb06e5c5c70a7d56d49ff95b2b7a71cdc080b
+source_hash: 623be858995bb486e05f51505fbb1d9bd87a0c5bcbef0a9ad54b90bf109216c9
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -98,7 +98,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 | Session Executor | Runtime | 空闲过期、关闭或确认失效时执行 `Executor.Close` |
 | Turn | 由 Runtime 跟踪的适配器 `Turn` | `AwaitSettlement` 确认结算完成 |
 
-Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 依据输入和该 Turn 的 `proto.TurnSettings`（与准备时的取值相同）创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
+Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 依据输入和该 Turn 的 `proto.TurnSettings`创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
 
 Executor 按下列状态转移。每个 Turn 在 `StartTurn` 与 `AwaitSettlement` 之间运行。
 
@@ -114,7 +114,7 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
+**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。唯一例外是声明标为可变的 `turn` 设置（`SessionUpdates.Model`、`ReasoningEffort`、`ReasoningEffortReset`、`ServiceTier`，以及 `Execution.Reviews` 非空时的 `review`）：已保留的 Executor 接受 `turn` 在这些设置上不同的 prepare，`StartTurn` 会收到它。适配器要么在 Turn 输入之前以原生方式应用不同的 `turn`，要么不声明该变更。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
 
 **每 Turn 状态。** 每个 Turn 都会获得全新的包装器、输出通道和回执状态。引导和函数接口均属于该 Turn。原生回调必须在异步工作开始前捕获来源 Turn，因此迟到事件绝不会被归到当前活动的 Turn 上。原生进程、query 或传输连接、固定能力配置和原生 session 身份均属于 Executor。不要重置已完成的 `sync.Once` 值，也不要复用旧 Turn 对象。
 
@@ -161,7 +161,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<package>/declaration.go` 导出一个 `agent.Declaration`，然后运行 `make generate-harness-catalog`，它会把该声明列入生成的 `harnessDeclarations`。绑定由共享的 `harnessconfig.Declaration` 加上 `Discover` 函数组成。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。发现过程只用 `agent.Narrow` 收窄声明的能力，绝不扩大；不可用的描述符来自 `agent.Unavailable`。将版本门控和工厂选择条件保留在适配器内部。
 
-Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
+Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。一个 Runtime 依次服务多个 Session，因此每个 Session 的原生状态目录（原生历史或配置目录、启动主目录和临时数据）都位于 `agent.StateDir(StateRoot, kind, key)` 或 `agent.StateDir(RuntimeRoot, kind, key)` 之下，其中 `key` 为请求的 `AgentStateKey`；任何 Session 私有状态都不放在别处。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序注册该 Runtime：
 
@@ -190,7 +190,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 - `SessionUpdates`，即适配器是否在保留的 Executor 的根 Turn 之间原生应用 Session 更新：`Model`、`ReasoningEffort`、`ReasoningEffortReset`（null 强度）和 `ServiceTier`，各自为 `Supported` 或 `Unsupported`。Core 拒绝更改不支持设置的更新，对支持设置的更改会通过下一个 Turn 的设置到达适配器；
 - 可选的纯限制 `ValidateConfiguration`、`ValidateTools`、`ValidateMessageInput` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。`ValidateMessageInput` 仅对携带图像的消息运行，在 `MessageImages` 能力检查之后、任何存储之前执行，决定 Harness 接受哪些 `image_url`；Core 只检查引用不为空白。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程。配置限制最先执行，工具解码错误先于 `ValidateTools`。
 
-`harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。
+`harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`SessionUpdates` 的每个字段都必须声明，`Execution.Reviews` 只能包含 `auto_review`，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。
 
 `apps/daemon/internal/agent/<package>/declaration.go` 中的 Runtime 绑定内嵌同一份声明并添加 `Discover`；它负责原生可用性探测和工厂，并且只把声明的能力收窄到该安装已验证的范围。绑定测试 `TestDiscoveryOnlyNarrowsDeclaration` 检查发现结果不超出声明。`harnessconfig/harnesstest.Declaration` 为测试构造合成声明。
 
@@ -216,7 +216,7 @@ daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启
 
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 
-适配器以启动用户的权限无人值守运行原生工具，Harness 从不询问人类。Codex 使用批准策略 `never` 和完全访问权限，在该策略下 Codex 自行处理 MCP elicitation，不会发给客户端；适配器还禁用其阻塞式 `request_user_input` 工具。Claude 通过适配器的工具回调运行，回调直接允许或拒绝、不会询问。MiniMax 绕过权限；适配器禁用 `askUser`、不声明 elicitation，并以 ACP `cancelled` 结果答复 `session/request_permission`，MiniMax 将其视为拒绝。原生权限或问题请求都不会到达 Core：需要人工介入时通过 function 工具完成，Session 读取 [`requires_action`](./sessions-events.md#session-status)，由应用提交 function 结果。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
+适配器以启动用户的权限无人值守运行原生工具，Harness 从不询问人类。Codex 使用批准策略 `never` 和完全访问权限，在该策略下 Codex 自行处理 MCP elicitation，不会发给客户端；在 `auto_review` 下，每个 Turn 改为发送 `on-request` 和 `auto_review` 审查者，其拒绝留在 Codex 内部，仍到达客户端的请求会得到 JSON-RPC -32601，即拒绝；适配器还禁用其阻塞式 `request_user_input` 工具。Claude 通过适配器的工具回调运行，回调直接允许或拒绝、不会询问；`auto_review` 下，凡是原生 `auto` 模式升级给人的请求，回调一律拒绝。MiniMax 绕过权限；适配器禁用 `askUser`、不声明 elicitation，并以 ACP `cancelled` 结果答复 `session/request_permission`，MiniMax 将其视为拒绝。原生权限或问题请求都不会到达 Core：需要人工介入时通过 function 工具完成，Session 读取 [`requires_action`](./sessions-events.md#session-status)，由应用提交 function 结果。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
 
 模型主机不可达时不能让 Turn 一直挂起。适配器通过原生设置让 Harness 自身的连接重试保持有界；Harness 以结构化数据报告最终连接错误时，该错误归为 `connection_failed`（[原生失败分类](../../../docs/zh/runtime-protocol.md#native-failure-classification)）。Core 不另设模型超时。各适配器指南写明其 Harness 的上限。
 

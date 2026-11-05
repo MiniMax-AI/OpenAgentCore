@@ -372,3 +372,40 @@ func TestExecutorCloseTerminatesAfterMissingCancellationTerminal(t *testing.T) {
 		t.Fatal("original cancellation waiter was abandoned")
 	}
 }
+
+func TestTurnStartCarriesTheTurnSettings(t *testing.T) {
+	e, root := executorFixture(t, "complete")
+	turns := []proto.TurnSettings{
+		{Model: "one", ReasoningEffort: "high", ServiceTier: "priority"},
+		{Model: "two", Review: "auto_review"},
+	}
+	for i, settings := range turns {
+		out := make(chan proto.Envelope, 20)
+		turn, err := e.StartTurn(t.Context(), "run", settings, proto.TextInput("answer"), out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		awaitExecutorTurn(t, turn, out)
+		var sent []string
+		for _, frame := range preparationFrames(t, root) {
+			if frame.Method == "turn/start" {
+				var p struct {
+					Model, Effort, ApprovalPolicy, ApprovalsReviewer string
+					ServiceTier                                      *string
+				}
+				if err := json.Unmarshal(frame.Params, &p); err != nil {
+					t.Fatal(err)
+				}
+				tier := "null"
+				if p.ServiceTier != nil {
+					tier = *p.ServiceTier
+				}
+				sent = append(sent, strings.Join([]string{p.Model, p.Effort, tier, p.ApprovalPolicy, p.ApprovalsReviewer}, " "))
+			}
+		}
+		want := []string{"one high priority never user", "two  null on-request auto_review"}
+		if len(sent) != i+1 || sent[i] != want[i] {
+			t.Fatalf("turn/start %d = %q, want %q", i, sent, want[i])
+		}
+	}
+}

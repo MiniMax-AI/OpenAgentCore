@@ -31,10 +31,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
@@ -46,6 +48,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/automationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/coremetricspg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
@@ -317,8 +320,16 @@ func run(config processconfig.Config) error {
 		}
 		return metricPtr(int64(result.Observed)), int64(result.Failed), err
 	}}
+	automationStore := automationpg.New(units, credentialKey)
+	automationService, err := automations.NewService(automationStore)
+	if err != nil {
+		return err
+	}
+	// The pass needs the handler, which needs the metrics that run it.
+	deliverAutomations := func(context.Context) (*int64, int64, error) { return nil, 0, nil }
+	automationDelivery := coremetrics.Periodic{ID: "automation_delivery", Every: time.Second, Run: func(ctx context.Context) (*int64, int64, error) { return deliverAutomations(ctx) }}
 	metricsSource := &coreMetricsSource{store: coremetricspg.New(units), pool: pool, worker: worker, registry: registry}
-	metrics, err := coremetrics.New(processStartedAt, buildRevision, metricsSource, sampling,
+	metrics, err := coremetrics.New(processStartedAt, buildRevision, metricsSource, sampling, automationDelivery,
 		prune("history_cleanup", 2*time.Second, history.Prune),
 		prune("audit_cleanup", 5*time.Second, func(ctx context.Context) (int64, error) {
 			return auditStore.DeleteExpiredWriteOperations(ctx, time.Now().Add(-config.WriteAuditRetention), 1000)
@@ -326,10 +337,6 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	metricsCtx, cancelMetrics := context.WithCancel(ctx)
-	metricsDone := make(chan struct{})
-	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
-	defer func() { cancelMetrics(); <-metricsDone }()
 	fileStore := filepg.New(units)
 	fileService, err := files.NewService(fileStore)
 	if err != nil {
@@ -345,6 +352,7 @@ func run(config processconfig.Config) error {
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,
+		Automations: automationService, AutomationsReader: automationStore,
 		Sessions:        sessionService,
 		SessionsReader:  sessionStore,
 		SessionCreation: sessionService,
@@ -375,10 +383,14 @@ func run(config processconfig.Config) error {
 			ConfigurationDiscovery: managedNodes.setup,
 		},
 	}
-	apiHandler, err := api.NewHandler(deps)
+	apiHandler, deliverAutomations, err := api.NewHandler(deps)
 	if err != nil {
 		return err
 	}
+	metricsCtx, cancelMetrics := context.WithCancel(ctx)
+	metricsDone := make(chan struct{})
+	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
+	defer func() { cancelMetrics(); <-metricsDone }()
 	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
 		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService),
 		connection:  runtimeenrollment.ConnectionHandler(sessionStore, registry),

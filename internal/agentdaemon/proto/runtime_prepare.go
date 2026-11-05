@@ -41,7 +41,6 @@ type RuntimePreparePayload struct {
 	BudgetMS       int64                  `json:"budget_ms,omitempty"`
 	Step           string                 `json:"step"`
 	EnvironmentID  string                 `json:"environment_id,omitempty"`
-	SessionID      string                 `json:"session_id,omitempty"`
 	Action         string                 `json:"action,omitempty"`
 	Slot           int                    `json:"slot,omitempty"`
 	Skill          *SkillMetadata         `json:"skill,omitempty"`
@@ -71,11 +70,9 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 		if p.BudgetMS <= 0 || p.BudgetMS > RuntimePrepareMaxBudgetMS {
 			return false
 		}
-		for _, id := range []string{p.EnvironmentID, p.SessionID} {
-			value, err := uuid.Parse(id)
-			if err != nil || value == uuid.Nil || value.String() != id {
-				return false
-			}
+		value, err := uuid.Parse(p.EnvironmentID)
+		if err != nil || value == uuid.Nil || value.String() != p.EnvironmentID {
+			return false
 		}
 		if p.Offset != 0 || len(p.Data) != 0 {
 			return false
@@ -126,7 +123,7 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 		encoded, err := json.Marshal(p)
 		return err == nil && len(encoded) <= RuntimePrepareMaxFrameBytes
 	}
-	if p.BudgetMS != 0 || p.EnvironmentID != "" || p.SessionID != "" || p.Action != "" || p.Slot != 0 ||
+	if p.BudgetMS != 0 || p.EnvironmentID != "" || p.Action != "" || p.Slot != 0 ||
 		p.Skill != nil || p.Plugin != nil || p.Sources != nil || p.File != nil || p.Initialization != nil || p.SizeBytes != 0 || p.SHA256 != "" {
 		return false
 	}

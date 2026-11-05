@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -87,7 +88,7 @@ func daemonComposition(t testing.TB) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	apiHandler, err := api.NewHandler(api.Dependencies{
+	apiHandler, _, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
 		Projects: struct{ api.Projects }{}, ProjectsReader: trapProjectsReader{keys: keys},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},
@@ -95,6 +96,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Files: struct{ api.Files }{}, FilesReader: struct{ api.FilesReader }{},
 		Skills: struct{ api.Skills }{}, SkillsReader: struct{ api.SkillsReader }{},
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
+		Automations: struct{ api.Automations }{}, AutomationsReader: struct{ automations.Reader }{},
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Sessions:        struct{ api.Sessions }{},
 		SessionsReader:  struct{ api.SessionsReader }{},

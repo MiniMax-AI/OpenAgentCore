@@ -36,7 +36,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	if len(operations) != 5 || operations[0].Request.Initialization.Action != "configure" || operations[1].Request.Action != "skill" || operations[2].Request.Action != "plugin" || operations[3].Request.Initialization.Action != "setup" || operations[4].Request.Action != "finalize" {
 		t.Fatal("bundle-before-setup or directory-after-setup ordering changed", operations)
 	}
-	owner := agentcapabilities.Identity{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
+	owner := agentcapabilities.Identity{EnvironmentID: uuid.NewString()}
 	for _, op := range operations {
 		peer := &capabilityFixture{outcome: "completed"}
 		if _, err := runRuntimeSetup(initializationTestContext(t), peer, owner, op); err != nil {
@@ -45,7 +45,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 		if _, err := uuid.Parse(peer.requestID); err != nil {
 			t.Fatal("request ID", err)
 		}
-		if peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID {
+		if peer.request.EnvironmentID != owner.EnvironmentID {
 			t.Fatal("allocation identity lost")
 		}
 		if (op.Request.Action == "skill" || op.Request.Action == "plugin") && !bytes.Equal(peer.body, archive) {

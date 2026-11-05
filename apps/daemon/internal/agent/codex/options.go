@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 )
@@ -97,14 +98,10 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, turn
 		return plan, err
 	}
 
-	if err := harnessconfiguration.Declaration.ValidateTurnSettings(turn); err != nil {
-		return plan, err
-	}
-
 	plan.Model = turn.Model
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
-	codexHome, err := allocSessionDir(stateRoot, agentStateKey)
+	codexHome, err := sessionDir(stateRoot, agentStateKey)
 	if err != nil {
 		return plan, err
 	}
@@ -215,25 +212,12 @@ func applyExecutionControls(plan *SessionPlan, turn proto.TurnSettings, controls
 // helpers
 // ---------------------------------------------------------------------------
 
-func allocSessionDir(root, agentStateKey string) (string, error) {
-	if strings.TrimSpace(agentStateKey) == "" {
-		return "", fmt.Errorf("codex: agentStateKey required for a Session directory")
+// sessionDir creates the Session's native state directory under root.
+func sessionDir(root, agentStateKey string) (string, error) {
+	dir, err := agent.StateDir(root, "codex", agentStateKey)
+	if err != nil {
+		return "", err
 	}
-	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
-		return "", fmt.Errorf("codex: state root must be a clean absolute directory")
-	}
-	parts := strings.Split(agentStateKey, "/")
-	safeParts := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if safe := safePathPartCodex(part); safe != "" && safe != "." && safe != ".." {
-			safeParts = append(safeParts, safe)
-		}
-	}
-	if len(safeParts) == 0 {
-		return "", fmt.Errorf("codex: invalid agentStateKey %q", agentStateKey)
-	}
-	dirParts := append([]string{root, "daemon", "agent-sessions"}, safeParts...)
-	dir := filepath.Join(dirParts...)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("codex: create Session directory %s: %w", dir, err)
 	}
@@ -285,22 +269,6 @@ func stringOpt(opts map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(s)
-}
-
-func safePathPartCodex(runID string) string {
-	var b strings.Builder
-	for _, r := range runID {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	out := b.String()
-	if out == "" {
-		return "run"
-	}
-	return out
 }
 
 // strconv quotes a value as a TOML string. Done by reusing the JSON

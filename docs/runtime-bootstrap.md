@@ -51,7 +51,6 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `device_id` | Canonical nonzero UUID of the daemon identity Core issued |
 | `credential` | Nonempty daemon credential Core issued, without whitespace or NUL |
 | `environment_id` | Canonical nonzero UUID of the Environment the Runtime serves |
-| `session_id` | Canonical nonzero UUID of the Session whose native history the Runtime keeps |
 | `workspace` | Clean absolute directory of the workspace, `runtimebootstrap.RuntimeWorkspace` in the packaged Runtime layout. The Runtime serves it as `runtimebootstrap.PublicWorkspace` (`/workspace`), the path applications and Core use |
 | `suspend_control` | Required boolean. Core sets it exactly when the Provider declares [checkpoint support](./sandbox-provider.md), and the Provider forwards it unchanged |
 

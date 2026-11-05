@@ -45,7 +45,7 @@ sequenceDiagram
 - The first heartbeat is sent at once, then at the interval that bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 - Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Environment binding.
 
 ## Versioning
 
@@ -90,8 +90,9 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | Identity | Scope and meaning |
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
-| Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where the payload validator requires them |
-| Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration |
+| Environment ID | The Environment and workspace a Runtime is bound to for its lifetime; a canonical UUID in `runtime_prepare` and `workspace_write` |
+| Session ID | Core-owned identity of the configuration in one `execution_prepare`; a Runtime bound to an Environment serves one Session at a time |
+| Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration, except the `turn` settings its Harness declares changeable |
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
 | Run ID | One execution attempt; `Envelope.id` for output, cancellation, active input and functions |
@@ -208,6 +209,8 @@ stateDiagram-v2
     ready --> failed
 ```
 
+One Session at a time: a Runtime bound to an Environment serves a single Session, and each `execution_prepare` names it. A Runtime without a bound Environment, such as the service-side host for `environment: none` Sessions, serves Sessions concurrently within its capacity and never switches. If an Executor of another Session is preparing, admitted or running, the prepare is rejected with `resource_unavailable`. Otherwise the new Executor's preparation closes the other Sessions' Executors, waits for each confirmed close, removes the native state of every other Session and only then starts the Harness; an unconfirmed close fails the preparation and keeps the state. A read-only workspace preparation starts no Harness and never switches Sessions.
+
 Preparation and start run outside the receive loop and router lock. An admission expires at a fixed deadline that retries do not extend; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains a bounded number of admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 
 Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. For Runtime initialization, shutdown joins the synchronous apply operation and its receipt delivery before releasing the connection; an `unknown` result remains unknown and blocks further preparation on that Router, but does not prevent reconnection after local mutations have stopped. Core retains the failed initialization and never replays it. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
@@ -220,9 +223,9 @@ The `execution_prepare` configuration carries the opt-ins Core sets for each Run
 
 | Field | Set by Core |
 | --- | --- |
-| `turn` | Always: the root Turn's `model`, plus `reasoning_effort` and a non-`auto` `service_tier` when the Agent sets them. Read-only workspace preparation sends an empty `turn` |
+| `turn` | Always: the root Turn's `model`, plus `reasoning_effort` and a non-`auto` `service_tier` when the Agent sets them, and `review` when it is `auto_review`. A retained Executor accepts a different `turn` only in the settings its Harness declares changeable; any other difference is `configuration_conflict`. Read-only workspace preparation sends an empty `turn` |
 | `agent_options` | Always `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
-| `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning summary or a `json_schema` output format. Core validates these and the `turn` settings against the Harness declaration before dispatch; native option names belong to the adapter |
+| `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning summary or a `json_schema` output format. Core validates these and the Session's turn settings against the Harness declaration when the Session is created or updated and before dispatch; native option names belong to the adapter |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |

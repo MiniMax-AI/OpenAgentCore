@@ -23,11 +23,8 @@ type snapshotMarker struct {
 
 func (b *Binding) openSnapshotMarker() (*snapshotMarker, error) {
 	identity := b.capabilityIdentity()
-	for _, id := range []string{identity.EnvironmentID, identity.SessionID} {
-		parsed, err := uuid.Parse(id)
-		if err != nil || parsed == uuid.Nil || parsed.String() != id {
-			return nil, agentcapabilities.ErrInvalid
-		}
+	if parsed, err := uuid.Parse(identity.EnvironmentID); err != nil || parsed == uuid.Nil || parsed.String() != identity.EnvironmentID {
+		return nil, agentcapabilities.ErrInvalid
 	}
 	private := b.stateRoot
 	if agentcapabilities.ValidateLocalDirectories([]string{private}) != nil {
@@ -65,7 +62,7 @@ func (b *Binding) openSnapshotMarker() (*snapshotMarker, error) {
 		current.Close()
 		return nil, agentcapabilities.ErrInvalid
 	}
-	marker := &snapshotMarker{directory: current, unlock: unlock, name: identity.EnvironmentID + "-" + identity.SessionID + ".json", root: b.capabilityRoot}
+	marker := &snapshotMarker{directory: current, unlock: unlock, name: identity.EnvironmentID + ".json", root: b.capabilityRoot}
 	completed, err := marker.read()
 	if err != nil {
 		marker.close()

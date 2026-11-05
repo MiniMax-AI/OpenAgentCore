@@ -27,7 +27,7 @@ case "$1" in
     printf '%s\n' '{"type":"runtime_ready","protocol":3,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare","workspace_command_observations"]}' ;;
   *)
     IFS= read -r request
-    printf '%s\n' '{"type":"executor_ready","protocol":3}'
+    printf '%s\n' '{"type":"executor_ready","protocol":4}'
     IFS= read -r request
     printf '%s\n' '{"type":"result","turn_id":"run","session_id":"native","text":"completed"}'
     printf '%s\n' '{"type":"turn_settled","turn_id":"run","confirmed":true,"reusable":true,"reason":""}' ;;
@@ -60,14 +60,14 @@ esac
 	}
 	// Feature checking must reject an older bridge without starting execution.
 	script = strings.ReplaceAll(script, `"features":["workspace_tools","workspace_prepare","workspace_command_observations"]`, `"features":[]`)
-	script = strings.ReplaceAll(script, "IFS= read -r request", "touch '"+filepath.Join(config.StateDir, "unexpected-start")+"'")
+	script = strings.ReplaceAll(script, "IFS= read -r request", "touch '"+filepath.Join(testState(config), "unexpected-start")+"'")
 	if err := os.WriteFile(config.Node, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := startSingleTurn(t.Context(), config, workspaceRequest(), out); err == nil {
 		t.Fatal("old packaged bridge accepted workspace execution")
 	}
-	if _, err := os.Stat(filepath.Join(config.StateDir, "unexpected-start")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(testState(config), "unexpected-start")); !os.IsNotExist(err) {
 		t.Fatal("old packaged bridge started execution")
 	}
 }

@@ -40,7 +40,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth`, with `metadata` | [Vaults and Credentials](./vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
-| Automations | all 10 operations | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
+| Automations and invocations | create, retrieve, update, list, delete, pause, resume; invocation create, retrieve, list | Implemented; `created_by` is always `developer` | [Automations](./automations.md) |
 | Environments collection | create, list (`/agents/environments`) | Not supported: 404 `unsupported_operation`; Core's Environments are Session-scoped | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 | Session traces | list | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 
@@ -81,8 +81,10 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Claude Code runs a Skill's inline shell inside the Skill expansion, so the command produces no tool observation.
 - Claude Code with live search on `environment: none` has only `WebSearch`, so search yields `search` actions and no page opens ([web search](./execution-tools.md#web-search-and-programmatic-tool-calling)).
 - An omitted reasoning effort stays null instead of taking the model's default.
+- An empty or blank `agent.model` returns 400 at Session create and update; the pinned schema allows it.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - Codex rejects programmatic tool calling together with `multi_agent`.
+- Codex `review: auto_review` reviews only the actions Codex escalates, such as a forced `rm` or an MCP tool call that needs approval; Codex has full filesystem access inside the sandbox, so other commands and file edits run without review. Its native reviewer calls the model `codex-auto-review` through the Session's model provider, and a provider that does not serve it denies every escalated action with its own error.
 - Codex runs without its native goals (`create_goal`, `get_goal` and `update_goal`), because an active goal starts turns of its own after the Turn ends ([Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)).
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
@@ -127,6 +129,11 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Creating an Environment file over an existing regular file returns the "must not traverse symlinks or overwrite existing files" message. A parent symbolic link that stays inside the workspace is followed, and a parent that escapes the workspace or is a regular file gets a generic 400; the official service rejects symbolic-link parents.
 - File names hold 1–1,024 bytes; the official service accepts empty and longer names.
 - A `SKILL.md` front-matter key other than `name`, `description`, `license`, `compatibility` and `metadata` is rejected; the official service accepts unknown keys ([upload a bundle](./source-files.md#upload-a-bundle)).
+
+**Automations** ([Automations](./automations.md))
+
+- An empty `instructions` in an `existing_session` target returns 400 at create and update; the pinned schema allows 0 bytes, and Core cannot send an empty message.
+- A `run_at` above 253402300799 (year 9999) returns 400; the pinned schema sets no maximum.
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
@@ -196,6 +203,14 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
 - The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
+- Automations, where the pinned sources are silent ([Automations](./automations.md)):
+  - [Instructions delivery](./automations.md#targets) as one input message.
+  - [Cron grammar and daylight saving](./automations.md#schedules).
+  - [Downtime, skipping, completion and pause](./automations.md#invocations).
+  - [Conflict and rejection cases](./automations.md#state-changes).
+  - [Target validation and saved references](./automations.md#targets).
+  - [Paging](./automations.md): `limit` clamping and unresolved `after`.
+- Whether a Claude Code Subagent from an earlier Turn, resumed by `SendMessage`, runs in the current Turn's permission mode rather than the mode it started under: the native mode is session-wide, so the adapter assumes the current one.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.

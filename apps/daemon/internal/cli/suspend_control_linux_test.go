@@ -22,7 +22,7 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 	}
 	path := filepath.Join(dir, "control.json")
 	environment := uuid.NewString()
-	if err := localworkspace.Bind(environment, uuid.NewString(), t.TempDir(), t.TempDir()); err != nil {
+	if err := localworkspace.Bind(environment, t.TempDir(), t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(localworkspace.Unbind)

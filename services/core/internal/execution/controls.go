@@ -26,7 +26,7 @@ func executionControls(agent v1.Agent, tools executionToolSet) *proto.ExecutionC
 }
 
 // turnSettings assembles the Runtime's settings from the settings a root Turn
-// bound. Auto service tier means unset.
+// bound. Auto service tier and review none mean unset.
 func turnSettings(bound sessions.TurnSettings) proto.TurnSettings {
 	turn := proto.TurnSettings{Model: bound.Model}
 	if bound.ReasoningEffort != nil {
@@ -34,6 +34,9 @@ func turnSettings(bound sessions.TurnSettings) proto.TurnSettings {
 	}
 	if bound.ServiceTier != "auto" {
 		turn.ServiceTier = bound.ServiceTier
+	}
+	if bound.Review == "auto_review" {
+		turn.Review = bound.Review
 	}
 	return turn
 }

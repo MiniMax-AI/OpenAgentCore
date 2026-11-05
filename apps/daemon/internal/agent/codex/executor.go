@@ -40,7 +40,7 @@ func newExecutor(ctx context.Context, req proto.PromptRequestPayload, cfg sessio
 	return &Executor{prepared: p}, nil
 }
 
-func (e *Executor) StartTurn(ctx context.Context, runID string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *Executor) StartTurn(ctx context.Context, runID string, turn proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if out == nil || strings.TrimSpace(runID) == "" || input.Validate() != nil {
 		return nil, errors.New("codex: start requires a run identity, input and output")
 	}
@@ -96,7 +96,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, _ proto.TurnSett
 	req := proto.PromptRequestPayload{RunID: runID, Input: input, AgentSessionID: e.prepared.resumeID, RequireExistingNativeSession: e.prepared.requireExistingNativeSession}
 	// Ownership precedes any native submission. Even an uncertain start returns the
 	// exact Turn so its caller can await settlement without replaying the input.
-	err := s.startNative(ctx, e.prepared.plan, req)
+	err := s.startNative(ctx, e.prepared.plan, turn, req)
 	if err != nil {
 		s.emitTerminal("codex: native start failed", true)
 		s.finishAfterTerminal()

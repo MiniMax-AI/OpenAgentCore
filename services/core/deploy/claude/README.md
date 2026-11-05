@@ -2,6 +2,8 @@
 
 The Claude adapter runs Claude Code through the pinned Claude Agent SDK. The SDK owns the model and tool loop. Two parts make up the adapter: the private TypeScript bridge in [`packages/claude-sdk-adapter`](../../../../packages/claude-sdk-adapter/README.md), which owns the bridge protocol and native SDK configuration, and the Go adapter in [`agent/claudesdk`](../../../../apps/daemon/internal/agent/claudesdk), which owns the bridge process. This page holds the Runtime-level rules and the Claude Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
+A retained Executor serves Turns whose model, reasoning effort or review differ: the bridge applies the Turn's values natively before its input ([bridge protocol](../../../../packages/claude-sdk-adapter/README.md)). `review: auto_review` switches the native permission mode to `auto`, and the tool callback denies every request the classifier escalates to a person.
+
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 
 ## Native pin and readiness
@@ -14,7 +16,7 @@ Claude accepts only the `anthropic` model protocol ([`harnessconfig/claudesdk`](
 
 ## Native state and recovery
 
-With a workspace binding, the SDK stores retained history at `<StateRoot>/runtime/claude-sdk/history`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). Without a workspace binding, native state uses `<StateRoot>/daemon/<profile>/runtime/claude-sdk`. Private launch home and scratch directories for workspace execution stay at `$OAC_RUNTIME_HOME/runtime/claude-sdk/home` and `$OAC_RUNTIME_HOME/runtime/claude-sdk/scratch` (mode 0700). The daemon's authentication stays under `$OAC_RUNTIME_HOME/daemon/`. These locations keep native history, temporary process state and device credentials separate; they do not restrict the tools.
+Each Session keeps its native state under its own state key, as the [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md#register-the-adapter) requires. The SDK's `CLAUDE_CONFIG_DIR`, which holds retained history, is `config` under `<StateRoot>/runtime/claude_sdk/state/<state key>/`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). With a workspace binding, the private launch home and scratch directory are `home` and `scratch` under `$OAC_RUNTIME_HOME/runtime/claude_sdk/state/<state key>/` (mode 0700). The daemon's authentication stays under `$OAC_RUNTIME_HOME/daemon/`. These locations keep native history, temporary process state and device credentials separate; they do not restrict the tools.
 
 Recovery uses the SDK's history APIs ([`recovery.ts`](../../../../packages/claude-sdk-adapter/src/recovery.ts)). An explicitly supplied native Session ID must exist. When Core requires existing history but has no recorded ID, the adapter accepts only a single native Session whose recorded cwd equals the bound workspace and which has at least one message. Missing, foreign, ambiguous or empty history is rejected before any model input.
 

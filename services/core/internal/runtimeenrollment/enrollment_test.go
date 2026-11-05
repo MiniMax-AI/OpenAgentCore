@@ -21,7 +21,7 @@ func (s *enrollmentStub) EnrollRuntime(_ context.Context, environment, digest st
 	if environment != "environment" || digest != runtimedevice.HashCredential("private-test-token") {
 		return sessions.RuntimeEnrollment{}, errors.New("unexpected enrollment input")
 	}
-	return sessions.RuntimeEnrollment{DeviceID: "device", SessionID: "session", EnvironmentID: environment, WorkspaceDirectory: "/workspace"}, s.err
+	return sessions.RuntimeEnrollment{DeviceID: "device", EnvironmentID: environment, WorkspaceDirectory: "/workspace"}, s.err
 }
 
 func TestEnrollmentConnectionContract(t *testing.T) {
@@ -50,7 +50,7 @@ func TestEnrollmentConnectionContract(t *testing.T) {
 			if strings.Contains(response.Body.String(), "private") {
 				t.Fatal("enrollment leaked confidential details")
 			}
-			if response.Code == 200 && (response.Body.String() != `{"device_id":"device","session_id":"session","environment_id":"environment","workspace_directory":"/workspace"}`+"\n" || response.Header().Get("Cache-Control") != "no-store") {
+			if response.Code == 200 && (response.Body.String() != `{"device_id":"device","environment_id":"environment","workspace_directory":"/workspace"}`+"\n" || response.Header().Get("Cache-Control") != "no-store") {
 				t.Fatalf("binding response %s", response.Body.String())
 			}
 		})

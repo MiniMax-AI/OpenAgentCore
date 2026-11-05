@@ -10,7 +10,7 @@ import (
 )
 
 func capabilityBegin() RuntimePreparePayload {
-	return RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(),
+	return RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(),
 		Action: "skill", Skill: &SkillMetadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 10, SHA256: strings.Repeat("a", 64)}
 }
 
@@ -24,7 +24,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 		"negative budget":       func(p *RuntimePreparePayload) { p.BudgetMS = -1 },
 		"excessive budget":      func(p *RuntimePreparePayload) { p.BudgetMS = RuntimePrepareMaxBudgetMS + 1 },
 		"noncanonical identity": func(p *RuntimePreparePayload) { p.EnvironmentID = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" },
-		"zero identity":         func(p *RuntimePreparePayload) { p.SessionID = uuid.Nil.String() },
+		"zero identity":         func(p *RuntimePreparePayload) { p.EnvironmentID = uuid.Nil.String() },
 		"begin data":            func(p *RuntimePreparePayload) { p.Data = []byte("x") },
 		"begin offset":          func(p *RuntimePreparePayload) { p.Offset = 1 },
 		"mixed metadata": func(p *RuntimePreparePayload) {
@@ -91,7 +91,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 }
 
 func TestCapabilitiesFinalizeRequiresExplicitBoundedSelection(t *testing.T) {
-	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("explicit empty finalization refused")
 	}
@@ -173,7 +173,7 @@ func TestLocalEnvironmentCarriesSelectionButNeverInstalledRoots(t *testing.T) {
 }
 
 func TestRuntimePreparationInitialActions(t *testing.T) {
-	base := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
+	base := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString()}
 	for _, initialization := range []RuntimeInitialization{
 		{Action: "configure", Env: map[string]string{"EXAMPLE": "value"}},
 		{Action: "npm", Packages: []string{"typescript"}},
@@ -263,7 +263,7 @@ func TestRuntimePreparationExitCodes(t *testing.T) {
 }
 
 func TestRuntimePreparationPortableSources(t *testing.T) {
-	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("portable sources rejected by wire")
 	}

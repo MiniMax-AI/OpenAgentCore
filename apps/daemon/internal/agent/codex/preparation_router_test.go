@@ -39,7 +39,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err := os.MkdirAll(workspace, 0700); err != nil {
 				t.Fatal(err)
 			}
-			binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, filepath.Join(t.TempDir(), "capabilities"))
+			binding, err := localworkspace.NewWithCapabilityDirectory(environment, workspace, filepath.Join(t.TempDir(), "capabilities"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -47,7 +47,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			req.DisableExecutionEnvironment = false
 			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Declaration{})
 			prepared := make(chan *Prepared, 1)
 			registry.RegisterExecutor("codex", func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 				e, err := newExecutor(ctx, req, cfg)

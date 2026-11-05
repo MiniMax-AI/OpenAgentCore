@@ -42,7 +42,7 @@ func discoverAgentCLIs(parent context.Context, rc *runContext, profile string, d
 		}
 		running.Go(func() {
 			p := &probes[i]
-			p.runtime = declaration.Discover(parent, agent.DiscoveryOptions{Profile: profile, StateRoot: stateRoot, RuntimeRoot: runtimeRoot, Stdout: &p.stdout, Stderr: &p.stderr}, declaration.Info())
+			p.runtime = declaration.Discover(parent, agent.DiscoveryOptions{StateRoot: stateRoot, RuntimeRoot: runtimeRoot, Stdout: &p.stdout, Stderr: &p.stderr}, declaration.Info())
 		})
 	}
 	running.Wait()

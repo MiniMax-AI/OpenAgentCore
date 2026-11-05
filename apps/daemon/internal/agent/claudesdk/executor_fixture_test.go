@@ -31,7 +31,7 @@ func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequest
 }
 
 func helperTurn(scanner *bufio.Scanner, request *startRequest) (func(bridgeEvent), func()) {
-	_ = json.NewEncoder(os.Stdout).Encode(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	_ = json.NewEncoder(os.Stdout).Encode(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if !scanner.Scan() {
 		os.Exit(4)
 	}

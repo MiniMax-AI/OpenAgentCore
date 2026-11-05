@@ -31,7 +31,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		!slices.Contains(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", `["OAC_RUNTIME_MCP_*"]`}) {
 		t.Fatal("native profile kept only credential isolation")
 	}
-	home, err := allocSessionDir(testStateRoot(t), req.AgentStateKey)
+	home, err := sessionDir(testStateRoot(t), req.AgentStateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		}
 	}
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	home, err := allocSessionDir(testStateRoot(t), "credentials")
+	home, err := sessionDir(testStateRoot(t), "credentials")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
 	if len(preparationFrames(t, root)) != 0 {
 		t.Fatal("read-only request started native child")
 	}
-	if _, err := os.Stat(filepath.Join(root, "daemon", "agent-sessions")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "runtime", "codex")); !os.IsNotExist(err) {
 		t.Fatal("read-only request created native state", err)
 	}
 }
@@ -41,7 +41,7 @@ func TestNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
 				if len(preparationFrames(t, root)) != 0 {
 					t.Fatal("transport override started native process")
 				}
-				if _, err := os.Stat(filepath.Join(root, "daemon", "agent-sessions")); !os.IsNotExist(err) {
+				if _, err := os.Stat(filepath.Join(root, "runtime", "codex")); !os.IsNotExist(err) {
 					t.Fatal("transport override created state", err)
 				}
 			})

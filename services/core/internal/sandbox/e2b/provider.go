@@ -279,7 +279,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if b.Workspace != nil {
 		return sandbox.Info{Reference: b.Reference}, &providercontract.UnsupportedError{Operation: "Create", Reason: "external_workspace_unsupported"}
 	}
-	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
+	if !validReference(b.Reference) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
 		info := sandbox.Info{Reference: b.Reference}
 		if validReference(b.Reference) {
 			info.State, info.CreateSettled = "absent", true

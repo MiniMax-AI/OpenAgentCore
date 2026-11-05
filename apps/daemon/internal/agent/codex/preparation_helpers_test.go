@@ -99,7 +99,7 @@ func assertPreparationOnly(t *testing.T, root string) {
 
 func preparedCatalogs(t *testing.T, root string) []string {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(root, "daemon", "agent-sessions", "*", "model-catalog-*.json"))
+	files, err := filepath.Glob(filepath.Join(root, "runtime", "codex", "state", "*", "model-catalog-*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

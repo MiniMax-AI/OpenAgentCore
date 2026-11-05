@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 73dcaa859ac6e54b4b51950922b8cb781daff8e159e718dddde363a8e089168a
+source_hash: b0e9bfc53d015b5daacfc846ff8e1a27d3f6021f89f84131afdb1a892f2c868e
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -25,7 +25,7 @@ source_hash: 73dcaa859ac6e54b4b51950922b8cb781daff8e159e718dddde363a8e089168a
 
 ### 不支持的操作 {#unsupported-operations}
 
-Automations 路由（共 10 个）、`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API operation is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 Automations 或 trace 存储。
+`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API operation is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 trace 存储。
 
 创建 Agent、Vault、Credential、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
 
@@ -61,7 +61,7 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 | 顺序 | 情况 | 响应 |
 | --- | --- | --- |
 | 1 | `Content-Type` 缺失、不是 JSON 或格式错误，包括无正文的 `POST`。`application/json` 和 `application/*+json` 不区分大小写，并允许附带参数 | "expected request with Content-Type: application/json" |
-| 2 | 正文超过路由限制：Session 创建和 Environment 模板为 16 MiB，文件创建采用 [Environment file](environment-files.md) 的限制，其他路由为 1 MiB | 413，代码 `request_too_large` |
+| 2 | 正文超过路由限制：Session 创建、Environment 模板以及 Automation 创建和更新为 16 MiB，文件创建采用 [Environment file](environment-files.md) 的限制，其他路由为 1 MiB | 413，代码 `request_too_large` |
 | 3 | 无效 UTF-8 | "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode." |
 | 4 | JSON 格式错误、尾随数据、两个值、字节顺序标记、仅含空白字符的正文，或形成孤立 UTF-16 代理项的转义 | "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)" |
 | 5 | 一个对象内任意深度出现重复键 | `"Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported."` 路径使用 `.` 连接对象键并省略数组索引，例如 `metadata.k` 或 `tools.type`。键在反转义后按大小写敏感方式比较。报告文档顺序中首次出现的重复键。 |
@@ -125,7 +125,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 默认值 | 接受范围 | 其他值 |
 | --- | --- | --- | --- |
-| Agents、Sessions、Items、Turn Items、Environment 模板、Vaults、Credentials、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
+| Agents、Sessions、Items、Turn Items、Environment 模板、Automations、Automation invocations、Vaults、Credentials、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
 | Turns、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
 | Files | 10000 | 1–10000 | 400，code 为 null，"limit must be between 1 and 10000." |

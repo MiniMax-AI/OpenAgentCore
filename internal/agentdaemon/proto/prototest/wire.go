@@ -35,7 +35,7 @@ const (
 
 // Turn is the root Turn's settings the scenarios prepare with. The Runtime's
 // Executor must receive them at StartTurn.
-var Turn = proto.TurnSettings{Model: "fixture-model", ReasoningEffort: "high"}
+var Turn = proto.TurnSettings{Model: "fixture-model", ReasoningEffort: "high", Review: "auto_review"}
 
 // Placeholders for values the Runtime generates. Core's side sends them as
 // written; the Runtime's side binds each to the value its Runtime sends.

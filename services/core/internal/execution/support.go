@@ -68,7 +68,7 @@ func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) boo
 	return p.ValidateSessionConfiguration(engine, configuration) == nil
 }
 
-func (p Policy) validateEngineInputs(engine string, configuration json.RawMessage, inputs []sessions.Input) error {
+func (p Policy) ValidateEngineInputs(engine string, configuration json.RawMessage, inputs []sessions.Input) error {
 	declaration, ok := p.Harnesses().Lookup(engine)
 	if !ok {
 		return sessions.ErrInvalidInput

@@ -25,7 +25,7 @@ func enrollFixtureSession(t *testing.T, s *Store, tenant string, session session
 		t.Fatal(err)
 	}
 	enrolled, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
-	if err != nil || enrolled.EnvironmentID != environment.ID || enrolled.SessionID != session.ID || enrolled.WorkspaceDirectory != "/workspace" {
+	if err != nil || enrolled.EnvironmentID != environment.ID || enrolled.WorkspaceDirectory != "/workspace" {
 		t.Fatalf("Runtime enrollment: %+v %v", enrolled, err)
 	}
 	bound, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID)

@@ -25,7 +25,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				if err == nil || !strings.Contains(err.Error(), "workspace structured output") {
 					t.Fatal("unqualified bundle admitted", err)
 				}
-				if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+				if _, err := os.Stat(filepath.Join(testState(config), "launched")); !os.IsNotExist(err) {
 					t.Fatal("unqualified request reached native launch", err)
 				}
 				return
@@ -36,7 +36,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			defer e.Close(context.Background())
 			req.ExecutionControls.OutputFormat.Schema[0] = ' '
 			var frozen startRequest
-			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json")), &frozen); err != nil {
+			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(testState(config), "prepare.json")), &frozen); err != nil {
 				t.Fatal(err)
 			}
 			if frozen.OutputFormat == nil || string(frozen.OutputFormat.Schema) != schema {
@@ -52,7 +52,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				}
 			}
 			var started map[string]json.RawMessage
-			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &started); err != nil || len(started) != 3 || started["output_format"] != nil {
+			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(testState(config), "start.json")), &started); err != nil || len(started) != 4 || started["output_format"] != nil {
 				t.Fatal("Start replaced the prepared configuration", err)
 			}
 		})

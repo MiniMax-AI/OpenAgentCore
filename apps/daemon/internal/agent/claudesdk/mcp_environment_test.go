@@ -15,7 +15,7 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 	req := workspaceRequest()
 	token := "selected-user-token"
 	t.Setenv("MCP_TOKEN", "unselected-native-token")
-	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", WorkspaceRoot: config.Workspace.Directory, MCP: []proto.EnvironmentMCP{
+	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", WorkspaceRoot: config.Workspace, MCP: []proto.EnvironmentMCP{
 		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/local", Server: proto.PluginMCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
 		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/remote", Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
 	}}
@@ -94,7 +94,7 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 func TestPublicMCPStdioStartsInTheWorkspaceDirectory(t *testing.T) {
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local",
 		Stdio: &proto.MCPStdio{Command: "run", Cwd: "/workspace", EnvVars: []string{"TOKEN"}}}}
-	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: "/workspace", WorkspaceRoot: "/environment/workspace"}, MCPHTTPServers: &servers}
+	req := proto.PromptRequestPayload{AgentStateKey: testStateKey, LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: "/workspace", WorkspaceRoot: "/environment/workspace"}, MCPHTTPServers: &servers}
 	projected, _, err := prepareRuntimeMCP(req)
 	raw, _ := json.Marshal(projected)
 	if err != nil || string(raw) != `[{"server_label":"local","allowed_tools":null,"command":"run","args":[],"declared":true}]` {

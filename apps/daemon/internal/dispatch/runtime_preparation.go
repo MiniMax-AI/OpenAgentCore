@@ -60,7 +60,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			}
 			return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("runtime_preparation_capacity"))
 		}
-		if r.localWorkspace == nil || !r.localWorkspace.Matches(request.EnvironmentID, request.SessionID) || r.runtimePreparationResourcesBusyLocked() {
+		if r.localWorkspace == nil || !r.localWorkspace.Matches(request.EnvironmentID) || r.runtimePreparationResourcesBusyLocked() {
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("resource_unavailable"))
 		}

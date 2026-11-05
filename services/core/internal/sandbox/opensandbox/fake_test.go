@@ -254,7 +254,7 @@ func testConfig(apiURL string) sandbox.DirectConfig {
 }
 
 func bootstrap(r sandbox.Reference) sandbox.Bootstrap {
-	return sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic",
+	return sandbox.Bootstrap{Reference: r, DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic",
 		Egress: sandbox.Egress{Public: true, PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{}}}
 }
 

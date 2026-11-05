@@ -26,7 +26,7 @@ func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPay
 	if err := os.WriteFile(entry, []byte("version-one"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
+	return Config{Node: os.Args[0], Entrypoint: entry, StateRoot: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{AgentStateKey: testStateKey, DisableExecutionEnvironment: true, Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
 }
 
 func runPersistentExecutorHelper() {
@@ -51,7 +51,7 @@ func runPersistentExecutorHelper() {
 	}
 	_ = os.WriteFile(filepath.Join(root, "prepared"), []byte(strconv.Itoa(os.Getpid())), 0600)
 	encode := func(event bridgeEvent) { _ = json.NewEncoder(os.Stdout).Encode(event) }
-	encode(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	encode(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if os.Getenv("SDK_EXECUTOR_MODE") == "block" {
 		time.Sleep(time.Hour)
 		return

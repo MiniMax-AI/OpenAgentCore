@@ -19,8 +19,8 @@ import (
 func localWriterRouter(t *testing.T) (*dispatch.Router, *recSender, proto.WorkspaceWritePayload, string) {
 	t.Helper()
 	workspace := t.TempDir()
-	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
+	environment := uuid.NewString()
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, workspace, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func localWriterRouter(t *testing.T) (*dispatch.Router, *recSender, proto.Worksp
 		_ = r.Shutdown(ctx)
 	})
 	digest := sha256.Sum256([]byte("abc"))
-	return r, sender, proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: session, Path: "file", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])}, workspace
+	return r, sender, proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, Path: "file", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])}, workspace
 }
 
 func waitWorkspaceWrite(t *testing.T, sender *recSender, id, outcome string) proto.WorkspaceWriteResultPayload {
@@ -62,19 +62,13 @@ func waitWorkspaceWrite(t *testing.T, sender *recSender, id, outcome string) pro
 
 func TestLocalUploadRequiresExactScopeAndCompleteBody(t *testing.T) {
 	r, sender, request, workspace := localWriterRouter(t)
-	for _, field := range []string{"environment", "session"} {
-		bad := request
-		if field == "environment" {
-			bad.EnvironmentID = uuid.NewString()
-		} else {
-			bad.SessionID = uuid.NewString()
-		}
-		id := uuid.NewString()
-		if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, bad)); err != nil {
-			t.Fatal(err)
-		}
-		waitWorkspaceWrite(t, sender, id, "rejected")
+	bad := request
+	bad.EnvironmentID = uuid.NewString()
+	badID := uuid.NewString()
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, badID, bad)); err != nil {
+		t.Fatal(err)
 	}
+	waitWorkspaceWrite(t, sender, badID, "rejected")
 	id := uuid.NewString()
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, request)); err != nil {
 		t.Fatal(err)

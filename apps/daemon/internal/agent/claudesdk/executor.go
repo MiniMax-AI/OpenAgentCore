@@ -28,10 +28,6 @@ type executor struct {
 
 func NewExecutorFactory(config Config) agent.ExecutorFactory {
 	config.Env = slices.Clone(config.Env)
-	if config.Workspace != nil {
-		workspace := *config.Workspace
-		config.Workspace = &workspace
-	}
 	checked := &runtimeCheckCache{}
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		if ctx == nil {
@@ -135,7 +131,7 @@ func (e *executor) read() {
 			break
 		}
 		if !ready {
-			if event.Type != "executor_ready" || event.Protocol != 3 || event.TurnID != "" {
+			if event.Type != "executor_ready" || event.Protocol != 4 || event.TurnID != "" {
 				if event.Type == "error" {
 					readyFailure = bridgeFailure(event.Code)
 				}
@@ -179,7 +175,7 @@ func (e *executor) read() {
 	close(e.done)
 }
 
-func (e *executor) StartTurn(ctx context.Context, run string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *executor) StartTurn(ctx context.Context, run string, turn proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -199,7 +195,11 @@ func (e *executor) StartTurn(ctx context.Context, run string, _ proto.TurnSettin
 	go s.runTurn(start, out)
 	// Once the write is attempted, a lost receipt has an unknown input outcome.
 	stopWrite := context.AfterFunc(ctx, s.invalidate)
-	err := e.write(turnStartFrame{"turn_start", run, input})
+	settings := turnSettings{Model: turn.Model, Review: turn.Review}
+	if turn.ReasoningEffort != "" {
+		settings.Effort = &turn.ReasoningEffort
+	}
+	err := e.write(turnStartFrame{"turn_start", run, input, settings})
 	stopWrite()
 	if err != nil {
 		s.invalidate()

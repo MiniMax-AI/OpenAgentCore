@@ -61,6 +61,7 @@
               "contracts/agents-api/subagents",
               "contracts/agents-api/environments",
               "contracts/agents-api/environment-files",
+              "contracts/agents-api/automations",
               "contracts/agents-api/source-files",
               "contracts/agents-api/vaults"
             ]

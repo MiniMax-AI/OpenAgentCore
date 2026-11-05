@@ -112,7 +112,7 @@ func TestBlockedSteeringWriteEndsRunWithTerminalFrames(t *testing.T) {
 		ready <- nil
 	}()
 	// Executor.StartTurn starts and settles each Turn through these two steps.
-	go s.settleExecutorTurn(s.startNative(ctx, SessionPlan{Model: "synthetic"}, proto.PromptRequestPayload{Input: proto.TextInput("first")}))
+	go s.settleExecutorTurn(s.startNative(ctx, SessionPlan{Model: "synthetic"}, proto.TurnSettings{Model: "synthetic"}, proto.PromptRequestPayload{Input: proto.TextInput("first")}))
 	if err := <-ready; err != nil {
 		t.Fatal(err)
 	}

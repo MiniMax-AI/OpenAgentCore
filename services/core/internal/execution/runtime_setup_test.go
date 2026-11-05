@@ -73,12 +73,12 @@ func TestRuntimeSetupFailureLabels(t *testing.T) {
 func TestInitialFileUsesTypedRuntimeBytes(t *testing.T) {
 	body := []byte(setupCanary)
 	size := int64(len(body))
-	owner := agentcapabilities.Identity{EnvironmentID: "environment", SessionID: "session"}
+	owner := agentcapabilities.Identity{EnvironmentID: "environment"}
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
 	if _, err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
 		t.Fatal(err)
 	}
-	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID || string(peer.data) != setupCanary {
+	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || string(peer.data) != setupCanary {
 		t.Fatal("file transport changed")
 	}
 	size++

@@ -3,10 +3,11 @@ package claudesdk
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"strings"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {

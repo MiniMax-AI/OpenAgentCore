@@ -49,7 +49,7 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 }
 
 func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSession) error {
-	if err := w.dispatcher.validateEngineInputs(input.Engine, input.Configuration, input.InitialInputs); err != nil {
+	if err := w.dispatcher.ValidateEngineInputs(input.Engine, input.Configuration, input.InitialInputs); err != nil {
 		return err
 	}
 	if preparedEnvironmentConfiguration(input.Configuration) {

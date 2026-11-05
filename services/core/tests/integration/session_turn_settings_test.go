@@ -18,9 +18,11 @@ import (
 func TestSessionUpdateBindsModelToLaterTurns(t *testing.T) {
 	h := newDispatchHarness(t)
 	ctx := context.Background()
-	declared := codex.Declaration.Clone()
-	declared.SessionUpdates.Model = proto.CapabilitySupported
-	supporting := execution.Policy{Declarations: harnessconfig.NewRegistry(declared)}
+	policy := func(model proto.CapabilitySupport) execution.Policy {
+		declared := codex.Declaration.Clone()
+		declared.SessionUpdates.Model = model
+		return execution.Policy{Declarations: harnessconfig.NewRegistry(declared)}
+	}
 	update := func(policy execution.Policy, model string) error {
 		_, err := sessionService(t, h.s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: h.tenant, SessionID: h.session.ID, Configure: func(engine string, stored json.RawMessage) (json.RawMessage, error) {
 			var configuration map[string]any
@@ -40,10 +42,10 @@ func TestSessionUpdateBindsModelToLaterTurns(t *testing.T) {
 		return prompt
 	}
 	first := h.message("first", "Before the update")
-	if update(execution.Policy{}, "refused-model") == nil {
+	if update(policy(proto.CapabilityUnsupported), "refused-model") == nil {
 		t.Fatal("a change the Harness does not declare was accepted")
 	}
-	if err := update(supporting, "later-model"); err != nil {
+	if err := update(policy(proto.CapabilitySupported), "later-model"); err != nil {
 		t.Fatal(err)
 	}
 	if got := prepared(first.TurnID).Turn.Model; got != "test-model" {

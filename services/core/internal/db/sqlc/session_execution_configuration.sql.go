@@ -45,11 +45,17 @@ func (q *Queries) GetSessionExecutionConfiguration(ctx context.Context, arg GetS
 
 const markSessionModelSource = `-- name: MarkSessionModelSource :exec
 UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model,source}', '"session"')
-WHERE session_id = $1
+WHERE session_id = $1 AND $2::jsonb #> '{agent,model}' IS DISTINCT FROM $3::jsonb #> '{agent,model}'
 `
 
-func (q *Queries) MarkSessionModelSource(ctx context.Context, sessionID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, markSessionModelSource, sessionID)
+type MarkSessionModelSourceParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	Before    []byte      `json:"before"`
+	After     []byte      `json:"after"`
+}
+
+func (q *Queries) MarkSessionModelSource(ctx context.Context, arg MarkSessionModelSourceParams) error {
+	_, err := q.db.Exec(ctx, markSessionModelSource, arg.SessionID, arg.Before, arg.After)
 	return err
 }
 

@@ -20,7 +20,7 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	t.Setenv("OAC_RUNTIME_HOME", private)
 	root := t.TempDir()
 	environment, session := uuid.NewString(), uuid.NewString()
-	b, err := NewWithCapabilityDirectory(environment, session, root, t.TempDir())
+	b, err := NewWithCapabilityDirectory(environment, root, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,8 +38,8 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 		"other Environment": func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
-		"other Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = uuid.NewString() },
-		"none":          func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
+		"non-canonical Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = "x y" },
+		"none":                  func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := valid
@@ -54,6 +54,20 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 	}
 	if _, err := (*Binding)(nil).Configure(proto.PromptRequestPayload{}); err != nil {
 		t.Fatal("ordinary unbound behavior changed", err)
+	}
+}
+
+func TestBindingServesSessionsInSequence(t *testing.T) {
+	b, req := testBinding(t)
+	for _, key := range []string{req.AgentStateKey, uuid.NewString()} {
+		req.AgentStateKey = key
+		configured, err := b.Configure(req)
+		if err != nil {
+			t.Fatalf("Session %s: %v", key, err)
+		}
+		if _, err = b.Prepare(t.Context(), configured); err != nil {
+			t.Fatalf("Session %s: %v", key, err)
+		}
 	}
 }
 
@@ -96,11 +110,11 @@ func TestBindingPrepareRejectsOtherWorkspaceRoot(t *testing.T) {
 func TestCapabilityLayoutUsesOperatorDirectories(t *testing.T) {
 	b, _ := testBinding(t)
 	for _, directory := range []string{filepath.Join(b.workspace, "capabilities"), filepath.Join(os.Getenv("OAC_RUNTIME_HOME"), "capabilities")} {
-		if _, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, directory); err != nil {
+		if _, err := NewWithCapabilityDirectory(b.environment, b.workspace, directory); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, "relative"); err == nil {
+	if _, err := NewWithCapabilityDirectory(b.environment, b.workspace, "relative"); err == nil {
 		t.Fatal("relative installation path accepted")
 	}
 }
