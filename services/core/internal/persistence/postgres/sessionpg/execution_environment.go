@@ -7,39 +7,36 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (e *Execution) WithInitialization(ctx context.Context, tenant, session string, apply func(context.Context, sessions.InitializationTx, sessions.LockedSession) error) error {
+// WithInitialization runs apply in the transaction of the tenant's
+// Environment. A malformed Environment ID is a missing Environment.
+func (e *Execution) WithInitialization(ctx context.Context, tenant, environment string, apply func(context.Context, sessions.InitializationTx, sessions.LockedSession) error) error {
+	return e.withEnvironment(ctx, tenant, environment, func(ctx context.Context, tx *environmentTx, locked sessions.LockedSession) error {
+		return apply(ctx, tx, locked)
+	})
+}
+
+// WithConnection runs apply in the transaction of the tenant's Environment.
+func (e *Execution) WithConnection(ctx context.Context, tenant, environment string, apply func(context.Context, sessions.ConnectionTx, sessions.LockedSession) error) error {
+	return e.withEnvironment(ctx, tenant, environment, func(ctx context.Context, tx *environmentTx, locked sessions.LockedSession) error {
+		return apply(ctx, tx, locked)
+	})
+}
+
+func (e *Execution) withEnvironment(ctx context.Context, tenant, environment string, apply func(context.Context, *environmentTx, sessions.LockedSession) error) error {
 	tenantID, err := parseID(tenant)
 	if err != nil {
 		return err
 	}
-	sessionID := pgunit.PathID(session)
-	return WithSession(ctx, e.lease, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
-		return apply(ctx, &environmentTx{SessionTx: BindSession(q, tenantID, sessionID)}, locked)
-	})
-}
-
-// WithConnection reads the Environment in the transaction before it locks
-// the Environment's Session.
-func (e *Execution) WithConnection(ctx context.Context, tenant, environment string, apply func(context.Context, sessions.ConnectionTx, sessions.LockedSession) error) error {
-	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		current, err := LoadEnvironment(ctx, q, tenant, environment)
-		if err != nil {
-			return err
-		}
-		lookup, err := ResourceLookup(tenant, current.SessionID)
-		if err != nil {
-			return err
-		}
-		return inSession(ctx, q, lookup.TenantID, lookup.ID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
-			return apply(ctx, &environmentTx{SessionTx: BindSession(q, lookup.TenantID, lookup.ID)}, locked)
-		})
+	id := pgunit.PathID(environment)
+	return WithEnvironment(ctx, e.lease, tenantID, id, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, attached pgtype.UUID) error {
+		return apply(ctx, &environmentTx{SessionTx: BindSession(q, tenantID, attached), environment: id}, locked)
 	})
 }
 
@@ -74,17 +71,33 @@ func (e *Execution) ListEnvironmentConnections(ctx context.Context, after string
 	return keys, nil
 }
 
-// environmentTx is the Session's Environment inside the Session transaction
-// of an initialization or connection operation.
-type environmentTx struct{ *SessionTx }
+// environmentTx is an Environment inside the transaction of an initialization
+// or connection operation. Its Session is the attached one, invalid when none
+// is attached.
+type environmentTx struct {
+	*SessionTx
+	environment pgtype.UUID
+}
 
 var (
 	_ sessions.InitializationTx = (*environmentTx)(nil)
 	_ sessions.ConnectionTx     = (*environmentTx)(nil)
 )
 
-func (t *environmentTx) LoadSessionDevice(ctx context.Context) (sessions.ExecutionDevice, bool, error) {
-	return loadSessionDevice(ctx, t.q, t.tenant, t.session)
+func (t *environmentTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
+	row, err := t.q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: t.tenant, ID: t.environment})
+	return environmentFromRow(row.Environment, row.AttachedSessionID, row.ExternalWorkspace, err)
+}
+
+func (t *environmentTx) LoadEnvironmentDevice(ctx context.Context) (sessions.ExecutionDevice, bool, error) {
+	row, err := t.q.GetEnvironmentDevice(ctx, sqlc.GetEnvironmentDeviceParams{TenantID: t.tenant, EnvironmentID: t.environment})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ExecutionDevice{}, false, nil
+	}
+	if err != nil {
+		return sessions.ExecutionDevice{}, false, err
+	}
+	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID)}, true, nil
 }
 
 func (t *environmentTx) ClaimInitialization(ctx context.Context, environment string) (bool, error) {

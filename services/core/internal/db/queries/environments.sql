@@ -1,6 +1,6 @@
 -- name: CreateEnvironment :exec
-INSERT INTO environments (id, tenant_id, configuration, initialization)
-VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(configuration), CASE WHEN sqlc.arg(prepared)::boolean THEN 'pending' ELSE 'complete' END);
+INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization)
+VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(configuration), true, CASE WHEN sqlc.arg(prepared)::boolean THEN 'pending' ELSE 'complete' END);
 
 -- name: AttachSessionEnvironment :exec
 UPDATE sessions SET environment_id = $2 WHERE id = $1;

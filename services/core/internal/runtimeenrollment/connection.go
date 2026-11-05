@@ -81,7 +81,7 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 	if current.Status == "failed" || current.Status == "expired" {
 		return false, sessions.ErrNotFound
 	}
-	bound, err := s.GetSessionDevice(ctx, tenant, current.SessionID)
+	bound, err := s.GetSessionDevice(ctx, tenant, current.AttachedSessionID)
 	if errors.Is(err, sessions.ErrNotFound) {
 		return false, nil
 	}

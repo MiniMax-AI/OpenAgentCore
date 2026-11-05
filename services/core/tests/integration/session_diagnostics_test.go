@@ -70,19 +70,19 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 		t.Run(skew.String(), func(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.SessionID)
+			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.AttachedSessionID)
 			events := []sessions.ExecutionEvent{diagnosticToolEvent("first", "before", "in_progress"), diagnosticToolEvent("second", "before", "in_progress")}
-			if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
+			if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), owner.TenantID, owner.AttachedSessionID, turn, 1, events); err != nil {
 				t.Fatal(err)
 			}
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			before := runtimeDatabaseTime(t, s)
-			completed, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
+			completed, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.AttachedSessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native completion changed", completed, err)
 			}
-			snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn)
+			snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.AttachedSessionID, turn)
 			if err != nil || len(snap.Items) != 2 {
 				t.Fatal(snap, err)
 			}
@@ -223,7 +223,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	})
 	failure := sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 7}
 	runtimeSuspensionSQL(t, pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
-	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
+	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
 	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
 		t.Fatal("failure committed without events")
 	}
@@ -268,7 +268,7 @@ func TestDiagnosticInitializationStepsAndFailureCategory(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtimeSuspensionSQL(t, s.pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
-	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
+	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
 	index := 1
 	steps := []sessions.InitializationStep{{Step: "npm", DurationMS: 4100}, {Step: "setup", Index: &index, DurationMS: 5200}}
 	execution := sessionExecution(t, writer.lease)
@@ -349,10 +349,10 @@ func TestDiagnosticRootReadRejectsActualChildTurn(t *testing.T) {
 	s, w, owner := managedIdleClockFixture(t)
 	root := runtimeSuspensionCompleted(t, s.pool, owner)
 	child, turn := uuid.NewString(), uuid.NewString()
-	runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
-	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, root)
-	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn','in_progress',clock_timestamp())`, turn, owner.SessionID, child)
-	if _, err := sessionAdapter(w).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
+	runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.AttachedSessionID, root)
+	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.AttachedSessionID, owner.DeviceID, root)
+	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn','in_progress',clock_timestamp())`, turn, owner.AttachedSessionID, child)
+	if _, err := sessionAdapter(w).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.AttachedSessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn became root diagnostics", err)
 	}
 }

@@ -56,9 +56,6 @@ AND installation_id=(SELECT installation_id FROM runtime_deployment WHERE single
 -- name: GetRuntimeEnrollment :one
 SELECT * FROM runtime_node_enrollments WHERE token_sha256=$1;
 
--- name: CreateRuntimePlacement :exec
-INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,(SELECT generation FROM runtime_deployment));
-
 -- name: GetRuntimePlacement :one
 SELECT p.*, n.name, (EXISTS(SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=p.deployment_generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch AND g.state='ready') AND n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at>clock_timestamp()-interval '45 seconds' AND n.removed_at IS NULL)::boolean AS available,
  COALESCE(a.observation_error,'')::text AS observation_error, COALESCE(a.state,'reserved')::text AS state, COALESCE(a.compute_phase,'disabled')::text AS compute_phase
@@ -78,9 +75,9 @@ SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.comp
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id LEFT JOIN sessions s ON s.environment_id=e.id AND s.deleted_at IS NULL
 WHERE a.node_id=$1 AND a.state<>'released' ORDER BY a.created_at,a.id LIMIT 1000;
 
--- name: CreateSessionRuntimePlacement :exec
+-- name: CreateRuntimePlacement :exec
 INSERT INTO runtime_placements(environment_id,node_id,deployment_generation)
-SELECT environment_id,$2,sqlc.arg(generation)::bigint FROM sessions WHERE id=$1;
+VALUES (sqlc.arg(environment_id)::uuid,sqlc.arg(node_id)::uuid,sqlc.arg(generation)::bigint);
 
 -- name: SetRuntimeObservation :exec
 UPDATE runtime_allocations SET observation_error=$4 WHERE id=$1 AND compute_revision=$2 AND state=$3 AND state<>'released';

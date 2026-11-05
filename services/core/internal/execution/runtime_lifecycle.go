@@ -386,7 +386,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if owner.ProviderKey != r.config.InstallationID || owner.NodeID != r.nodeID {
 		return sandbox.ErrOwnership
 	}
-	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
 		var err error
 		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
@@ -418,7 +418,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 		return err
 	}
 	info, err := provider.GetInfo(ctx, runtimeReference(owner))
-	cleanup := owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending"
+	cleanup := owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending"
 	// Resource drift disqualifies execution, not cleanup already authorized by
 	// Core. Kill independently verifies ownership before removing anything.
 	invalidCleanup := cleanup && errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, sandbox.ErrOwnership)
@@ -438,7 +438,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 			return err
 		}
 	}
-	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
 		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
 			return err

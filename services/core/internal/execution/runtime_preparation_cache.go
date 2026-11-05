@@ -42,7 +42,7 @@ func (w *Worker) preparationCache(ctx context.Context, owner sessions.Environmen
 	encoder := json.NewEncoder(hash)
 	_ = encoder.Encode(owner.TenantID)
 	for index := range fileCount {
-		metadata, body, err := w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(ctx, owner.TenantID, owner.SessionID, index)
+		metadata, body, err := w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(ctx, owner.TenantID, owner.EnvironmentID, index)
 		if err != nil {
 			return nil, err
 		}

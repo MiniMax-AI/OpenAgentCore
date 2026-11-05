@@ -206,7 +206,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		if err != nil {
 			return err
 		}
-		if revoked.SessionDeleted {
+		if revoked.Reclaimed {
 			err = sessions.CancelWork(ctx, tx)
 		} else {
 			retain := false
@@ -442,10 +442,10 @@ func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, 
 	if !live {
 		return current, nil
 	}
-	if current.SessionDeleted {
+	if current.Reclaimed {
 		return Allocation{}, sessions.ErrNotFound
 	}
-	device, bound, err := tx.LoadSessionDevice()
+	device, bound, err := tx.LoadEnvironmentDevice()
 	if err != nil {
 		return Allocation{}, err
 	}

@@ -88,7 +88,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
 		return sandbox.ErrOwnership
 	}
-	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
 		return r.cleanupCompute(ctx, p, owner, state)
 	}
 	if err := r.lease.CheckOwnership(ctx); err != nil {

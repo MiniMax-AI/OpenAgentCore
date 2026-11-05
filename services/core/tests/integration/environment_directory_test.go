@@ -120,7 +120,7 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 		t.Fatal("foreign reader admitted", err)
 	}
 	wrong := environment
-	wrong.SessionID = uuid.NewString()
+	wrong.AttachedSessionID = uuid.NewString()
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), wrong, "reports"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("wrong Session admitted", err)
 	}

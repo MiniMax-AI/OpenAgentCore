@@ -291,14 +291,18 @@ func loadSession(ctx context.Context, q *sqlc.Queries, tenant, id pgtype.UUID) (
 }
 
 // loadSessionActivity adds the Environment, input activity and latest Turn
-// projection of GetSession to session within the caller's snapshot.
+// projection of GetSession to session within the caller's snapshot, and
+// composes the Environment's configuration into the Session's.
 func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.Session) (sessions.Session, error) {
 	id, _ := parseID(session.ID)
 	tenant, _ := parseID(session.TenantID)
 	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	if err == nil {
-		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, environment.ExternalWorkspace, nil)
+		value, err := environmentFromRow(environment.Environment, environment.AttachedSessionID, environment.ExternalWorkspace, nil)
 		if err != nil {
+			return session, err
+		}
+		if session.Configuration, err = sessions.ComposeEnvironment(session.Configuration, value.Configuration); err != nil {
 			return session, err
 		}
 		session.Environment = &value
@@ -311,7 +315,11 @@ func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 			return session, err
 		}
 		session.EnvironmentInputActivity, session.PendingInput = sessions.InputActivity(state)
-	} else if !errors.Is(err, pgx.ErrNoRows) {
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		if session.Configuration, err = sessions.ComposeEnvironment(session.Configuration, nil); err != nil {
+			return session, err
+		}
+	} else {
 		return session, err
 	}
 	row, err := q.GetLatestSessionTurn(ctx, id)
@@ -343,4 +351,17 @@ func environmentFailure(row sqlc.Environment) *sessions.EnvironmentFailure {
 		failure.Detail = sessions.SanitizedProvisioningDetail(detail)
 	}
 	return failure
+}
+
+// environmentSnapshot is the Session's whole configuration snapshot: its
+// stored part with its Environment's configuration composed in.
+func environmentSnapshot(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UUID, stored []byte) (json.RawMessage, error) {
+	row, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: session})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ComposeEnvironment(stored, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return sessions.ComposeEnvironment(stored, row.Environment.Configuration)
 }

@@ -29,7 +29,7 @@ func (s *connectionStub) AuthenticateEnvironmentExecutor(_ context.Context, envi
 	return "tenant", s.err
 }
 func (*connectionStub) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
-	return sessions.Environment{ID: "environment", SessionID: "session", Status: "pending"}, nil
+	return sessions.Environment{ID: "environment", AttachedSessionID: "session", Status: "pending"}, nil
 }
 func (*connectionStub) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
 	return sessions.ExecutionDevice{}, sessions.ErrNotFound
@@ -95,7 +95,7 @@ func (s *liveConnectionStore) AuthenticateEnvironmentExecutor(context.Context, s
 	return "tenant", nil
 }
 func (s *liveConnectionStore) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
-	return sessions.Environment{ID: "environment", SessionID: "session", Status: "connected"}, nil
+	return sessions.Environment{ID: "environment", AttachedSessionID: "session", Status: "connected"}, nil
 }
 func (s *liveConnectionStore) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
 	return sessions.ExecutionDevice{ID: "device", EnvironmentID: "environment"}, nil

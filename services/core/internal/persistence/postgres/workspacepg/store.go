@@ -191,7 +191,7 @@ func (e *Execution) Bind(ctx context.Context, tenant, environment, configuration
 	var result workspaces.Record
 	err = e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		deleted, err := lockSession(ctx, q, tenant, environment)
+		deleted, err := lockEnvironment(ctx, q, tenant, environment)
 		if err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func (e *Execution) change(ctx context.Context, ref workspacefs.Reference, apply
 	}
 	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		deleted, err := lockSession(ctx, q, ref.TenantID, ref.EnvironmentID)
+		deleted, err := lockEnvironment(ctx, q, ref.TenantID, ref.EnvironmentID)
 		if err != nil {
 			return err
 		}
@@ -338,16 +338,16 @@ func (e *Execution) change(ctx context.Context, ref workspacefs.Reference, apply
 	})
 }
 
-func lockSession(ctx context.Context, q *sqlc.Queries, tenant, environment string) (bool, error) {
-	id, err := q.LockWorkspaceSession(ctx, sqlc.LockWorkspaceSessionParams{TenantID: pgunit.PathID(tenant), ID: pgunit.PathID(environment)})
+func lockEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment string) (bool, error) {
+	id, err := q.LockWorkspaceEnvironment(ctx, sqlc.LockWorkspaceEnvironmentParams{TenantID: pgunit.PathID(tenant), ID: pgunit.PathID(environment)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, workspaces.ErrNotFound
 	}
 	if err != nil {
 		return false, err
 	}
-	// Read after acquiring the Session lock with a fresh statement snapshot.
-	return q.WorkspaceSessionDeleted(ctx, id)
+	// Read after acquiring the Environment lock with a fresh statement snapshot.
+	return q.WorkspaceEnvironmentReclaimed(ctx, id)
 }
 
 func get(ctx context.Context, q *sqlc.Queries, c credentials, tenant, environment string) (workspaces.Record, error) {

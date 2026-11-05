@@ -111,7 +111,7 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 		writeSessionsError(w, r, err)
 		return
 	}
-	session, err := h.SessionsReader.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), claim.Principal.TenantID, environment.AttachedSessionID)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return

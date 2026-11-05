@@ -61,7 +61,7 @@ func TestFailEnvironment(t *testing.T) {
 	failedAt := time.Unix(1700000000, 0)
 	settled := &EnvironmentInputState{State: EnvironmentInputFailed, EnvironmentType: "openai_hosted", SettledAt: failedAt}
 	usage := json.RawMessage(`{"input_tokens":1}`)
-	environment := Environment{ID: "environment", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
+	environment := Environment{ID: "environment", AttachedSessionID: "session", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	var changes []SessionChange
 	f := &fakeTx{t: t,
 		recordEnvironmentFailure: returns(failedAt), appendChanges: collect(&changes), failPendingInput: done,
@@ -86,8 +86,14 @@ func TestFailEnvironment(t *testing.T) {
 		t.Fatalf("changes %+v", changes)
 	}
 
+	unattached := &fakeTx{t: t, recordEnvironmentFailure: returns(failedAt)}
+	if err := FailEnvironment(t.Context(), unattached, Environment{ID: "environment", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}, "reason", nil); err != nil {
+		t.Fatal(err)
+	}
+	assertCalls(t, unattached, "RecordEnvironmentFailure environment reason")
+
 	invalid := &fakeTx{t: t, recordEnvironmentFailure: returns(failedAt)}
-	if err := FailEnvironment(t.Context(), invalid, Environment{ID: "environment", Configuration: json.RawMessage(`{}`)}, "reason", nil); err == nil {
+	if err := FailEnvironment(t.Context(), invalid, Environment{ID: "environment", AttachedSessionID: "session", Configuration: json.RawMessage(`{}`)}, "reason", nil); err == nil {
 		t.Fatal("invalid Environment type failed")
 	}
 	assertCalls(t, invalid, "RecordEnvironmentFailure environment reason")
@@ -95,7 +101,7 @@ func TestFailEnvironment(t *testing.T) {
 
 func TestTerminateEnvironment(t *testing.T) {
 	configuration := json.RawMessage(`{"type":"openai_hosted"}`)
-	connected := Environment{ID: "environment", Status: "connected", Configuration: configuration}
+	connected := Environment{ID: "environment", AttachedSessionID: "session", Status: "connected", Configuration: configuration}
 	var changes []SessionChange
 	live := &fakeTx{t: t,
 		loadEnvironment: returns(connected), recordEnvironmentFailure: returns(time.Unix(1700000000, 0)), appendChanges: collect(&changes),
@@ -123,7 +129,7 @@ func TestTerminateEnvironment(t *testing.T) {
 	assertCalls(t, expired, "LoadEnvironment", "LoadEnvironmentInput", "ExpireEnvironment environment", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput")
 
 	terminal := &fakeTx{t: t,
-		loadEnvironment:      returns(Environment{ID: "environment", Status: "failed", Configuration: configuration}),
+		loadEnvironment:      returns(Environment{ID: "environment", AttachedSessionID: "session", Status: "failed", Configuration: configuration}),
 		loadEnvironmentInput: inputs(), failPendingInput: done, loadActiveTurn: activeTurn(nil), cancelPendingInput: done,
 	}
 	if err := TerminateEnvironment(t.Context(), terminal, false, "reason", nil); err != nil {

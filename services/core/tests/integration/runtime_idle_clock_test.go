@@ -87,11 +87,11 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 		t.Run(skew.String(), func(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.SessionID)
+			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.AttachedSessionID)
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
 			before := runtimeDatabaseTime(t, s)
-			completed, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0)
+			completed, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.AttachedSessionID, turn, sessions.TurnCompleted, outcome, "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("native completion changed or rejected", completed, err)
@@ -100,7 +100,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, sessions.ErrTurnConflict) {
+			if _, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.AttachedSessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("terminal replay accepted", err)
 			}
 			unchanged, err := deploymentStore(w).Activity(t.Context(), owner.ID)
@@ -108,7 +108,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 				t.Fatal("terminal retry reset idle", unchanged, err)
 			}
 			verifyManagedIdleClock(t, s, w, owner, before, after)
-			read, err := sessionAdapter(s).GetTurn(t.Context(), owner.TenantID, owner.SessionID, turn)
+			read, err := sessionAdapter(s).GetTurn(t.Context(), owner.TenantID, owner.AttachedSessionID, turn)
 			if err != nil || read.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native timestamp rewritten", read, err)
 			}
@@ -121,14 +121,14 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			root := runtimeSuspensionCompleted(t, s.pool, owner)
 			child := uuid.NewString()
-			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
-			runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal,public_visible) VALUES($1,$2,$3,'codex','child','root',1,$4,1,true)`, child, owner.SessionID, owner.DeviceID, root)
+			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.AttachedSessionID, root)
+			runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal,public_visible) VALUES($1,$2,$3,'codex','child','root',1,$4,1,true)`, child, owner.AttachedSessionID, owner.DeviceID, root)
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			created := source - 1000
 			payload, _ := json.Marshal(proto.SubagentTurnPayload{NativeID: "child", TurnID: "remote-turn", Status: sessions.TurnCompleted, CreatedAtMS: created, StartedAtMS: &created, CompletedAtMS: &source})
 			tenant, _ := parseID(owner.TenantID)
 			project := func() error {
-				return w.withSession(t.Context(), owner.TenantID, owner.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+				return w.withSession(t.Context(), owner.TenantID, owner.AttachedSessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 					return sessions.ProjectSource(ctx, sessionpg.BindSession(q, tenant, session), sessions.Source{Turn: root, Kind: proto.TypeSubagentTurn, Payload: payload})
 				})
 			}
@@ -149,12 +149,12 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 				t.Fatal("replayed child completion reset idle", unchanged, err)
 			}
 			verifyManagedIdleClock(t, s, w, owner, before, after)
-			page, err := sessionAdapter(s).ListSubagentTurns(t.Context(), owner.TenantID, owner.SessionID, child, "", 10, true)
+			page, err := sessionAdapter(s).ListSubagentTurns(t.Context(), owner.TenantID, owner.AttachedSessionID, child, "", 10, true)
 			if err != nil || len(page.Data) != 1 {
 				t.Fatal(page, err)
 			}
 			// Public child Turns have second precision; read the stored native time.
-			sessionID, _ := parseID(owner.SessionID)
+			sessionID, _ := parseID(owner.AttachedSessionID)
 			turnID, _ := parseID(page.Data[0].ID)
 			read, err := s.queries.GetChildTurn(t.Context(), sqlc.GetChildTurnParams{SessionID: sessionID, ID: turnID})
 			if err != nil || read.CompletedAt.Time.UnixMilli() != source {
@@ -225,7 +225,7 @@ func TestManagedIdleClockReconnectPreservesReceipts(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("reconnect changed compute receipt or idle clock", err)
 	}
-	if _, err := sessionAdapter(s).GetTurn(t.Context(), owner.TenantID, owner.SessionID, turn); err != nil {
+	if _, err := sessionAdapter(s).GetTurn(t.Context(), owner.TenantID, owner.AttachedSessionID, turn); err != nil {
 		t.Fatal(err)
 	}
 }

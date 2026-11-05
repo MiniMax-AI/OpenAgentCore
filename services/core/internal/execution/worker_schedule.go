@@ -75,6 +75,20 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrDeviceBindingConflict) {
 				continue
 			}
+			if err == nil && !ready {
+				// The Environment is prepared without a Harness; a connected
+				// Runtime that lacks the Session's Harness fails its input.
+				missing, err := w.harnessUnavailable(ctx, item.TenantID, item.SessionID)
+				if err != nil {
+					return nil, err
+				}
+				if missing {
+					if err := w.dispatcher.sessionExecution.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "runtime_preparation_failed"); err != nil && !errors.Is(err, sessions.ErrNotFound) {
+						return nil, err
+					}
+				}
+				continue
+			}
 		}
 		if err != nil {
 			return nil, err

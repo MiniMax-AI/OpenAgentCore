@@ -23,7 +23,7 @@ func LoadEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment s
 		return sessions.Environment{}, err
 	}
 	row, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenantID, ID: pgunit.PathID(environment)})
-	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
+	return environmentFromRow(row.Environment, row.AttachedSessionID, row.ExternalWorkspace, err)
 }
 
 // loadSessionEnvironment reads, on q, the Environment of the tenant's Session
@@ -39,7 +39,7 @@ func loadSessionEnvironment(ctx context.Context, q *sqlc.Queries, tenant, sessio
 		return sessions.Environment{}, err
 	}
 	row, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenantID, ID: id})
-	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
+	return environmentFromRow(row.Environment, row.AttachedSessionID, row.ExternalWorkspace, err)
 }
 
 func (s *Store) GetEnvironment(ctx context.Context, tenant, environment string) (sessions.Environment, error) {
@@ -62,8 +62,8 @@ func (s *Store) ListEnvironmentInitializations(ctx context.Context, after string
 	result := make([]sessions.EnvironmentInitialization, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, sessions.EnvironmentInitialization{
-			EnvironmentID: optionalID(row.ID), SessionID: optionalID(row.SessionID), TenantID: optionalID(row.TenantID),
-			DeviceID: optionalID(row.DeviceID), State: row.Initialization, Engine: row.Engine,
+			EnvironmentID: optionalID(row.ID), TenantID: optionalID(row.TenantID),
+			DeviceID: optionalID(row.DeviceID), State: row.Initialization,
 		})
 	}
 	return result, nil

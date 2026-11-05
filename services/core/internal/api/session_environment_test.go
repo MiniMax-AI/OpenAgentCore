@@ -17,7 +17,7 @@ func environmentSession() sessions.Session {
 		ID: "session", TenantID: "tenant", CreatedAt: time.Unix(1700000000, 0), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"self_hosted"}}`),
 		Environment: &sessions.Environment{
-			ID: "environment", SessionID: "session", TenantID: "tenant", Status: "pending",
+			ID: "environment", AttachedSessionID: "session", TenantID: "tenant", Status: "pending",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":["/remote/capabilities"],"id":"forged","remote_url":"https://secret@private","env":{"SECRET":"private"},"setup_commands":["private"]}`),
 		},
 	}
@@ -52,7 +52,7 @@ func TestSessionEnvironmentUsesSafeStoredAssociation(t *testing.T) {
 		func(s *sessions.Session) { s.Environment = nil },
 		func(s *sessions.Session) { s.Environment.ID = "" },
 		func(s *sessions.Session) { s.Environment.TenantID = "foreign" },
-		func(s *sessions.Session) { s.Environment.SessionID = "other" },
+		func(s *sessions.Session) { s.Environment.AttachedSessionID = "other" },
 		func(s *sessions.Session) { s.Environment.Configuration = json.RawMessage(`{"type":"self_hosted"}`) },
 		func(s *sessions.Session) {
 			s.Configuration = json.RawMessage(`{"agent":{"id":"agent","model":"model"},"environment":{"type":"openai_hosted"}}`)

@@ -159,7 +159,7 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 		if err != nil {
 			return err
 		}
-		if owner.SessionDeleted {
+		if owner.Reclaimed {
 			return ErrExecutionUnavailable
 		}
 		if owner.State == "released" || owner.State == "cleanup_pending" || owner.Expired {
@@ -199,7 +199,7 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 			// capability declaration. File work must wait for both receipts.
 			peer, peerErr := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if peerErr == nil {
-				session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.SessionID)
+				session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.AttachedSessionID)
 				if err != nil {
 					return err
 				}
@@ -246,7 +246,7 @@ func (w *Worker) waitEnvironmentInitialization(ctx context.Context, environment 
 		if err != nil {
 			return err
 		}
-		if current.SessionID != environment.SessionID {
+		if current.AttachedSessionID != environment.AttachedSessionID {
 			return sessions.ErrNotFound
 		}
 		switch current.Initialization {

@@ -38,8 +38,8 @@ func TestEgressLimitsTheModelProviderToItsPort(t *testing.T) {
 	}
 }
 
-// A Session whose record is missing fails the attempt instead of falling back to the full cap.
-func TestAllocationEgressFailsClosedWithoutSession(t *testing.T) {
+// An Environment whose record is missing fails the attempt instead of falling back to the full cap.
+func TestAllocationEgressFailsClosedWithoutEnvironment(t *testing.T) {
 	r := &runtimeLifecycle{sessions: missingSession{}}
 	if _, err := r.allocationEgress(context.Background(), deployment.Allocation{}, sandbox.DefaultNetwork()); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("err %v", err)
@@ -48,8 +48,8 @@ func TestAllocationEgressFailsClosedWithoutSession(t *testing.T) {
 
 type missingSession struct{ sessions.Reader }
 
-func (missingSession) GetSession(context.Context, string, string) (sessions.Session, error) {
-	return sessions.Session{}, sessions.ErrNotFound
+func (missingSession) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
+	return sessions.Environment{}, sessions.ErrNotFound
 }
 
 func TestEnvironmentPolicyNarrowsTheCap(t *testing.T) {

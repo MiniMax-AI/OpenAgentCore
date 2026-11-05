@@ -36,7 +36,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 				t.Fatal(err)
 			}
 			first, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
-			if err != nil || first.ID == "" || first.ID == session.ID || first.SessionID != session.ID || first.TenantID != tenant || first.Status != "pending" || first.CreatedAt.IsZero() {
+			if err != nil || first.ID == "" || first.ID == session.ID || first.AttachedSessionID != session.ID || first.TenantID != tenant || first.Status != "pending" || first.CreatedAt.IsZero() {
 				t.Fatal(first, err)
 			}
 			got, err := sessionAdapter(s).GetEnvironment(ctx, tenant, first.ID)

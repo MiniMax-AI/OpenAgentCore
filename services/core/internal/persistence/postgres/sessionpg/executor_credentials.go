@@ -190,8 +190,8 @@ func (s *Store) WithExecutorCredentials(ctx context.Context, tenant string, appl
 	})
 }
 
-// WithEnvironmentExecutorCredentials reads the Environment on the pool before
-// it knows which Session to lock.
+// WithEnvironmentExecutorCredentials runs apply in the transaction of the
+// tenant's Environment.
 func (s *Store) WithEnvironmentExecutorCredentials(ctx context.Context, tenant, environment string, apply func(context.Context, sessions.EnvironmentExecutorCredentialTx, sessions.LockedSession) error) error {
 	tenantID, err := parseID(tenant)
 	if err != nil {
@@ -200,13 +200,8 @@ func (s *Store) WithEnvironmentExecutorCredentials(ctx context.Context, tenant, 
 	if _, err := parseID(environment); err != nil {
 		return err
 	}
-	current, err := LoadEnvironment(ctx, s.units.Queries(), tenant, environment)
-	if err != nil {
-		return err
-	}
-	session := pgunit.PathID(current.SessionID)
-	return WithSession(ctx, s.units, tenantID, session, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
-		return apply(ctx, &environmentCredentialTx{executorCredentialTx: executorCredentialTx{q: q, tenant: tenantID}, session: session}, locked)
+	return WithEnvironment(ctx, s.units, tenantID, pgunit.PathID(environment), func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, attached pgtype.UUID) error {
+		return apply(ctx, &environmentCredentialTx{executorCredentialTx: executorCredentialTx{q: q, tenant: tenantID}, session: attached}, locked)
 	})
 }
 

@@ -63,7 +63,16 @@ func (s *Store) UpdateSession(ctx context.Context, tenantID, sessionID string, e
 		}
 		configuration := current.Configuration
 		if configure != nil {
-			if configuration, err = configure(current.Engine, configuration); err != nil {
+			// configure sees the Session's whole snapshot; the Environment's
+			// part stays with the Environment.
+			snapshot, err := environmentSnapshot(ctx, q, tenant, current.ID, current.Configuration)
+			if err != nil {
+				return err
+			}
+			if snapshot, err = configure(current.Engine, snapshot); err != nil {
+				return err
+			}
+			if configuration, _, err = sessions.SplitEnvironment(snapshot); err != nil {
 				return err
 			}
 		}

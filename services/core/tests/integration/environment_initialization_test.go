@@ -188,7 +188,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
+		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending"}
 	}
 	revoked, other := create(), create()
 	owned := executionOwner(t, s).Sessions

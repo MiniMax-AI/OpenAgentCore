@@ -78,10 +78,10 @@ func TestFileReadinessWaitsForInitialization(t *testing.T) {
 					if reads > 1 {
 						initialization = "complete"
 					}
-					return sessions.Environment{SessionID: "session", Initialization: initialization}, nil
+					return sessions.Environment{AttachedSessionID: "session", Initialization: initialization}, nil
 				}},
 			}}
-			if err := worker.waitRuntimeAwake(t.Context(), sessions.Environment{SessionID: "session"}); err != nil || reads != 2 {
+			if err := worker.waitRuntimeAwake(t.Context(), sessions.Environment{AttachedSessionID: "session"}); err != nil || reads != 2 {
 				t.Fatalf("Files proceeded before initialization: reads=%d err=%v", reads, err)
 			}
 		})
@@ -102,9 +102,9 @@ func TestFileReadinessRejectsFailedInitializationAndLostOwnership(t *testing.T) 
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			worker := &Worker{dispatcher: &Dispatcher{SessionsReader: initializationReadinessReader{read: func(context.Context) (sessions.Environment, error) {
-				return sessions.Environment{SessionID: test.session, Initialization: test.state}, test.readError
+				return sessions.Environment{AttachedSessionID: test.session, Initialization: test.state}, test.readError
 			}}}}
-			if err := worker.waitEnvironmentInitialization(t.Context(), sessions.Environment{SessionID: "session"}); !errors.Is(err, test.want) {
+			if err := worker.waitEnvironmentInitialization(t.Context(), sessions.Environment{AttachedSessionID: "session"}); !errors.Is(err, test.want) {
 				t.Fatal(err)
 			}
 		})

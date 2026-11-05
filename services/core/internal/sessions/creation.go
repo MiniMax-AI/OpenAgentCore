@@ -88,16 +88,17 @@ type CreationTx interface {
 	SaveExecutionConfiguration(ctx context.Context, projection v1.SessionExecutionConfiguration, revision uuid.UUID) error
 	// SaveInitialFiles copies the validated initial files, a file_id one from
 	// its locked source File, seals them under the Session and records their
-	// metadata in its configuration. A missing source is ErrNotFound and one
+	// metadata in the Environment's configuration. A missing source is ErrNotFound and one
 	// beyond environmentconfig.MaxInitialFileBytes ErrInvalidInput.
 	SaveInitialFiles(ctx context.Context, files []environmentconfig.InitialFile) error
 	// SaveSetup seals the installed setup under the Session and records its
-	// metadata in its configuration.
+	// metadata in the Environment's configuration.
 	SaveSetup(ctx context.Context, setup environmentconfig.Setup) error
-	// CreateEnvironment creates the Session's Environment, pending
-	// preparation when the Session froze a setup or initial files, and
-	// returns its ID.
-	CreateEnvironment(ctx context.Context) (string, error)
+	// CreateEnvironment creates the Session's Environment with the
+	// configuration, pending preparation when prepared, attaches it to the
+	// Session and returns its ID. It precedes the setup and initial files,
+	// which are saved for it.
+	CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error)
 	// CreateInputReservation reserves the batch under key until the deadline
 	// the database clock sets, marked as the Session's initial input and
 	// bound to settings.
@@ -129,6 +130,9 @@ func (s *Service) CreateSession(ctx context.Context, tenant string, input Create
 		}
 		var created []writeaudit.Resource
 		if upserted.Created {
+			// The stored row holds none of the Environment; the snapshot the
+			// caller sent is the Session's full configuration.
+			upserted.Session.Configuration = session.Configuration
 			if created, err = s.createResources(ctx, tx, upserted.Session, input, batch, encoded); err != nil {
 				return err
 			}
@@ -190,6 +194,23 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 			return nil, err
 		}
 	}
+	created := []writeaudit.Resource{{Type: writeaudit.ResourceSession, ID: session.ID}}
+	creates, err := createsEnvironment(session.Configuration)
+	if err != nil {
+		return nil, err
+	}
+	environment := ""
+	if creates {
+		_, configuration, err := SplitEnvironment(session.Configuration)
+		if err != nil {
+			return nil, err
+		}
+		prepared := hosted || len(input.InitialFiles) > 0 || !setup.Empty()
+		if environment, err = tx.CreateEnvironment(ctx, configuration, prepared); err != nil {
+			return nil, err
+		}
+		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
+	}
 	if len(input.InitialFiles) > 0 {
 		if environmentconfig.ValidateInitialFiles(input.InitialFiles) != nil {
 			return nil, ErrInvalidInput
@@ -202,18 +223,6 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 		if err := tx.SaveSetup(ctx, setup); err != nil {
 			return nil, err
 		}
-	}
-	created := []writeaudit.Resource{{Type: writeaudit.ResourceSession, ID: session.ID}}
-	creates, err := createsEnvironment(session.Configuration)
-	if err != nil {
-		return nil, err
-	}
-	environment := ""
-	if creates {
-		if environment, err = tx.CreateEnvironment(ctx); err != nil {
-			return nil, err
-		}
-		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
 	}
 	if hosted {
 		if err := s.rules.CheckPublicOrigin(deployment.Provider); err != nil {

@@ -86,7 +86,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 			writes := sessionExecution(t, w.lease)
 			key := runtimeFileWriteKey(owner)
 			until := time.Now().Add(time.Hour)
-			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
+			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.AttachedSessionID)
 			done := make(chan error, 1)
 			go func() {
 				var err error

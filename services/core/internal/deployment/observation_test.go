@@ -52,10 +52,10 @@ func TestObservationResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T
 
 func TestObservationResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	r, err := newTestResolver(t, resolverStore{
-		session:  sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		session:  sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", AttachedSessionID: "session"}},
 		measured: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`),
 		allocation: Allocation{
-			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
+			ID: "allocation", TenantID: "tenant", AttachedSessionID: "session", EnvironmentID: "environment",
 			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
 		},
 	})
@@ -143,7 +143,7 @@ func TestObservationResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 		environment *sessions.Environment
 	}{
 		{mode: "none"},
-		{mode: "self_hosted", environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		{mode: "self_hosted", environment: &sessions.Environment{ID: "environment", TenantID: "tenant", AttachedSessionID: "session"}},
 	} {
 		r, err := newTestResolver(t, resolverStore{session: sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
 		if err != nil {
@@ -158,7 +158,7 @@ func TestObservationResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 
 func TestObservationResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 	r, err := newTestResolver(t, resolverStore{
-		session:       sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
+		session:       sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", AttachedSessionID: "session"}},
 		allocationErr: ErrNotFound,
 	})
 	if err != nil {
@@ -173,8 +173,8 @@ func TestObservationResolverReportsManagedAllocationAsUnavailable(t *testing.T) 
 func TestObservationResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
 	for _, mode := range []string{"self_hosted", "openai_hosted"} {
 		for _, environment := range []sessions.Environment{
-			{ID: "environment", TenantID: "other", SessionID: "session"},
-			{ID: "environment", TenantID: "tenant", SessionID: "other"},
+			{ID: "environment", TenantID: "other", AttachedSessionID: "session"},
+			{ID: "environment", TenantID: "tenant", AttachedSessionID: "other"},
 		} {
 			resolver, err := newTestResolver(t, resolverStore{session: sessions.Session{
 				ID: "session", TenantID: "tenant",
@@ -192,12 +192,12 @@ func TestObservationResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) 
 
 func TestObservationResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
 	base := Allocation{
-		ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
+		ID: "allocation", TenantID: "tenant", AttachedSessionID: "session", EnvironmentID: "environment",
 		ProviderKey: "provider", DeviceID: "device",
 	}
 	for _, mutate := range []func(*Allocation){
 		func(value *Allocation) { value.TenantID = "other" },
-		func(value *Allocation) { value.SessionID = "other" },
+		func(value *Allocation) { value.AttachedSessionID = "other" },
 		func(value *Allocation) { value.EnvironmentID = "other" },
 	} {
 		allocation := base
@@ -205,7 +205,7 @@ func TestObservationResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
 		resolver, err := newTestResolver(t, resolverStore{
 			session: sessions.Session{
 				ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`),
-				Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"},
+				Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", AttachedSessionID: "session"},
 			},
 			allocation: allocation,
 		})

@@ -93,7 +93,7 @@ func (s *Service) resolveScope(ctx context.Context, tenantID, sessionID string) 
 	if err != nil {
 		return Scope{}, fmt.Errorf("resolve Runtime history Environment: %w", err)
 	}
-	if environment.TenantID != tenantID || environment.SessionID != sessionID {
+	if environment.TenantID != tenantID || environment.AttachedSessionID != sessionID {
 		return Scope{}, errors.New("Runtime history Environment does not match resolved ownership")
 	}
 	var configuration struct {

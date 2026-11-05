@@ -85,7 +85,7 @@ func (f *fakeCreationTx) SaveSetup(_ context.Context, setup environmentconfig.Se
 	return f.saveSetup()
 }
 
-func (f *fakeCreationTx) CreateEnvironment(context.Context) (string, error) {
+func (f *fakeCreationTx) CreateEnvironment(context.Context, json.RawMessage, bool) (string, error) {
 	f.record("CreateEnvironment", f.createEnvironment != nil)
 	return f.createEnvironment()
 }
@@ -411,7 +411,7 @@ func TestCreateSession(t *testing.T) {
 			t.Fatalf("result %+v, %v", result, err)
 		}
 		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "SaveModelExecution https://model.example/v1",
-			"SaveExecutionConfiguration available " + uuid.Nil.String(), "SaveInitialFiles 1", "SaveSetup skill_a@3", "CreateEnvironment",
+			"SaveExecutionConfiguration available " + uuid.Nil.String(), "CreateEnvironment", "SaveInitialFiles 1", "SaveSetup skill_a@3",
 			"LoadEnvironmentInput", `CreateInputReservation <key> [{"kind":"message","payload":` + hi + `}] initial`, "LoadEnvironmentInput",
 			"PruneChanges", "AuditCreation session:session environment:environment:session", "LoadSession"}
 		if strings.Join(calls, "\n") != strings.Join(want, "\n") {

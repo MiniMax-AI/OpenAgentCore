@@ -72,15 +72,21 @@ func (s *Store) FindCreation(ctx context.Context, tenantID, key string) (session
 // caller named it, which binds the sealed model execution and the audit.
 type creationTx struct {
 	SessionTx
-	tenantID string
-	tx       pgx.Tx
-	cipher   *credentialcrypto.Cipher
+	// environment is the Session's Environment once CreateEnvironment ran.
+	environment pgtype.UUID
+	tenantID    string
+	tx          pgx.Tx
+	cipher      *credentialcrypto.Cipher
 }
 
 func (t *creationTx) UpsertSession(ctx context.Context, session sessions.NewSession) (sessions.Creation, error) {
+	stored, _, err := sessions.SplitEnvironment(session.Configuration)
+	if err != nil {
+		return sessions.Creation{}, err
+	}
 	params := sqlc.CreateSessionParams{
 		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: t.tenant, Engine: session.Engine,
-		Metadata: session.Metadata, IdempotencyKey: session.Key, RequestHash: session.RequestHash, Configuration: session.Configuration,
+		Metadata: session.Metadata, IdempotencyKey: session.Key, RequestHash: session.RequestHash, Configuration: stored,
 		CreatorKind: pgtype.Text{String: session.Creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: session.Creator.ID, Valid: true},
 	}
 	if session.IntentHash != nil {
@@ -94,8 +100,8 @@ func (t *creationTx) UpsertSession(ctx context.Context, session sessions.NewSess
 		return sessions.Creation{}, storable(err)
 	}
 	t.session = row.ID
-	stored, err := sessionFromRow(row)
-	return sessions.Creation{Session: stored, Created: row.ID == params.ID, Cursor: row.EventSequence}, err
+	created, err := sessionFromRow(row)
+	return sessions.Creation{Session: created, Created: row.ID == params.ID, Cursor: row.EventSequence}, err
 }
 
 func (t *creationTx) LockDeployment(ctx context.Context) (placement.Deployment, error) {
@@ -169,7 +175,7 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 			return fmt.Errorf("seal initial file: %w", err)
 		}
 		if err := t.q.CreateInitialEnvironmentFile(ctx, sqlc.CreateInitialEnvironmentFileParams{
-			ID: pgtype.UUID{Bytes: id, Valid: true}, SessionID: t.session, Position: int32(i), Path: f.Path, SizeBytes: size, Contents: encrypted,
+			ID: pgtype.UUID{Bytes: id, Valid: true}, EnvironmentID: t.environment, Position: int32(i), Path: f.Path, SizeBytes: size, Contents: encrypted,
 		}); err != nil {
 			return storable(err)
 		}
@@ -178,7 +184,7 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 	if err != nil {
 		return err
 	}
-	return storable(t.q.SetSessionInitialFileMetadata(ctx, sqlc.SetSessionInitialFileMetadataParams{ID: t.session, Column2: encoded}))
+	return storable(t.q.SetEnvironmentInitialFileMetadata(ctx, sqlc.SetEnvironmentInitialFileMetadataParams{ID: t.environment, Column2: encoded}))
 }
 
 func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setup) error {
@@ -190,10 +196,10 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 	if err != nil {
 		return fmt.Errorf("seal environment setup: %w", err)
 	}
-	if err := t.q.CreateEnvironmentSetup(ctx, sqlc.CreateEnvironmentSetupParams{SessionID: t.session, Contents: encrypted}); err != nil {
+	if err := t.q.CreateEnvironmentSetup(ctx, sqlc.CreateEnvironmentSetupParams{EnvironmentID: t.environment, Contents: encrypted}); err != nil {
 		return err
 	}
-	params := sqlc.SetSessionSetupMetadataParams{ID: t.session}
+	params := sqlc.SetEnvironmentSetupMetadataParams{ID: t.environment}
 	for _, field := range []struct {
 		target *[]byte
 		value  any
@@ -207,15 +213,18 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 			return err
 		}
 	}
-	return storable(t.q.SetSessionSetupMetadata(ctx, params))
+	return storable(t.q.SetEnvironmentSetupMetadata(ctx, params))
 }
 
-func (t *creationTx) CreateEnvironment(ctx context.Context) (string, error) {
-	id := uuid.New()
-	if err := t.q.CreateEnvironment(ctx, sqlc.CreateEnvironmentParams{ID: pgtype.UUID{Bytes: id, Valid: true}, SessionID: t.session}); err != nil {
+func (t *creationTx) CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error) {
+	t.environment = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	if err := t.q.CreateEnvironment(ctx, sqlc.CreateEnvironmentParams{ID: t.environment, TenantID: t.tenant, Configuration: configuration, Prepared: prepared}); err != nil {
 		return "", err
 	}
-	return id.String(), nil
+	if err := t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: t.environment}); err != nil {
+		return "", err
+	}
+	return optionalID(t.environment), nil
 }
 
 func (t *creationTx) PruneChanges(ctx context.Context) error {

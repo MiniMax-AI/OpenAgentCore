@@ -74,32 +74,18 @@ func (q *Queries) CreateRuntimeEnrollment(ctx context.Context, arg CreateRuntime
 }
 
 const createRuntimePlacement = `-- name: CreateRuntimePlacement :exec
-INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,(SELECT generation FROM runtime_deployment))
+INSERT INTO runtime_placements(environment_id,node_id,deployment_generation)
+VALUES ($1::uuid,$2::uuid,$3::bigint)
 `
 
 type CreateRuntimePlacementParams struct {
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 	NodeID        pgtype.UUID `json:"node_id"`
+	Generation    int64       `json:"generation"`
 }
 
 func (q *Queries) CreateRuntimePlacement(ctx context.Context, arg CreateRuntimePlacementParams) error {
-	_, err := q.db.Exec(ctx, createRuntimePlacement, arg.EnvironmentID, arg.NodeID)
-	return err
-}
-
-const createSessionRuntimePlacement = `-- name: CreateSessionRuntimePlacement :exec
-INSERT INTO runtime_placements(environment_id,node_id,deployment_generation)
-SELECT environment_id,$2,$3::bigint FROM sessions WHERE id=$1
-`
-
-type CreateSessionRuntimePlacementParams struct {
-	ID         pgtype.UUID `json:"id"`
-	NodeID     pgtype.UUID `json:"node_id"`
-	Generation int64       `json:"generation"`
-}
-
-func (q *Queries) CreateSessionRuntimePlacement(ctx context.Context, arg CreateSessionRuntimePlacementParams) error {
-	_, err := q.db.Exec(ctx, createSessionRuntimePlacement, arg.ID, arg.NodeID, arg.Generation)
+	_, err := q.db.Exec(ctx, createRuntimePlacement, arg.EnvironmentID, arg.NodeID, arg.Generation)
 	return err
 }
 
