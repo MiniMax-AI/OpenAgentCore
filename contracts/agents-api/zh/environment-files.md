@@ -1,7 +1,7 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: 0ed7d7e903ead70f209808a991c15e6156749f7abb111b145b1de1f58d3037d8
+source_hash: 95d56a1da2027c85e05130f00e8712247682d65365a483c6563c1d10a4c70363
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。
@@ -13,6 +13,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 - Environment 文件适用于 `openai_hosted` 和 `self_hosted` Environment。`none` Environment 返回 503 `execution_unavailable`。
 - 公开路径从 `/workspace` 开始，代表 Environment 在机器上实际位置的工作区目录。
 - 首先在调用方项目查找 Environment；不存在或属于其他范围的 ID 返回 404。
+- 未挂载任何 Session 的独立 Environment，两种操作均返回 409 `conflict_error`，“Attach a session to this environment before using its files.”
 - 仍为 `pending` 的 `openai_hosted` Environment，两种操作均返回 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`。此检查在请求验证之后、任何源 File 查询之前执行。其他状态继续处理，Runtime 不可达时返回 503。
 - 文件操作在现有请求期限内等待 Environment 初始化完成；`connected` 本身不表示已就绪，初始化失败或执行容量耗尽仍返回 503。
 - 列表和写入不启动 Turn，也不向模型发送输入。

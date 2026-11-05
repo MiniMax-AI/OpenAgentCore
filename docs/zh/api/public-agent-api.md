@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 8846a755d119bc752f903715629d7be7c6aefef4498766c00889a714ac11d4b5
+source_hash: ed050299de0e943275b2a52fa644ec61bf5a149fd5eeafad8ed833521fc56714
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -52,6 +52,7 @@ agents /agents
 | [Turns 和 Items](#turns-and-items) | `/agents/sessions/{id}/turns`、`/items` | 持久化历史 |
 | [Files](#files) | `/files`、`/agents/environments/{id}/files`、`/agents/sessions/{id}/artifacts` | 上传内容、工作区文件和输出 |
 | [Skills](#skills) | `/skills` | 带版本的能力捆绑包 |
+| [Environments](#prewarm-an-environment) | `/agents/environments` | 供 Session 挂载的已准备工作区 |
 | [Environment 模板](#environment-templates) | `/agents/environments/templates` | 可复用的工作区设置 |
 | [Automations](#automations) | `/agents/automations` | 按计划创建 Session 或发送指令 |
 | [Vaults](#vaults) | `/vaults` | MCP 服务器的只写凭据 |
@@ -132,7 +133,7 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 
 | 状态 | 常见代码 | 含义 |
 | --- | --- | --- |
-| 400 | `invalid_request_error`、`invalid_beta`、`model_provider_required`、`unsupported_or_invalid_configuration` | 修正请求。`invalid_beta` 表示 `OpenAI-Beta` 请求头缺失或错误 |
+| 400 | `invalid_request_error`、`invalid_beta`、`model_provider_required`、`model_provider_unreachable`、`unsupported_or_invalid_configuration` | 修正请求。`invalid_beta` 表示 `OpenAI-Beta` 请求头缺失或错误 |
 | 401 | `invalid_api_key` 或无代码 | 密钥错误或缺失，或者使用了其他命名空间中的密钥 |
 | 404 | Beta 路由返回 `not_found_error` | 对象不存在，或属于其他项目。这两种情况看起来完全相同 |
 | 405 | `unsupported_operation` | Core 不支持此操作 |
@@ -560,6 +561,31 @@ template = client.beta.agents.environments.templates.create(
 | `files`、`skills`、`plugins` | 初始内容。最多 50 个文件，内联数据总计最多 10 MiB |
 
 Session 启动时会冻结模板。详细信息请参阅 [Environment 模板](../../../contracts/agents-api/zh/environments.md#templates)。
+
+## 预热 Environment {#prewarm-an-environment}
+
+在创建 Session 之前先创建 Environment，使工作区在 Session 启动时已准备就绪。它接受 Session 的 `environment` 和同样的模板。用 `environment_id` 挂载 Session；该 Session 被删除后，下一个 Session 即可挂载：
+
+::: code-group
+
+```python [Python]
+env = client.beta.agents.environments.create(
+    environment={"type": "openai_hosted", "environment_template_id": template.id},
+)
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted", "environment_id": env.id},
+    agent_id=agent.id,
+    input="Summarize the data in /workspace.",
+)
+```
+
+```sh [curl]
+agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
+```
+
+:::
+
+没有 Session 的已准备 Environment 读作 `ready`。`environment_id` 不接受 `environment` 的其他成员。挂载 Session 之前文件不可用。空闲的 Environment 会过期，因此应在使用前不久预热。详细信息请参阅[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
 
 ## Automations {#automations}
 

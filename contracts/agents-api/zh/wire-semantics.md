@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: b0e9bfc53d015b5daacfc846ff8e1a27d3f6021f89f84131afdb1a892f2c868e
+source_hash: a3b0e48628d44c1d03ac9d12f45f2071b85700b5c5afc804eb4a828da9d30fa4
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -25,9 +25,9 @@ source_hash: b0e9bfc53d015b5daacfc846ff8e1a27d3f6021f89f84131afdb1a892f2c868e
 
 ### 不支持的操作 {#unsupported-operations}
 
-`POST` 和 `GET /agents/environments`，以及 `GET /agents/sessions/{session_id}/traces` 都已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API operation is not supported."。Environment 只存在于 Session 内部（[归属](environments.md#resources-and-states)），Core 没有 trace 存储。
+`GET /agents/sessions/{session_id}/traces` 已注册，因此与其他固定版本路由一样先通过 Beta 和身份验证检查，然后返回 404、代码 `unsupported_operation`、消息 "This API operation is not supported."。Core 没有 trace 存储。
 
-创建 Agent、Vault、Credential、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
+创建 Agent、Vault、Credential、Environment、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
 
 ### 标头 {#headers}
 
@@ -198,11 +198,11 @@ Session 创建和更新、Vault 创建、Credential 创建和更新、Environmen
 | 字段 | Param |
 | --- | --- |
 | Session 更新 `agent.tools` | `agent.tools` |
-| `environment.environment_id` | `environment_id` |
 | `environment.container_size`；响应携带 `container_size: null` | `container_size` |
 | `desktop.enabled: true`；响应携带 `desktop: {"enabled": false}` | `desktop.enabled` |
 | 非空的 `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` 为 `environment_variable` | `auth.type` |
+| `POST /agents/environments` 的非空 `vault_ids` | `vault_ids` |
 | Session 输入 `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
 
 ### Session 准入 {#session-admission}

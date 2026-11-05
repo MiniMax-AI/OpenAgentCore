@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 9b3a9fc6f679b7ec35ca8a37978010c76d26d42e3822b4fb0ee42c3ccfdd5f79
+source_hash: 3f29c2e19d355f59bdb3cb1e40558cfd8612462e4f13ccc670165d9c63eef478
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -36,7 +36,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。Core 拒绝 `environment.environment_id`，因此已有 hosted Environment 无法关联到另一个 Session。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
+| Environments | create, retrieve, list | 已为 `openai_hosted` 实现；Session 用 `environment.environment_id` 挂载独立 Environment，同一时刻只挂载一个 Session | [独立 Environment](environments.md#standalone-environments) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
 | Vaults | create, retrieve, update, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
@@ -44,7 +44,6 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
 | Automations 和 invocations | 创建、检索、更新、列出、删除、暂停、恢复；invocation 的创建、检索、列出 | 已实现；`created_by` 始终为 `developer` | [Automations](automations.md) |
-| Environment 集合 | create, list（`/agents/environments`） | 不支持：404 `unsupported_operation`；Core 的 Environment 以 Session 为范围 | [不支持的操作](wire-semantics.md#unsupported-operations) |
 | Session traces | list | 不支持：404 `unsupported_operation` | [不支持的操作](wire-semantics.md#unsupported-operations) |
 
 各 Harness 在不同部署位置支持哪些操作，请参阅 [Harness capabilities](harness-capabilities.md)。[API 行为](wire-semantics.md) 包含适用于各项资源的通用规则：请求、错误和列表。
@@ -66,6 +65,14 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - UUID 标识符也可按其他拼写形式解析，例如大写形式或带花括号的形式。
 - 对于重复的查询键，Files 路由会保留本地 `unsupported_parameter` 代码。
 - Core 不处理 CORS；官方服务会发送 CORS 标头。
+
+**独立 Environment**（[独立 Environment](environments.md#standalone-environments)）
+
+- `POST /agents/environments` 的 `Idempotency-Key` 为 1–128 字节，与 Session 相同；官方上限为 1–256。重试按发送的正文比较，但会重新解析所指定的模板，因此模板被删除后的重试会失败，而不是返回原 Environment。
+- Core 没有预热 beta 的门控；官方的创建和列出需要该 beta 的访问权限。
+- `vault_ids` 必须为 null 或 `[]`；非空列表返回 400。Credential 只能通过 Session 到达 Environment。
+- 独立 Environment 以自己的网络策略创建，不会为后续 Session 放宽。若该策略无法到达模型提供方，挂载返回 400 `model_provider_unreachable`；官方服务没有此错误。
+- 不支持检查点时，空闲的 Environment 在空闲超时后过期；确认计算丢失的 Environment 也会过期。两者都不会在新计算上被替换。
 
 **列表**（[lists](wire-semantics.md#lists)）
 
@@ -157,6 +164,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 - 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 沙箱重置不归档独立 Environment；未挂载的 Environment 会让重置保持待定，直到它在空闲超时或保留期结束时过期。
 
 **执行和历史**
 
@@ -203,6 +211,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
+- 独立 Environment：`environment.environment_id` 的 `not` 约束按 schema 顺序报告第一个违规成员，其消息文本没有样本。Core 对未挂载的已准备 Environment 读作 `ready`，准备完成前创建后读作 `pending`。官方服务如何处理对仍为 `pending` 的 Environment 的挂载、是否列出 `failed` 和 `expired` 的 Environment，以及挂载前的文件路由（Core 返回 409），均没有官方样本。
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
 - Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：

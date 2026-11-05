@@ -23,9 +23,9 @@ The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/Open
 
 ### Unsupported operations
 
-`POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no trace store.
+`GET /agents/sessions/{session_id}/traces` is registered, so it passes the Beta and authentication checks like every pinned route, then answers 404 with code `unsupported_operation` and the message "This API operation is not supported." Core has no trace store.
 
-Creating an Agent, Vault, Credential, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
+Creating an Agent, Vault, Credential, Environment, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
 
 ### Headers
 
@@ -196,11 +196,11 @@ These official fields have no Core meaning. A request that sets one returns 400 
 | Field | Param |
 | --- | --- |
 | Session update `agent.tools` | `agent.tools` |
-| `environment.environment_id` | `environment_id` |
 | `environment.container_size`; responses carry `container_size: null` | `container_size` |
 | `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
 | A nonempty `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` `environment_variable` | `auth.type` |
+| A nonempty `vault_ids` on `POST /agents/environments` | `vault_ids` |
 | The Session input `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
 
 ### Session admission

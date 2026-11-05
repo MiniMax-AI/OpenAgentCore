@@ -50,6 +50,7 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 | [Turns and Items](#turns-and-items) | `/agents/sessions/{id}/turns`, `/items` | Durable history |
 | [Files](#files) | `/files`, `/agents/environments/{id}/files`, `/agents/sessions/{id}/artifacts` | Uploads, workspace files and outputs |
 | [Skills](#skills) | `/skills` | Versioned capability bundles |
+| [Environments](#prewarm-an-environment) | `/agents/environments` | Prepared workspaces that a Session attaches to |
 | [Environment Templates](#environment-templates) | `/agents/environments/templates` | Reusable workspace setup |
 | [Automations](#automations) | `/agents/automations` | Scheduled Session creation or instructions |
 | [Vaults](#vaults) | `/vaults` | Write-only credentials for MCP servers |
@@ -130,7 +131,7 @@ See [creation retries](../../contracts/agents-api/wire-semantics.md#creation-ret
 
 | Status | Common codes | Meaning |
 | --- | --- | --- |
-| 400 | `invalid_request_error`, `invalid_beta`, `model_provider_required`, `unsupported_or_invalid_configuration` | Fix the request. `invalid_beta` means a missing or wrong `OpenAI-Beta` header |
+| 400 | `invalid_request_error`, `invalid_beta`, `model_provider_required`, `model_provider_unreachable`, `unsupported_or_invalid_configuration` | Fix the request. `invalid_beta` means a missing or wrong `OpenAI-Beta` header |
 | 401 | `invalid_api_key` or none | Wrong or missing key, or a key from another namespace |
 | 404 | `not_found_error` on Beta routes | Missing, or belongs to another Project. The two look the same |
 | 405 | `unsupported_operation` | Core doesn't support this operation |
@@ -558,6 +559,31 @@ template = client.beta.agents.environments.templates.create(
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
 A Session freezes the template when it starts. Details: [Environment Templates](../../contracts/agents-api/environments.md#templates).
+
+## Prewarm an Environment
+
+Create an Environment before its Session so the workspace is prepared when the Session starts. It takes the `environment` of a Session and the same Template. Attach a Session with `environment_id`; when the Session is deleted, the next one can attach:
+
+::: code-group
+
+```python [Python]
+env = client.beta.agents.environments.create(
+    environment={"type": "openai_hosted", "environment_template_id": template.id},
+)
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted", "environment_id": env.id},
+    agent_id=agent.id,
+    input="Summarize the data in /workspace.",
+)
+```
+
+```sh [curl]
+agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
+```
+
+:::
+
+A prepared Environment with no Session reads `ready`. `environment_id` accepts no other `environment` member. Files stay unavailable until a Session is attached. An idle Environment expires, so prewarm shortly before use. Details: [Standalone Environments](../../contracts/agents-api/environments.md#standalone-environments).
 
 ## Automations
 

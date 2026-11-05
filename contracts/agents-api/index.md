@@ -33,7 +33,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](./subagents.md) |
-| Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). Core rejects `environment.environment_id`, so an existing hosted Environment cannot be attached to another Session. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
+| Environments | create, retrieve, list | Implemented for `openai_hosted`; a Session attaches a standalone Environment with `environment.environment_id`, one Session at a time | [Standalone Environments](./environments.md#standalone-environments) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
 | Vaults | create, retrieve, update, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
@@ -41,7 +41,6 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
 | Automations and invocations | create, retrieve, update, list, delete, pause, resume; invocation create, retrieve, list | Implemented; `created_by` is always `developer` | [Automations](./automations.md) |
-| Environments collection | create, list (`/agents/environments`) | Not supported: 404 `unsupported_operation`; Core's Environments are Session-scoped | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 | Session traces | list | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 
 Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [API behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
@@ -63,6 +62,14 @@ Each item is Core's deliberate or native behavior where the official service beh
 - UUID identifiers also resolve in other spellings, such as uppercase or braces.
 - The Files routes keep a local `unsupported_parameter` code for a repeated query key.
 - Core has no CORS handling; the official service sends CORS headers.
+
+**Standalone Environments** ([standalone Environments](./environments.md#standalone-environments))
+
+- `Idempotency-Key` on `POST /agents/environments` is 1–128 bytes, as for Sessions; the official limit is 1–256. A retry compares the body as sent, but it resolves a named Template again, so a retry after that Template was deleted fails instead of returning the Environment.
+- Core has no prewarming-beta gate; the official create and list require access to it.
+- `vault_ids` must be null or `[]`; a nonempty list returns 400. Credentials reach an Environment only through its Session.
+- A standalone Environment is created with its own network policy and is not widened for a later Session. An attach whose model provider the policy cannot reach returns 400 `model_provider_unreachable`; the official service has no such error.
+- Without checkpoint support an idle Environment expires at the idle timeout, and an Environment whose compute is confirmed lost expires. Neither is replaced on new compute.
 
 **Lists** ([lists](./wire-semantics.md#lists))
 
@@ -154,6 +161,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 - A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A sandbox reset does not archive a standalone Environment; an unattached one leaves the reset pending until it expires at its idle timeout or the end of its retention.
 
 **Execution and history**
 
@@ -200,6 +208,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 ### Unverified against the official service
 
+- Standalone Environments: the `not` constraint of `environment.environment_id` reports the first offending member in schema order, and its message text is not sampled. Core reports `ready` for an unattached, prepared Environment, and creation `pending` before preparation. How the official service handles an attach to an Environment that is still `pending`, whether it lists `failed` and `expired` Environments, and the file routes before attach (Core returns 409) have no official sample.
 - When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
 - The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
 - Automations, where the pinned sources are silent ([Automations](./automations.md)):
