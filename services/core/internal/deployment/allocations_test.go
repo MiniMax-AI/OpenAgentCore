@@ -94,16 +94,16 @@ func (f *fakeReservationTx) InsertAllocation(allocation NewAllocation) (Allocati
 }
 
 type fakeAllocationTx struct {
-	idleSeconds          int64
-	canRetainEnvironment func(Allocation) (bool, error)
-	t                    testing.TB
-	loadActivity         func(Allocation) (Activity, error)
-	loadSuspensionDemand func(Allocation) (SuspensionDemand, error)
-	setCompute           func(Allocation, ComputeChange) (Allocation, error)
-	loadAllocation       func() (Allocation, error)
-	loadEnvironmentDevice    func() (EnvironmentDevice, bool, error)
-	settleCreation       func(Allocation) (Allocation, error)
-	release              func(Allocation) (Allocation, error)
+	idleSeconds           int64
+	canRetainEnvironment  func(Allocation) (bool, error)
+	t                     testing.TB
+	loadActivity          func(Allocation) (Activity, error)
+	loadSuspensionDemand  func(Allocation) (SuspensionDemand, error)
+	setCompute            func(Allocation, ComputeChange) (Allocation, error)
+	loadAllocation        func() (Allocation, error)
+	loadEnvironmentDevice func() (EnvironmentDevice, bool, error)
+	settleCreation        func(Allocation) (Allocation, error)
+	release               func(Allocation) (Allocation, error)
 }
 
 func (f *fakeAllocationTx) LoadAllocation() (Allocation, error) {
