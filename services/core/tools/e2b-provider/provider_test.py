@@ -35,7 +35,7 @@ class Fixture(unittest.TestCase):
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True,
                                           Egress={'public': True, 'private_domains': [], 'domains': [], 'endpoints': []})}
         self.request['RuntimeBootstrap'] = {
-            'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': provider.RUNTIME_BOOTSTRAP_VERSION, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
@@ -357,13 +357,15 @@ class TemplateCheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             for name, text in files.items():
                 Path(root, name).write_text(text)
-            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, '3']).returncode
+            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, str(provider.RUNTIME_BOOTSTRAP_VERSION)]).returncode
 
     def test_template_needs_startup_script_and_current_bootstrap_version(self):
-        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 0)
-        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 2'}), 78)
+        current = 'RUNTIME_BOOTSTRAP_VERSION = %d' % provider.RUNTIME_BOOTSTRAP_VERSION
+        previous = 'RUNTIME_BOOTSTRAP_VERSION = %d' % (provider.RUNTIME_BOOTSTRAP_VERSION - 1)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': current}), 0)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': previous}), 78)
         self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': ''}), 78)
-        self.assertEqual(self.exit_code({'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 78)
+        self.assertEqual(self.exit_code({'helper_contract_generated.py': current}), 78)
 
 
 class CheckpointTest(Fixture):

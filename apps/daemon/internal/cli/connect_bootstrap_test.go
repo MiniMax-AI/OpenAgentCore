@@ -34,7 +34,7 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := runtimebootstrap.Connection{Version: runtimebootstrap.Version, CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "bootstrap-secret",
-		EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Workspace: t.TempDir()}
+		EnvironmentID: uuid.NewString(), Workspace: t.TempDir()}
 	raw, err := input.Marshal()
 	if err != nil {
 		t.Fatal(err)
