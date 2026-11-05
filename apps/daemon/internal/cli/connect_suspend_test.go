@@ -342,7 +342,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	environment, session := uuid.NewString(), uuid.NewString()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
-	if err := localworkspace.Bind(environment, session, t.TempDir(), t.TempDir()); err != nil {
+	if err := localworkspace.Bind(environment, t.TempDir(), t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(localworkspace.Unbind)

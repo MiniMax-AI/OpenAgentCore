@@ -347,7 +347,7 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(nil)
-	input := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
+	input := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: b.environment,
 		Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/file"}, SHA256: hex.EncodeToString(digest[:])}
 	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted file", err)

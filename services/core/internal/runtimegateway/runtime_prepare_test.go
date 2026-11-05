@@ -17,7 +17,7 @@ import (
 )
 
 func skillPreparation() proto.RuntimePreparePayload {
-	return proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "skill",
+	return proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "skill",
 		Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}}
 }
 
@@ -83,7 +83,7 @@ func TestCapabilitiesTransfersMoreThanFrameLimitAndCorrelates(t *testing.T) {
 		switch p.Step {
 		case "begin":
 			digest := sha256.Sum256(data)
-			if p.EnvironmentID != request.EnvironmentID || p.SessionID != request.SessionID || p.Skill == nil || *p.Skill != *request.Skill || p.SizeBytes != len(data) || p.SHA256 != hex.EncodeToString(digest[:]) {
+			if p.EnvironmentID != request.EnvironmentID || p.Skill == nil || *p.Skill != *request.Skill || p.SizeBytes != len(data) || p.SHA256 != hex.EncodeToString(digest[:]) {
 				t.Fatal("identity, metadata or digest changed")
 			}
 			result.Outcome = "ready"
@@ -115,7 +115,7 @@ func TestCapabilitiesTransfersMoreThanFrameLimitAndCorrelates(t *testing.T) {
 func TestCapabilitiesFinalizeTransfersNoArchive(t *testing.T) {
 	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
-	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &proto.CapabilitySources{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "finalize", Sources: &proto.CapabilitySources{}}
 	id := uuid.NewString()
 	done := beginCapabilities(s, t.Context(), id, request, nil)
 	env := nextCapabilityFrame(t, s)
@@ -238,7 +238,7 @@ func TestRuntimeInitialFileChunking(t *testing.T) {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
 			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
-			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/project/file"}}
+			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/project/file"}}
 			data := bytes.Repeat([]byte("z"), size)
 			id := uuid.NewString()
 			done := beginCapabilities(s, t.Context(), id, request, data)
@@ -288,7 +288,7 @@ func TestRuntimeInitializationNoDataAndExitReceipt(t *testing.T) {
 		t.Run(fmt.Sprint(exit), func(t *testing.T) {
 			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
-			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: "echo test"}}
+			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: "echo test"}}
 			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), request, []byte("forbidden")); err == nil {
 				t.Fatal("initialization body accepted")
 			}
@@ -333,7 +333,7 @@ func TestRuntimePreparationSeparatesTransferAndApplyBudgets(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 				defer s.Close("test")
-				request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
+				request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
 				id := uuid.NewString()
 				done := beginCapabilities(s, t.Context(), id, request, nil)
 				frame := nextCapabilityFrame(t, s)
@@ -376,7 +376,7 @@ func TestRuntimePreparationCommittedApplyStopsWaitingOnDisconnectOrCallerDeadlin
 			defer s.Close("test")
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			defer cancel()
-			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
+			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
 			id := uuid.NewString()
 			done := beginCapabilities(s, ctx, id, request, nil)
 			nextCapabilityFrame(t, s)

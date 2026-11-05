@@ -13,26 +13,24 @@ import (
 	"github.com/google/uuid"
 )
 
-const executorIdleCapacity = 16
-
 type executorState struct {
-	capabilities                           proto.AgentKindCapabilities
-	id, sessionID, environmentID, stateKey string
-	fingerprint                            [32]byte
-	native                                 agent.Executor
-	nativeID                               string
-	ctx                                    context.Context
-	cancel                                 context.CancelFunc
-	turn                                   proto.TurnSettings
-	admission                              *preparationState
-	run                                    *sessionState
-	preparing                              bool
-	invalid                                bool
-	closeDone                              chan struct{}
-	closeReason                            string
-	closeErr                               error
-	timer                                  *time.Timer
-	idleLease                              uint64
+	capabilities                 proto.AgentKindCapabilities
+	id, sessionID, environmentID string
+	fingerprint                  [32]byte
+	native                       agent.Executor
+	nativeID                     string
+	ctx                          context.Context
+	cancel                       context.CancelFunc
+	turn                         proto.TurnSettings
+	admission                    *preparationState
+	run                          *sessionState
+	preparing                    bool
+	invalid                      bool
+	closeDone                    chan struct{}
+	closeReason                  string
+	closeErr                     error
+	timer                        *time.Timer
+	idleLease                    uint64
 }
 
 // executorFingerprint covers the configuration a retained Executor fixes. The
@@ -77,6 +75,9 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	requestFingerprint := sha256.Sum256(encoded)
+	if code := r.switchSession(input.SessionID); code != "" {
+		return r.rejectPreparation(env, code)
+	}
 	r.mu.Lock()
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
@@ -100,21 +101,11 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
-	active := 0
-	for _, candidate := range r.executors {
-		if candidate.sessionID != input.SessionID && candidate.stateKey == req.AgentStateKey {
-			r.mu.Unlock()
-			return r.rejectPreparation(env, "session_binding_conflict")
-		}
-	}
 	for _, owner := range r.executors {
-		if owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid {
-			active++
+		if owner.sessionID != input.SessionID {
+			r.mu.Unlock()
+			return r.rejectPreparation(env, "resource_unavailable")
 		}
-	}
-	if active >= preparationCapacity {
-		r.mu.Unlock()
-		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner := r.executors[input.SessionID]
 	reused := owner != nil
@@ -142,12 +133,8 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		owner.idleLease++
 		owner.turn = req.Turn
 	} else {
-		if len(r.executors) >= executorIdleCapacity+preparationCapacity {
-			r.mu.Unlock()
-			return r.rejectPreparation(env, "executor_capacity")
-		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, turn: req.Turn, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
+		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), fingerprint: fingerprint, turn: req.Turn, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
@@ -172,6 +159,40 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		go r.prepareExecutor(p, req, factory)
 	}
 	return nil
+}
+
+// switchSession makes the Runtime serve sessionID alone before a new executor
+// is created. Other Sessions' executors that hold no work are closed, and only
+// then is every other Session's native state removed. That includes state whose
+// executor already expired or whose process restarted. It returns a rejection
+// code when a Session still holds work or a close is unconfirmed.
+func (r *Router) switchSession(sessionID string) string {
+	var others []*executorState
+	r.mu.Lock()
+	if r.executors[sessionID] != nil && len(r.executors) == 1 {
+		r.mu.Unlock()
+		return ""
+	}
+	for _, owner := range r.executors {
+		if owner.sessionID == sessionID {
+			continue
+		}
+		if owner.preparing || owner.admission != nil || owner.run != nil {
+			r.mu.Unlock()
+			return "resource_unavailable"
+		}
+		others = append(others, owner)
+	}
+	r.mu.Unlock()
+	for _, owner := range others {
+		if r.closeExecutor(owner) != nil {
+			return "executor_cleanup_unconfirmed"
+		}
+	}
+	if r.localWorkspace.RemoveOtherSessionState(sessionID) != nil {
+		return "executor_cleanup_unconfirmed"
+	}
+	return ""
 }
 
 func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory) {
@@ -265,19 +286,6 @@ func (r *Router) scheduleExecutorIdleLocked(owner *executorState) {
 	}
 	if owner.timer != nil {
 		owner.timer.Stop()
-	}
-	idle := 0
-	for _, candidate := range r.executors {
-		if candidate != owner && candidate.run == nil && candidate.admission == nil && !candidate.preparing {
-			idle++
-		}
-	}
-	if idle >= executorIdleCapacity {
-		owner.invalid = true
-		owner.closeReason = "idle_capacity"
-		r.shutdownWG.Add(1)
-		go func() { defer r.shutdownWG.Done(); _ = r.closeExecutor(owner) }()
-		return
 	}
 	owner.idleLease++
 	lease := owner.idleLease

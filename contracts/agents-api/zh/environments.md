@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 029df42249e47ea130d35b2883572e3f89f10bf2fbd756060f2e53cd63559e11
+source_hash: a9d64e2e8a51a00f11071e1f5255814f6340c355554e6a0a3c9262ca9415e5df
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -182,13 +182,13 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 
 **就绪性。** 传输 `connected` 是一种连接观察，而不代表就绪。执行和实时文件访问都要等待初始化；随后，原生准备所有者会在接纳 Turn 前验证已安装的快照和 Harness。文件读取保留自身的就绪性和授权，不要求能力或原生就绪。部署模型凭据绝不发送到应用程序所有的机器。
 
-**传输。** 初始文件、configure、npm、Python 和设置操作、惰性的 Skill 和 Plugin 归档以及最终确定选择，都会作为带有类型的 `runtime_prepare` 操作传输，并携带规范的 Session 和 Environment 身份；[protocol](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 负责分块和回执。文件及设置工作目录使用逻辑 `/workspace` 地址；Runtime 负责选择可执行文件和物理目标位置，Core 不提供任何可执行文件或主机平台字段。源选择接受可移植的 Unix 绝对路径、Windows 驱动器路径和 UNC 路径；Core 绝不会在自己的主机上解析这些路径，而 daemon 会应用其本地路径和访问检查。
+**传输。** 初始文件、configure、npm、Python 和设置操作、惰性的 Skill 和 Plugin 归档以及最终确定选择，都会作为带有类型的 `runtime_prepare` 操作传输，并携带规范的 Environment 身份；[protocol](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 负责分块和回执。文件及设置工作目录使用逻辑 `/workspace` 地址；Runtime 负责选择可执行文件和物理目标位置，Core 不提供任何可执行文件或主机平台字段。源选择接受可移植的 Unix 绝对路径、Windows 驱动器路径和 UNC 路径；Core 绝不会在自己的主机上解析这些路径，而 daemon 会应用其本地路径和访问检查。
 
 ### 已安装快照 {#installed-snapshot}
 
 两种来源都使用通用 Runtime 解析器，以及适用于 Linux、macOS 和 Windows 的 `installed.json` 清单。Runtime 操作者负责选择能力根目录（[installer options](../../../docs/zh/getting-started/self-hosted.md#options-for-automation)）；Core 和传输请求无法选择。
 
-- 清单会将 Session 和 Environment 绑定到有序的源选择摘要。准备所有者会在原生执行之前验证或创建该清单，即使选择为空也是如此。
+- 清单会将 Environment 绑定到有序的源选择摘要。准备所有者会在原生执行之前验证或创建该清单，即使选择为空也是如此。
 - 设置命令运行后，初始化器会将声明的、位于工作区内的能力目录快照到 Runtime 存储中。目录字节是在设置之后读取，而不是在 Session 创建时读取。
 - 文件系统锁可防止并发安装。私有完成记录仅保留操作者的安装根目录，因此已删除的快照绝不会被误认为首次准备，也不会再次被捕获。
 - 快照缺失、不完整、冲突或属于外部来源时，会在不删除数据、修复或重播的情况下失败。

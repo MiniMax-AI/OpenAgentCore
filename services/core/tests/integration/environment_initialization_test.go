@@ -90,7 +90,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			peer := &initializationPeer{unavailable: outcome == "unavailable"}
 			peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 			peer.apply = func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
-				if request.EnvironmentID != environment.ID || request.SessionID != session.ID {
+				if request.EnvironmentID != environment.ID {
 					t.Error("wrong authorization binding")
 				}
 				action := request.Action

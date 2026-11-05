@@ -62,7 +62,7 @@ func bindEnvironmentRuntime(remote string, bound machineapi.Enrollment, workspac
 	if bound.WorkspaceDirectory != runtimebootstrap.PublicWorkspace && bound.WorkspaceDirectory != workspace {
 		return errors.New("connect: enrollment does not match the Runtime workspace")
 	}
-	if err := localworkspace.Bind(bound.EnvironmentID, bound.SessionID, workspace, capabilityDirectory); err != nil {
+	if err := localworkspace.Bind(bound.EnvironmentID, workspace, capabilityDirectory); err != nil {
 		return errors.New("connect: local Runtime layout unavailable")
 	}
 	return saveEnvironmentBinding(root, environmentBinding{RemoteURL: remote, Enrollment: bound, LocalWorkspace: workspace, CapabilityDirectory: capabilityDirectory})

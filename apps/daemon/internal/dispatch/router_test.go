@@ -136,7 +136,7 @@ func sessionExecutor(start func(context.Context, string, proto.MessageInput, cha
 // "input" and waits until it accepts operations.
 func startRun(t *testing.T, r *dispatch.Router, s *recSender, run string, config proto.PromptRequestPayload) {
 	t.Helper()
-	ready := executorAdmission(t, r, s, "prepare-"+run, noEnvironmentPreparation("session-"+run, config))
+	ready := executorAdmission(t, r, s, "prepare-"+run, noEnvironmentPreparation("session", config))
 	startExecutorTurn(t, r, s, "prepare-"+run, run, ready)
 	waitFor(t, func() bool { return r.RunStartedForTest(run) }, "run "+run+" to accept operations")
 }
@@ -173,31 +173,6 @@ func TestExecutionStartRunsInputAndForwardsOutput(t *testing.T) {
 
 	// Settlement should have removed the Run.
 	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "active runs to drop to 0")
-}
-
-func TestExecutionStartRejectsDuplicateRunID(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	startRun(t, h.router, h.sender, "run_dup", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
-	sess := <-h.gotSess
-
-	// Another Executor must not start a second Turn for the same RunID.
-	second := executorAdmission(t, h.router, h.sender, "prepare-dup", noEnvironmentPreparation("session-dup", proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	start := mustEnv(t, proto.TypeExecutionStart, "prepare-dup", proto.ExecutionStartPayload{Handle: second.Handle, ExecutorID: second.ExecutorID, RunID: "run_dup", Input: proto.TextInput("input")})
-	if err := h.router.Handle(context.Background(), start); err == nil {
-		t.Fatal("duplicate Run started")
-	}
-	if status := waitPreparationStatus(t, h.sender, "prepare-dup", "rejected", ""); status.ErrorCode != "run_conflict" {
-		t.Fatalf("duplicate start status = %+v, want run_conflict", status)
-	}
-
-	select {
-	case extra := <-h.gotSess:
-		t.Fatalf("Turn started twice for duplicate run, second run=%s", extra.runID)
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(sess.out)
 }
 
 func TestExecutionPrepareRejectsUnknownKind(t *testing.T) {

@@ -46,8 +46,8 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 		}
 		f.Close()
 	}
-	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
+	environment := uuid.NewString()
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, workspace, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

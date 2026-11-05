@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/google/uuid"
 )
 
 func writeSourceSkill(t *testing.T, directory, text string) {
@@ -40,7 +39,7 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 		t.Fatalf("first preparation: %v", err)
 	}
 	writeSourceSkill(t, source, "second")
-	reconnect, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, b.capabilityRoot)
+	reconnect, err := NewWithCapabilityDirectory(b.environment, b.workspace, b.capabilityRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,19 +65,13 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 	if err != nil || string(fresh[len(fresh)-6:]) != "second" {
 		t.Fatal("new Session did not capture new source", err)
 	}
-	// Reusing a snapshot under another selection cannot start native work, even
-	// for another Session.
+	// Reusing a snapshot under another selection cannot start native work.
 	local := *configured.LocalEnvironment
 	local.CapabilitySources = &proto.CapabilitySources{}
 	changed := configured
 	changed.LocalEnvironment = &local
 	if _, err = b.Prepare(t.Context(), changed); err == nil {
 		t.Fatal("changed selection accepted")
-	}
-	reconnect.stateKey = uuid.NewString()
-	changed.AgentStateKey = reconnect.stateKey
-	if _, err = reconnect.Prepare(t.Context(), changed); err == nil {
-		t.Fatal("foreign snapshot accepted")
 	}
 }
 
@@ -204,7 +197,7 @@ func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
 			if err := os.WriteFile(source, []byte(`{"LOCAL_ONLY":"changed"}`), 0600); err != nil {
 				t.Fatal(err)
 			}
-			reconnect, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, b.capabilityRoot)
+			reconnect, err := NewWithCapabilityDirectory(b.environment, b.workspace, b.capabilityRoot)
 			if err != nil {
 				t.Fatal(err)
 			}

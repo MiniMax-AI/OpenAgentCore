@@ -2,6 +2,7 @@ package localworkspace
 
 import (
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
@@ -15,33 +16,37 @@ import (
 // Binding freezes operator-owned identity and paths for one Runtime lifetime.
 type Binding struct {
 	environment    string
-	stateKey       string
 	workspace      string
 	writer         *fileWriter
 	capabilityMu   sync.Mutex
 	capabilityRoot string
 	stateRoot      string
+	runtimeRoot    string
 }
 
 // NewWithCapabilityDirectory freezes paths selected by the Runtime operator.
-func NewWithCapabilityDirectory(environment, session, workspace, directory string) (*Binding, error) {
+func NewWithCapabilityDirectory(environment, workspace, directory string) (*Binding, error) {
 	stateRoot, err := paths.StateDirectory()
 	if err != nil {
 		return nil, err
 	}
-	b, err := newNativeBinding(environment, session, workspace, directory)
+	b, err := newNativeBinding(environment, workspace, directory)
 	if err != nil {
 		return nil, err
 	}
-	b.stateRoot = stateRoot
+	runtimeRoot, err := paths.Root()
+	if err != nil {
+		return nil, err
+	}
+	b.stateRoot, b.runtimeRoot = stateRoot, runtimeRoot
 	return b, nil
 }
 
 var current *Binding
 
 // Bind freezes the Runtime's Environment binding for this process. It runs once, before any Harness discovery.
-func Bind(environment, session, workspace, capabilityDirectory string) error {
-	b, err := NewWithCapabilityDirectory(environment, session, workspace, capabilityDirectory)
+func Bind(environment, workspace, capabilityDirectory string) error {
+	b, err := NewWithCapabilityDirectory(environment, workspace, capabilityDirectory)
 	if err != nil {
 		return err
 	}
@@ -66,7 +71,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	if b == nil && r.LocalEnvironment == nil {
 		return r, nil
 	}
-	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
+	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment ||
 		r.DisableExecutionEnvironment {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
@@ -90,6 +95,14 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	return r, nil
 }
 
-func (b *Binding) Matches(environment, session string) bool {
-	return b != nil && b.environment == environment && b.stateKey == session
+func (b *Binding) Matches(environment string) bool {
+	return b != nil && b.environment == environment
+}
+
+// RemoveOtherSessionState deletes every Session's native state but keepKey's.
+func (b *Binding) RemoveOtherSessionState(keepKey string) error {
+	if b == nil {
+		return nil
+	}
+	return agent.RemoveSessionState(b.stateRoot, b.runtimeRoot, keepKey)
 }
