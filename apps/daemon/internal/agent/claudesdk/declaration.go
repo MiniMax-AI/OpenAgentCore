@@ -59,13 +59,13 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if !filepath.IsAbs(options.StateRoot) || filepath.Clean(options.StateRoot) != options.StateRoot {
 		return fail(fmt.Errorf("Claude SDK requires an explicit state root"))
 	}
-	config = Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(options.StateRoot, "daemon", options.Profile, "runtime", "claude-sdk")}
+	config = Config{Node: node, Entrypoint: entrypoint, StateRoot: options.StateRoot, RuntimeRoot: options.RuntimeRoot}
 	if binding := localworkspace.Current(); binding != nil {
 		config.Node, err = filepath.EvalSymlinks(node)
 		if err != nil {
 			return fail(err)
 		}
-		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, binding.Workspace())
+		config, err = ConfigureLocal(config, binding.Workspace())
 		if err != nil {
 			return fail(err)
 		}
@@ -74,7 +74,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
-	local := config.Workspace != nil
+	local := config.Workspace != ""
 	if local && !info.SupportsLocalRuntime() {
 		return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
 	}

@@ -3,27 +3,16 @@ package claudesdk
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 // ConfigureLocal selects the qualified, dedicated Runtime layout. The shared
 // localworkspace binding still authorizes every request against its Session.
-func ConfigureLocal(config Config, stateRoot, root, workspace string) (Config, error) {
-	if !filepath.IsAbs(stateRoot) || filepath.Clean(stateRoot) != stateRoot {
-		return Config{}, fmt.Errorf("claudesdk: state root must be a clean absolute directory")
+func ConfigureLocal(config Config, workspace string) (Config, error) {
+	if !canonicalWorkspaceDir(workspace) {
+		return Config{}, fmt.Errorf("claudesdk: invalid trusted workspace configuration")
 	}
-	config.StateDir = filepath.Join(stateRoot, "runtime", "claude-sdk", "history")
-	config.Workspace = &WorkspaceConfig{
-		Directory:  workspace,
-		HomeDir:    filepath.Join(root, "runtime", "claude-sdk", "home"),
-		ScratchDir: filepath.Join(root, "runtime", "claude-sdk", "scratch"),
-	}
-	for _, dir := range []string{config.StateDir, config.Workspace.HomeDir, config.Workspace.ScratchDir} {
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return Config{}, err
-		}
-	}
+	config.Workspace = workspace
 	config.Env = nil
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
@@ -31,6 +20,5 @@ func ConfigureLocal(config Config, stateRoot, root, workspace string) (Config, e
 			config.Env = append(config.Env, entry)
 		}
 	}
-	_, _, err := workspaceEnvironment(config)
-	return config, err
+	return config, nil
 }

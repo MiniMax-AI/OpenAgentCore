@@ -103,7 +103,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 			calls := 0
 			runtime := discoverWithCheck(t.Context(), options, Declaration.Info(), func(_ context.Context, c Config) (RuntimeInfo, error) {
 				calls++
-				if c.Node != node || c.Entrypoint != entrypoint || c.StateDir != filepath.Join(options.StateRoot, "daemon", "test", "runtime", "claude-sdk") || c.Env != nil {
+				if c.Node != node || c.Entrypoint != entrypoint || c.StateRoot != options.StateRoot || c.RuntimeRoot != options.RuntimeRoot || c.Env != nil {
 					t.Fatalf("configuration: %+v", c)
 				}
 				if !ready {

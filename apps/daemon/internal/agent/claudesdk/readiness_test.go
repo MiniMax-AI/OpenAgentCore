@@ -20,10 +20,10 @@ const readyReport = `{"type":"runtime_ready","protocol":3,"node":"22.22.2","sdk"
 func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
+	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateRoot: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", Required: true}}}
 	if _, err := startSingleTurn(t.Context(), config, req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support required HTTP MCP" {
 		t.Fatalf("unqualified runtime executed required MCP: %v", err)
@@ -33,7 +33,7 @@ func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
+	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateRoot: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready", "GORACE=atexit_sleep_ms=0",
 	}}
 	info, err := CheckRuntime(t.Context(), config)
@@ -44,7 +44,7 @@ func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	if !info.SupportsHTTPMCP() {
 		t.Fatal("runtime feature not recognized")
 	}
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}}
 	if _, err := startSingleTurn(t.Context(), config, req, make(chan proto.Envelope, 1)); err == nil || !strings.Contains(err.Error(), "packaged runtime does not support HTTP MCP") {
 		t.Fatalf("old runtime was not rejected before execution: %v", err)
@@ -77,11 +77,11 @@ func TestRuntimeReadiness(t *testing.T) {
 func TestMCPBearerRejectsAnonymousOnlyRuntimeWithoutProbeSecrets(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
+	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateRoot: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
 	token := "private-fixture-token"
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}}
 	if _, err := startSingleTurn(t.Context(), config, req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support authenticated HTTP MCP" {
 		t.Fatalf("old runtime executed authenticated request or readiness received its secret: %v", err)

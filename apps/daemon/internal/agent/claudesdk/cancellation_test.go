@@ -47,7 +47,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if err := running.(*session).SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal("cancelled execution accepted steering", err)
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(testState(config), "release"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := running.Cancel(ctx); err != nil {
@@ -133,7 +133,7 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	if event := <-out; event.Type != proto.TypeDelta {
 		t.Fatal("missing native readiness barrier")
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(testState(config), "release"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := running.Cancel(ctx); err != nil {
@@ -159,11 +159,11 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 }
 
 func cancellationConfig(root, mode string) Config {
-	return Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=cancellation-" + mode, "GORACE=atexit_sleep_ms=0"}}
+	return Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateRoot: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=cancellation-" + mode, "GORACE=atexit_sleep_ms=0"}}
 }
 
 func cancellationRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Turn: proto.TurnSettings{Model: "fake-model"}, AgentOptions: map[string]any{"system_prompt": "instructions"}}
+	return proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Turn: proto.TurnSettings{Model: "fake-model"}, AgentOptions: map[string]any{"system_prompt": "instructions"}}
 }
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {

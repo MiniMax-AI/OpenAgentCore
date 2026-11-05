@@ -21,7 +21,7 @@ func TestWorkspaceCommandsRequirePackagedFeature(t *testing.T) {
 	if _, err := NewExecutorFactory(config)(t.Context(), preparationRequest()); err == nil || !strings.Contains(err.Error(), "workspace preparation is unavailable") {
 		t.Fatal("old bridge accepted command observations", err)
 	}
-	if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(testState(config), "launched")); !os.IsNotExist(err) {
 		t.Fatal("old bridge started execution before rejection")
 	}
 }
@@ -33,7 +33,7 @@ func TestWorkspaceCommandFramesKeepStartIdentityAndObservedOutput(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer resource.Close(context.Background())
-	if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(testState(config), "start.json")); !os.IsNotExist(err) {
 		t.Fatal("preparation submitted a command")
 	}
 	out := make(chan proto.Envelope, 16)

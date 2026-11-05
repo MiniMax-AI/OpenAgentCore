@@ -2,7 +2,6 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +12,7 @@ import (
 func TestLocalWorkspaceBindingAndRequiredHistory(t *testing.T) {
 	config := workspaceFixture(t)
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: config.Workspace.Directory}
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: config.Workspace}
 	req.RequireExistingNativeSession = true
 	start, _, err := prepareConfiguration(config, req)
 	if err != nil || !start.RequireHistory {
@@ -45,27 +44,5 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 		if _, _, err := prepareConfiguration(config, req); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("unsafe provider accepted or disclosed")
 		}
-	}
-}
-
-func TestLocalHistorySurvivesChangingInstanceRoot(t *testing.T) {
-	config := workspaceFixture(t)
-	retained, instance := t.TempDir(), t.TempDir()
-	first, err := ConfigureLocal(config, retained, instance, config.Workspace.Directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := ConfigureLocal(config, retained, t.TempDir(), config.Workspace.Directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.StateDir != second.StateDir || first.StateDir != filepath.Join(retained, "runtime", "claude-sdk", "history") {
-		t.Fatal("history moved with compute")
-	}
-	if first.Workspace.HomeDir == second.Workspace.HomeDir || first.Workspace.ScratchDir == second.Workspace.ScratchDir {
-		t.Fatal("instance HOME or scratch retained across compute")
-	}
-	if _, err := ConfigureLocal(config, "relative", instance, config.Workspace.Directory); err == nil {
-		t.Fatal("invalid state root accepted")
 	}
 }

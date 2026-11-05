@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 func workspaceFixture(t *testing.T) Config {
@@ -17,15 +20,14 @@ func workspaceFixture(t *testing.T) Config {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	for _, name := range []string{"workspace", "home", "state", "scratch", "secrets", "bin", "runtime/dist", "runtime/node_modules"} {
+	for _, name := range []string{"workspace", "state", "runtime-home", "secrets", "bin", "runtime/dist", "runtime/node_modules"} {
 		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	config := Config{Node: filepath.Join(root, "bin", "node"), Entrypoint: filepath.Join(root, "runtime", "dist", "main.js"), StateDir: filepath.Join(root, "state"),
-		Env: []string{"ANTHROPIC_AUTH_TOKEN=selected-provider-fixture", "ANTHROPIC_BASE_URL=https://example.invalid"},
-		Workspace: &WorkspaceConfig{Directory: filepath.Join(root, "workspace"), HomeDir: filepath.Join(root, "home"),
-			ScratchDir: filepath.Join(root, "scratch")}}
+	config := Config{Node: filepath.Join(root, "bin", "node"), Entrypoint: filepath.Join(root, "runtime", "dist", "main.js"), StateRoot: filepath.Join(root, "state"),
+		Env:         []string{"ANTHROPIC_AUTH_TOKEN=selected-provider-fixture", "ANTHROPIC_BASE_URL=https://example.invalid"},
+		RuntimeRoot: filepath.Join(root, "runtime-home"), Workspace: filepath.Join(root, "workspace")}
 	for _, name := range []string{config.Node, config.Entrypoint, filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js")} {
 		if err := os.WriteFile(name, nil, 0o700); err != nil {
 			t.Fatal(err)
@@ -35,7 +37,7 @@ func workspaceFixture(t *testing.T) Config {
 }
 
 func workspaceRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
+	return proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
 		Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
 }
 
@@ -47,7 +49,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if start.Cwd != config.Workspace.Directory || start.Workspace == nil || start.MCPHTTPServers != nil {
+	if start.Cwd != config.Workspace || start.Workspace == nil || start.MCPHTTPServers != nil {
 		t.Fatal("trusted binding was not retained")
 	}
 	raw, _ := json.Marshal(start)
@@ -65,13 +67,36 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	if _, ok := values["ANTHROPIC_API_KEY"]; ok {
 		t.Fatal("inherited unselected provider credential")
 	}
-	if values["HOME"] != config.Workspace.HomeDir || values["CLAUDE_CONFIG_DIR"] != config.StateDir ||
-		values["TMPDIR"] != config.Workspace.ScratchDir || values["ANTHROPIC_AUTH_TOKEN"] != "selected-provider-fixture" {
+	if values["CLAUDE_CONFIG_DIR"] != testState(config) || values["ANTHROPIC_AUTH_TOKEN"] != "selected-provider-fixture" {
 		t.Fatal("explicit runtime environment was not preserved")
 	}
-	entries, err := os.ReadDir(config.StateDir)
+	entries, err := os.ReadDir(testState(config))
 	if err != nil || len(entries) != 0 {
 		t.Fatal("preparation created history or nested scratch")
+	}
+}
+
+func TestSessionsKeepNativeStateInOwnDirectories(t *testing.T) {
+	config := workspaceFixture(t)
+	req := workspaceRequest()
+	seen := map[string]string{}
+	for _, key := range []string{"session-a", "session-b"} {
+		req.AgentStateKey = key
+		_, env, err := prepareConfiguration(config, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, _ := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, key)
+		runtime, _ := agent.StateDir(config.RuntimeRoot, harnessconfiguration.Declaration.Kind, key)
+		for name, want := range map[string]string{"CLAUDE_CONFIG_DIR": state, "HOME": filepath.Join(runtime, "home"), "TMPDIR": filepath.Join(runtime, "scratch")} {
+			if !slices.Contains(env, name+"="+want) {
+				t.Fatalf("%s for %s is not %s", name, key, want)
+			}
+			if prior, ok := seen[want]; ok {
+				t.Fatalf("%s and %s share %s", prior, key, want)
+			}
+			seen[want] = key
+		}
 	}
 }
 
@@ -84,24 +109,22 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 			case "none":
 				req.DisableExecutionEnvironment = true
 			case "workspace-root":
-				req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: config.Workspace.ScratchDir}
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: filepath.Join(config.RuntimeRoot, "scratch")}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "relative":
-				config.Workspace.Directory = "relative"
+				config.Workspace = "relative"
 			case "missing":
-				config.Workspace.Directory = filepath.Join(config.Workspace.Directory, "missing")
-			case "overlap":
-				config.Workspace.ScratchDir = config.StateDir
+				config.Workspace = filepath.Join(config.Workspace, "missing")
 			case "symlink":
-				alias := filepath.Join(filepath.Dir(config.StateDir), "alias")
-				if err := os.Symlink(config.Workspace.Directory, alias); err != nil {
+				alias := filepath.Join(filepath.Dir(testState(config)), "alias")
+				if err := os.Symlink(config.Workspace, alias); err != nil {
 					t.Fatal(err)
 				}
-				config.Workspace.Directory = alias
+				config.Workspace = alias
 			case "rule-pattern":
-				config.Workspace.Directory += "*"
-				if err := os.Mkdir(config.Workspace.Directory, 0o700); err != nil {
+				config.Workspace += "*"
+				if err := os.Mkdir(config.Workspace, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			case "ambient-setting":
@@ -115,8 +138,7 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 			if _, _, err := prepareConfiguration(config, req); err == nil {
 				t.Fatal("invalid binding or request accepted")
 			}
-			entries, err := os.ReadDir(config.StateDir)
-			if err != nil || len(entries) != 0 {
+			if _, err := os.Stat(testState(config)); !os.IsNotExist(err) {
 				t.Fatal("rejection created execution state")
 			}
 		})
@@ -139,7 +161,7 @@ func TestWorkspaceRetainsDeclaredFunctions(t *testing.T) {
 func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	config := workspaceFixture(t)
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace.Directory}
+	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace}
 	token := "vault-selected-canary"
 	tools := []string{"prove"}
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: &tools, Required: true, BearerToken: &token}}
@@ -170,4 +192,15 @@ func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	if err := validateExecutorFeatures(info, start); err != nil {
 		t.Fatal(err)
 	}
+}
+
+const testStateKey = "session"
+
+// testState is the native state directory the fixtures' Session writes to.
+func testState(config Config) string {
+	dir, err := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, testStateKey)
+	if err != nil {
+		panic(err)
+	}
+	return dir
 }

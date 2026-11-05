@@ -16,7 +16,7 @@ func TestSelfHostedToolEnvironment(t *testing.T) {
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", file)
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace.Directory}
+	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace}
 	profile, _, err := prepareWorkspace(config, req)
 	if err != nil {
 		t.Fatal(err)
