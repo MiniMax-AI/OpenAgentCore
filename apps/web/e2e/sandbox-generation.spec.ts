@@ -141,7 +141,7 @@ test("unknown target preparation preserves live old-generation service while an 
 test("a generation-only change preserves mixed allocation ownership through failed inventory reads", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
-  let expected: { session: string; generation: string }[] = [];
+  let expected: { session: string | null; generation: string }[] = [];
   await page.route("**/core/v1/sandbox/nodes/node-local/allocations", async (route) => {
     const response = await route.fetch();
     const body = await response.json() as { data: SandboxAllocation[] };
@@ -158,7 +158,7 @@ test("a generation-only change preserves mixed allocation ownership through fail
   await expect(table.getByRole("columnheader", { name: "Configuration generation", exact: true })).toBeVisible();
   await expect.poll(() => [...new Set(expected.map((entry) => entry.generation))].sort()).toEqual(["1", "2"]);
   const ownership = () => table.locator("tbody tr").evaluateAll((rows) => rows.map((row) => ({
-    session: row.querySelector("th code")?.getAttribute("title"),
+    session: row.querySelector("th code")?.getAttribute("title") ?? null,
     generation: row.querySelector("td")?.textContent,
   })));
   await expect.poll(ownership).toEqual(expected);

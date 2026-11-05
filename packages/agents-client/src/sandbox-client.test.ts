@@ -82,6 +82,7 @@ describe("strict sandbox administration projections", () => {
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
     ["allocations", "known and unknown phase times", { data: [allocation, { ...allocation, compute_phase: "suspended", compute_phase_changed_at: created, diagnostic: "node_unavailable" }] }],
+    ["allocations", "no attached Session", { data: [{ ...allocation, session_id: null }] }],
     ["deployment", "unconfigured", unconfigured], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
   ])("accepts %s as Core serializes it: %s", async (name, _, body) => {
     expect(await read(name, body)).toEqual(body);

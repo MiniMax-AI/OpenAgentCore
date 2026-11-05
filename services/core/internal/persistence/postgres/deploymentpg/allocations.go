@@ -486,9 +486,13 @@ func (s *Store) NodeAllocations(ctx context.Context, nodeID string) ([]deploymen
 	}
 	result := make([]deployment.NodeAllocation, 0, len(rows))
 	for _, a := range rows {
+		var session *string
+		if a.AttachedSessionID.Valid {
+			session = new(uuidString(a.AttachedSessionID))
+		}
 		result = append(result, deployment.NodeAllocation{
 			DeploymentGeneration: uint64(a.DeploymentGeneration.Int64), Diagnostic: a.ObservationError, ID: uuidString(a.ID), NodeID: uuidString(a.NodeID),
-			TenantID: uuidString(a.TenantID), SessionID: uuidString(a.AttachedSessionID), EnvironmentID: uuidString(a.EnvironmentID), State: a.State,
+			TenantID: uuidString(a.TenantID), SessionID: session, EnvironmentID: uuidString(a.EnvironmentID), State: a.State,
 			ComputePhase: a.ComputePhase, ComputePhaseChangedAt: timestamp(a.ComputePhaseChangedAt), Initialization: a.Initialization, CreatedAt: a.CreatedAt.Time,
 		})
 	}

@@ -203,14 +203,14 @@ function projectNodeDetail(value: unknown, nodeId: string): SandboxNodeDetail {
   return { ...node, host: { ...observed } as unknown as NodeHost, history: { resolution_seconds: buckets.resolution_seconds as number, points } };
 }
 
-const allocationStrings = ["id", "node_id", "tenant_id", "session_id", "environment_id", "state", "compute_phase", "initialization", "diagnostic"];
+const allocationStrings = ["id", "node_id", "tenant_id", "environment_id", "state", "compute_phase", "initialization", "diagnostic"];
 function projectAllocations(value: unknown, nodeId: string): { data: SandboxAllocation[] } {
   const list = members(value, sandboxAllocationListFields);
   valid(Array.isArray(list.data));
   return { data: (list.data as unknown[]).map((entry) => {
     const allocation = members(entry, nodeAllocationFields);
     valid(isNonnegativeInteger(allocation.deployment_generation) && strings(allocation, allocationStrings) && sameResourceId(allocation.node_id as string, nodeId) && isOneOf(nodeAllocationDiagnosticValues, allocation.diagnostic) &&
-      nullable(timestamp)(allocation.compute_phase_changed_at) && timestamp(allocation.created_at));
+      nullable(timestamp)(allocation.compute_phase_changed_at) && (allocation.session_id === null || typeof allocation.session_id === "string") && timestamp(allocation.created_at));
     return { ...allocation } as unknown as SandboxAllocation;
   }) };
 }

@@ -224,7 +224,7 @@ A node manages generations, so its `provider_ready` follows its serving generati
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` takes `{name, max_active, max_retained}`; lowering a limit stops no running sandbox. `DELETE /core/v1/sandbox/nodes/{node_id}` refuses with 409 `runtime_node_in_use` while the node holds allocations, snapshots, reservations or pending cleanup, including while it is offline. Removal deletes no compute and retires the node's identity; the host can come back only as a new node. There is no node drain.
 
-`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. This is a phase transition time, not a snapshot expiry. The snapshot deadline is not exposed by this response and must not be inferred from `suspension.retention_seconds`.
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `session_id` is the live Session attached to the allocation's Environment, or null when none is attached. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. This is a phase transition time, not a snapshot expiry. The snapshot deadline is not exposed by this response and must not be inferred from `suspension.retention_seconds`.
 
 ### Recommended capacity
 

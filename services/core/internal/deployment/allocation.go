@@ -158,10 +158,11 @@ type NodeAllocation struct {
 	ID                   string `json:"id" binding:"required"`
 	NodeID               string `json:"node_id" binding:"required"`
 	TenantID             string `json:"tenant_id" binding:"required"`
-	SessionID            string `json:"session_id" binding:"required"`
-	EnvironmentID        string `json:"environment_id" binding:"required"`
-	State                string `json:"state" binding:"required"`
-	ComputePhase         string `json:"compute_phase" binding:"required"`
+	// The live Session attached to the Environment, or null when none is.
+	SessionID     *string `json:"session_id" extensions:"x-nullable" binding:"required"`
+	EnvironmentID string  `json:"environment_id" binding:"required"`
+	State         string  `json:"state" binding:"required"`
+	ComputePhase  string  `json:"compute_phase" binding:"required"`
 	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
 	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable" binding:"required"`
 	Initialization        string     `json:"initialization" binding:"required"`

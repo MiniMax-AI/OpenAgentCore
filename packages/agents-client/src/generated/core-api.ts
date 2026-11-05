@@ -480,7 +480,7 @@ export interface NodeAllocation {
   id: string;
   initialization: string;
   node_id: string;
-  session_id: string;
+  session_id: string | null;
   state: string;
   tenant_id: string;
 }
