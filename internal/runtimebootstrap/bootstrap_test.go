@@ -26,8 +26,8 @@ func TestConnectionRejectsAmbiguousOrForeignInput(t *testing.T) {
 	}
 	for name, raw := range map[string]string{
 		"null": "null", "array": "[]", "trailing": good + "{}",
-		"duplicate": strings.Replace(good, `"version":4`, `"version":3,"version":3`, 1),
-		"unknown":   strings.Replace(good, `"version":4`, `"extra":1,"version":3`, 1),
+		"duplicate": strings.Replace(good, `"version":4`, `"version":4,"version":4`, 1),
+		"unknown":   strings.Replace(good, `"version":4`, `"extra":1,"version":4`, 1),
 		"case":      strings.Replace(good, "credential", "Credential", 1),
 		"old auth":  `{"server_url":"https://core.example","runtime_id":"old","runner_credential":"test-secret"}`,
 		"oversized": strings.Repeat(" ", MaxBytes) + good,
@@ -39,7 +39,7 @@ func TestConnectionRejectsAmbiguousOrForeignInput(t *testing.T) {
 		})
 	}
 	for field, values := range map[string][]any{
-		"version":         {nil, 0, 2, "3"},
+		"version":         {nil, 0, 3, "4"},
 		"suspend_control": {nil, 1, "true"},
 		"core_url":        {"http://user:pass@core.example/api/v1", "https://core.example/api/v1?", "https://core.example/api/v1#", "https://core.example", "https://core.example/api/v1/", "https://core.example/api/v1?q=1", ""},
 		"device_id":       {"", "invalid", "00000000-0000-0000-0000-000000000000"},
