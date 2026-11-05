@@ -23,8 +23,8 @@ func TestNullableSystemPrompt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-			start, _, err := prepareConfiguration(config, proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), Turn: proto.TurnSettings{Model: "test-model"}, AgentOptions: tc.options})
+			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateRoot: filepath.Join(root, "state")}
+			start, _, err := prepareConfiguration(config, proto.PromptRequestPayload{AgentStateKey: testStateKey, RunID: "run", Input: proto.TextInput("hello"), Turn: proto.TurnSettings{Model: "test-model"}, AgentOptions: tc.options})
 			if (err != nil) != tc.reject || (!tc.reject && start.SystemPrompt != tc.want) {
 				t.Fatalf("system prompt %q, error %v", start.SystemPrompt, err)
 			}

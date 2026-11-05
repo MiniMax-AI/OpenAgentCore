@@ -16,8 +16,8 @@ func TestSelfHostedToolEnvironment(t *testing.T) {
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", file)
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace.Directory}
-	profile, _, err := prepareWorkspace(config, req)
+	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace}
+	profile, _, err := prepareWorkspace(config, req, testState(config))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestSelfHostedToolEnvironment(t *testing.T) {
 	if err := os.WriteFile(file, []byte(`[]`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := prepareWorkspace(config, req); err == nil {
+	if _, _, err := prepareWorkspace(config, req, testState(config)); err == nil {
 		t.Fatal("invalid explicit tool configuration was ignored")
 	}
 }

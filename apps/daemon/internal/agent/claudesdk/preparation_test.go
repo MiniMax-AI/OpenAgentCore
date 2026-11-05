@@ -31,7 +31,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 		}
 		result <- e
 	}()
-	raw := waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json"))
+	raw := waitPreparationFile(t, filepath.Join(testState(config), "prepare.json"))
 	select {
 	case <-result:
 		t.Fatal("preparation returned before its native receipt")
@@ -39,7 +39,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 		t.Fatal(err)
 	default:
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "ready"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(testState(config), "ready"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var resource agent.Executor
@@ -53,7 +53,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	e := resource.(*executor)
 	defer e.Close(context.Background())
 	pid := e.base.process.Cmd.Process.Pid
-	if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(testState(config), "start.json")); !os.IsNotExist(err) {
 		t.Fatal("preparation submitted input")
 	}
 	var frozen startRequest
@@ -64,7 +64,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 		t.Fatal("configuration-only request was not retained")
 	}
 	config.Env[0] = "ANTHROPIC_AUTH_TOKEN=changed"
-	config.Workspace.Directory = "/changed"
+	config.Workspace = "/changed"
 	req.Turn.Model = "changed"
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
@@ -75,7 +75,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	var sent struct{ Settings json.RawMessage }
-	if json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &sent) != nil || string(sent.Settings) != `{"model":"turn-model","effort":null,"review":"auto_review"}` {
+	if json.Unmarshal(waitPreparationFile(t, filepath.Join(testState(config), "start.json")), &sent) != nil || string(sent.Settings) != `{"model":"turn-model","effort":null,"review":"auto_review"}` {
 		t.Fatalf("turn_start settings = %s", sent.Settings)
 	}
 	if turn.(*session).owner != e || turn.(*session).process.Cmd.Process.Pid != pid {
@@ -95,7 +95,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if done.Content != "completed" || done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Usage.Raw["claude_sdk_result"] == nil {
 		t.Fatal("prepared execution lost ordinary output or frozen resume", done)
 	}
-	if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {
+	if _, err := os.Stat(filepath.Join(testState(config), "released")); err != nil {
 		t.Fatal("completion preceded process release", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			if _, err := NewExecutorFactory(config)(t.Context(), req); err == nil {
 				t.Fatal("invalid preparation was accepted")
 			}
-			if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(testState(config), "launched")); !os.IsNotExist(err) {
 				t.Fatal("rejection launched native preparation")
 			}
 		})

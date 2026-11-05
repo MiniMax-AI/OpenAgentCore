@@ -7,19 +7,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
-
-// WorkspaceConfig binds one trusted private placement. It does not create an
-// isolation boundary or authorize a public Environment. The operator must place
-// the entire factory inside the qualified outer mount/process boundary first.
-// State directories must already exist.
-type WorkspaceConfig struct {
-	Directory  string
-	HomeDir    string
-	ScratchDir string
-}
 
 type workspaceProfile struct {
 	ToolEnv        map[string]string      `json:"tool_env,omitempty"`
@@ -32,16 +24,28 @@ type workspaceProfile struct {
 	EnvNames       []string               `json:"env_names"`
 }
 
-func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {
+func prepareWorkspace(config Config, req proto.PromptRequestPayload, state string) (*workspaceProfile, []string, error) {
 	if req.DisableExecutionEnvironment {
 		return nil, nil, fmt.Errorf("claudesdk: workspace profile does not support the requested execution combination")
 	}
-	if req.LocalEnvironment != nil && req.LocalEnvironment.WorkspaceRoot != config.Workspace.Directory {
+	if req.LocalEnvironment != nil && req.LocalEnvironment.WorkspaceRoot != config.Workspace {
 		return nil, nil, fmt.Errorf("claudesdk: workspace root conflicts with the trusted workspace binding")
 	}
-	profile, env, err := workspaceEnvironment(config)
+	// Retained history lives with the Environment filesystem; HOME and scratch stay on the Runtime's own disk.
+	runtime, err := agent.StateDir(config.RuntimeRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
 	if err != nil {
 		return nil, nil, err
+	}
+	env, names, err := trustedEnvironment(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	profile := &workspaceProfile{Home: filepath.Join(runtime, "home"), State: filepath.Join(state, "config"), Scratch: filepath.Join(runtime, "scratch"), EnvNames: names}
+	env = append(env, "HOME="+profile.Home, "TMPDIR="+profile.Scratch, "CLAUDE_CONFIG_DIR="+profile.State)
+	for _, dir := range []string{profile.State, profile.Home, profile.Scratch} {
+		if err = os.MkdirAll(dir, 0o700); err != nil {
+			return nil, nil, err
+		}
 	}
 	if req.LocalEnvironment != nil {
 		profile.ToolEnv, err = localworkspace.ReadOptionalToolEnvironment()
@@ -62,14 +66,10 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	return profile, append(env, credentials...), nil
 }
 
-// Harness state paths and selected model credentials overlay the user environment.
-func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
-	fail := func() (*workspaceProfile, []string, error) {
+// trustedEnvironment validates the trusted binding and returns the user environment without Harness state paths or credentials.
+func trustedEnvironment(config Config) ([]string, []string, error) {
+	fail := func() ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("claudesdk: invalid trusted workspace configuration")
-	}
-	w := config.Workspace
-	if w == nil {
-		return fail()
 	}
 	for _, path := range []string{config.Node, config.Entrypoint, filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js")} {
 		info, err := os.Stat(path)
@@ -77,12 +77,9 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			return fail()
 		}
 	}
-	for _, path := range []string{w.Directory, config.StateDir, w.HomeDir, w.ScratchDir} {
-		if !canonicalWorkspaceDir(path) {
-			return fail()
-		}
+	if !canonicalWorkspaceDir(config.Workspace) {
+		return fail()
 	}
-	profile := &workspaceProfile{Home: w.HomeDir, State: config.StateDir, Scratch: w.ScratchDir, EnvNames: []string{}}
 	env := []string{}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
@@ -90,7 +87,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			env = append(env, entry)
 		}
 	}
-	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir)
+	names := []string{}
 	seen := map[string]bool{}
 	for _, entry := range config.Env {
 		name, _, ok := strings.Cut(entry, "=")
@@ -98,10 +95,10 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			return fail()
 		}
 		seen[name] = true
-		profile.EnvNames = append(profile.EnvNames, name)
+		names = append(names, name)
 		env = append(env, entry)
 	}
-	return profile, env, nil
+	return env, names, nil
 }
 
 func workspaceEnvName(name string) bool {

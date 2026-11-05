@@ -160,7 +160,7 @@ func TestEnvironmentBindingPreservesIdentityAndHistory(t *testing.T) {
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)
 	}
-	history := filepath.Join(root, "daemon", "agent-sessions", "retained")
+	history := filepath.Join(root, "runtime", "codex", "state", "retained")
 	if err := os.MkdirAll(filepath.Dir(history), 0700); err != nil {
 		t.Fatal(err)
 	}

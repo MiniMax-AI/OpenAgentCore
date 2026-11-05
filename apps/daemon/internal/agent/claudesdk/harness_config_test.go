@@ -2,18 +2,19 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"path/filepath"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 func TestHarnessConfigReachesBridgeAndOwnsSnapshot(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
+	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateRoot: filepath.Join(root, "state")}
 	native := map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 1024}}
-	req := proto.PromptRequestPayload{Turn: proto.TurnSettings{Model: "fixture", ReasoningEffort: "high"}, AgentOptions: map[string]any{"harness_config": native}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
+	req := proto.PromptRequestPayload{AgentStateKey: testStateKey, Turn: proto.TurnSettings{Model: "fixture", ReasoningEffort: "high"}, AgentOptions: map[string]any{"harness_config": native}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 	start, _, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)

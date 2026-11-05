@@ -103,12 +103,18 @@ func CheckRuntime(ctx context.Context, config Config) (RuntimeInfo, error) {
 		binary = "node"
 	}
 	env := append(append([]string{}, os.Environ()...), config.Env...)
-	if config.Workspace != nil {
+	if config.Workspace != "" {
 		var err error
-		_, env, err = workspaceEnvironment(config)
+		if env, _, err = trustedEnvironment(config); err != nil {
+			return RuntimeInfo{}, err
+		}
+		// The check belongs to no Session, so it writes only to a home it discards.
+		home, err := os.MkdirTemp("", "claude-runtime-check-")
 		if err != nil {
 			return RuntimeInfo{}, err
 		}
+		defer os.RemoveAll(home)
+		env = append(env, "HOME="+home, "TMPDIR="+home, "CLAUDE_CONFIG_DIR="+home)
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{
 		Parent: ctx, Binary: binary,

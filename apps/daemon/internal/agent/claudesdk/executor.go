@@ -28,10 +28,6 @@ type executor struct {
 
 func NewExecutorFactory(config Config) agent.ExecutorFactory {
 	config.Env = slices.Clone(config.Env)
-	if config.Workspace != nil {
-		workspace := *config.Workspace
-		config.Workspace = &workspace
-	}
 	checked := &runtimeCheckCache{}
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		if ctx == nil {
