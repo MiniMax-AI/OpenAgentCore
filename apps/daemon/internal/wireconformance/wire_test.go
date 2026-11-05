@@ -323,7 +323,10 @@ type controlledExecutor struct {
 }
 
 func (e *controlledExecutor) Close(context.Context) error { e.closes.Add(1); return nil }
-func (e *controlledExecutor) StartTurn(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *controlledExecutor) StartTurn(_ context.Context, id string, settings proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+	if settings != prototest.Turn {
+		return nil, errors.New("Turn settings did not reach StartTurn")
+	}
 	e.starts.Add(1)
 	turn := &controlledTurn{id: id, out: out, cancelling: make(chan struct{}), allowCancel: make(chan struct{}), settled: make(chan struct{})}
 	e.turn <- turn

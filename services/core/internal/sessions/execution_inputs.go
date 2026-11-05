@@ -42,7 +42,7 @@ func (o *ExecutionOperations) PromoteEnvironmentInput(ctx context.Context, tenan
 			if err := CheckInputStart(ctx, tx); err != nil {
 				return err
 			}
-			if result.Receipts, err = AdmitInputs(ctx, tx, result.Key, result.Inputs); err != nil {
+			if result.Receipts, err = AdmitInputs(ctx, tx, result.Key, result.Inputs, result.Settings); err != nil {
 				return err
 			}
 			settled, err := tx.AdmitInputReservation(ctx, reservation)

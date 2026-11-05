@@ -220,8 +220,9 @@ The `execution_prepare` configuration carries the opt-ins Core sets for each Run
 
 | Field | Set by Core |
 | --- | --- |
-| `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
-| `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning effort and summary, a non-`auto` service tier or a `json_schema` output format. Core validates every value against the Harness declaration before dispatch; native option names belong to the adapter |
+| `turn` | Always: the root Turn's `model`, plus `reasoning_effort` and a non-`auto` `service_tier` when the Agent sets them. Read-only workspace preparation sends an empty `turn` |
+| `agent_options` | Always `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
+| `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning summary or a `json_schema` output format. Core validates these and the `turn` settings against the Harness declaration before dispatch; native option names belong to the adapter |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |

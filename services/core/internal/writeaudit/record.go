@@ -18,16 +18,18 @@ var ErrInvalidSource = errors.New("invalid write audit source")
 type ResourceType string
 
 const (
-	ResourceAgent               ResourceType = "agent"
-	ResourceSession             ResourceType = "session"
-	ResourceEnvironment         ResourceType = "environment"
-	ResourceEnvironmentTemplate ResourceType = "environment_template"
-	ResourceSkill               ResourceType = "skill"
-	ResourceSkillVersion        ResourceType = "skill_version"
-	ResourceFile                ResourceType = "file"
-	ResourceVault               ResourceType = "vault"
-	ResourceCredential          ResourceType = "credential"
-	ResourceArtifact            ResourceType = "artifact"
+	ResourceAgent                ResourceType = "agent"
+	ResourceSession              ResourceType = "session"
+	ResourceEnvironment          ResourceType = "environment"
+	ResourceEnvironmentTemplate  ResourceType = "environment_template"
+	ResourceSkill                ResourceType = "skill"
+	ResourceSkillVersion         ResourceType = "skill_version"
+	ResourceFile                 ResourceType = "file"
+	ResourceVault                ResourceType = "vault"
+	ResourceCredential           ResourceType = "credential"
+	ResourceArtifact             ResourceType = "artifact"
+	ResourceAutomation           ResourceType = "automation"
+	ResourceAutomationInvocation ResourceType = "automation_invocation"
 )
 
 type Action string
@@ -52,7 +54,7 @@ type Resource struct {
 // is closed; recording and owner queries share it.
 func ValidResourceType(value string) bool {
 	switch ResourceType(value) {
-	case ResourceAgent, ResourceSession, ResourceEnvironment, ResourceEnvironmentTemplate, ResourceSkill, ResourceSkillVersion, ResourceFile, ResourceVault, ResourceCredential, ResourceArtifact:
+	case ResourceAgent, ResourceSession, ResourceEnvironment, ResourceEnvironmentTemplate, ResourceSkill, ResourceSkillVersion, ResourceFile, ResourceVault, ResourceCredential, ResourceArtifact, ResourceAutomation, ResourceAutomationInvocation:
 		return true
 	}
 	return false

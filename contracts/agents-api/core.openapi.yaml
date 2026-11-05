@@ -4177,6 +4177,8 @@ definitions:
       - vault
       - credential
       - artifact
+      - automation
+      - automation_invocation
     type: string
     x-enum-varnames:
       - ResourceAgent
@@ -4189,6 +4191,8 @@ definitions:
       - ResourceVault
       - ResourceCredential
       - ResourceArtifact
+      - ResourceAutomation
+      - ResourceAutomationInvocation
 info:
   contact: {}
   description: Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.

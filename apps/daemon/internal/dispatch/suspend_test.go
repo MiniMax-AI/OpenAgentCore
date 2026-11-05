@@ -20,7 +20,7 @@ type suspendedExecutor struct {
 	close  func(context.Context) error
 }
 
-func (e *suspendedExecutor) StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
+func (e *suspendedExecutor) StartTurn(context.Context, string, proto.TurnSettings, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
 	return nil, errors.New("suspended executor must not start a Turn")
 }
 

@@ -17,7 +17,7 @@ SELECT r.state, r.is_initial, r.created_at, r.settled_at, r.failure_code, e.id A
 FROM environments e
 JOIN sessions s ON s.id = e.session_id
 JOIN LATERAL (
-    SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code FROM environment_input_reservations
+    SELECT id, session_id, idempotency_key, batch, state, created_at, deadline, settled_at, is_initial, failure_code, settings FROM environment_input_reservations
     WHERE session_id = e.session_id
     ORDER BY created_at DESC, id DESC LIMIT 1
 ) r ON true

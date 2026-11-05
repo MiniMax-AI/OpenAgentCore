@@ -18,16 +18,16 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	reader, _ := testSessions(t, pgtest.Open(t), nil)
 	d := Dispatcher{SessionsReader: reader}
 	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
-	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}, sessions.TurnSettings{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
 	// A none device without a frozen provider uses its own provider environment:
 	// Core sends only the Agent's model and instructions.
 	instructions := "Keep this instruction."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: v1.Environment{Type: "none"}}
-	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{})
-	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
-		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
+	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}, sessions.TurnSettings{Model: "device-model"})
+	if err != nil || request.Turn.Model != "device-model" || !reflect.DeepEqual(request.AgentOptions, map[string]any{"system_prompt": &instructions}) {
+		t.Fatal("none Session received adapter options Core does not own", request.Turn, request.AgentOptions, err)
 	}
 }
 

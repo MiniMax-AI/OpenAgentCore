@@ -38,7 +38,11 @@ func newInputTx(t *testing.T) *fakeInputTx {
 	return &fakeInputTx{fakeFunctionTx: &fakeFunctionTx{fakeTx: &fakeTx{t: t}}}
 }
 
-func (f *fakeInputTx) CreateTurn(context.Context) (Turn, error) {
+func (f *fakeInputTx) LoadTurnSettings(context.Context) (TurnSettings, error) {
+	return TurnSettings{}, nil
+}
+
+func (f *fakeInputTx) CreateTurn(context.Context, TurnSettings) (Turn, error) {
 	f.record("CreateTurn", f.createTurn != nil)
 	return f.createTurn()
 }
@@ -68,7 +72,7 @@ func (f *fakeInputTx) LoadInputReservation(_ context.Context, reservation string
 	return f.loadInputReservation()
 }
 
-func (f *fakeInputTx) CreateInputReservation(_ context.Context, key string, batch json.RawMessage, initial bool) (EnvironmentInputReservation, error) {
+func (f *fakeInputTx) CreateInputReservation(_ context.Context, key string, batch json.RawMessage, initial bool, _ TurnSettings) (EnvironmentInputReservation, error) {
 	detail := []string{key, string(batch)}
 	if initial {
 		detail = append(detail, "initial")
@@ -213,7 +217,7 @@ func TestAdmitInput(t *testing.T) {
 		tx.createTurnInput, tx.loadUsage = sequences(7), returns(json.RawMessage(`{}`))
 		tx.loadInputSource = returns(Source{Turn: testTurn, Kind: "message", Sequence: 7, Payload: messageInput("hi").Payload})
 		tx.loadItem, tx.putItem = returns(items.Stored{}), func(items.Change) (*int32, error) { return nil, nil }
-		receipt, err := admitInput(t.Context(), tx, inputKey, 0, messageInput("hi"))
+		receipt, err := admitInput(t.Context(), tx, inputKey, 0, messageInput("hi"), TurnSettings{})
 		if err != nil || receipt != (InputReceipt{Sequence: 7, TurnID: testTurn}) {
 			t.Fatalf("receipt %+v, %v", receipt, err)
 		}
@@ -239,7 +243,7 @@ func TestAdmitInput(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tx := newInputTx(t)
 			tx.loadActiveTurn, tx.createTurnInput, tx.loadInputSource, tx.requestTurnCancel = activeTurn(test.active), sequences(8), unprojected, done
-			receipt, err := admitInput(t.Context(), tx, inputKey, 1, test.input)
+			receipt, err := admitInput(t.Context(), tx, inputKey, 1, test.input, TurnSettings{})
 			if err != nil || receipt != test.want {
 				t.Fatalf("receipt %+v, %v", receipt, err)
 			}
@@ -251,7 +255,7 @@ func TestAdmitInput(t *testing.T) {
 		tx.findResultTurn = func() (Turn, bool, error) { return turnWith(TurnWaiting), true, nil }
 		tx.matchFunctionResult, tx.submitFunctionResult, tx.createTurnInput = returns(FunctionResultMatch{Recorded: true}), done, sequences(9)
 		payload := json.RawMessage(`{"turn_id":"` + testTurn + `","call_id":"call","result":{"ok":true}}`)
-		receipt, err := admitInput(t.Context(), tx, inputKey, 0, Input{Kind: "tool_result", Payload: payload})
+		receipt, err := admitInput(t.Context(), tx, inputKey, 0, Input{Kind: "tool_result", Payload: payload}, TurnSettings{})
 		if err != nil || receipt != (InputReceipt{Sequence: 9, TurnID: testTurn}) {
 			t.Fatalf("receipt %+v, %v", receipt, err)
 		}

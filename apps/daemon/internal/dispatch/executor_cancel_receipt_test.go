@@ -47,7 +47,7 @@ type receiptCancelExecutor struct {
 	closeOnce                    sync.Once
 }
 
-func (e *receiptCancelExecutor) StartTurn(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *receiptCancelExecutor) StartTurn(_ context.Context, id string, _ proto.TurnSettings, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	turn := &receiptCancelTurn{id: id, out: out, owner: e, written: make(chan struct{}), cancelled: make(chan struct{}), closed: make(chan struct{}), settled: make(chan struct{}), awaiting: make(chan struct{})}
 	e.current = turn
 	e.turn <- turn

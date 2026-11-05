@@ -28,8 +28,8 @@ func newTurn(t *testing.T, pool *pgxpool.Pool, status string) (pgtype.UUID, pgty
 	if _, err := pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash) VALUES ($1, $2, 'codex', 'key', 'hash')`, session, tenant); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id, session_id, status, completed_at)
-		VALUES ($1, $2, $3::text, CASE WHEN $3::text IN ('completed', 'failed', 'cancelled') THEN clock_timestamp() END)`, turn, session, status); err != nil {
+	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id, session_id, status, completed_at, settings)
+		VALUES ($1, $2, $3::text, CASE WHEN $3::text IN ('completed', 'failed', 'cancelled') THEN clock_timestamp() END, '{}')`, turn, session, status); err != nil {
 		t.Fatal(err)
 	}
 	return pgtype.UUID{Bytes: tenant, Valid: true}, pgtype.UUID{Bytes: session, Valid: true}, pgtype.UUID{Bytes: turn, Valid: true}

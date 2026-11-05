@@ -54,7 +54,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	}
 	owner, cancel := context.WithCancel(ctx)
 	defer cancel()
-	req, err := d.executionRequest(owner, session, snapshot, caps, bound)
+	req, err := d.executionRequest(owner, session, snapshot, caps, bound, run.Reservation.Settings)
 	if err != nil {
 		return run, err
 	}

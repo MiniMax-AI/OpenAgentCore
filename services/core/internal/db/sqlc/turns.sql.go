@@ -12,16 +12,17 @@ import (
 )
 
 const createTurn = `-- name: CreateTurn :one
-INSERT INTO turns(id, session_id) VALUES ($1, $2) RETURNING id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started
+INSERT INTO turns(id, session_id, settings) VALUES ($1, $2, $3) RETURNING id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started, settings
 `
 
 type CreateTurnParams struct {
 	ID        pgtype.UUID `json:"id"`
 	SessionID pgtype.UUID `json:"session_id"`
+	Settings  []byte      `json:"settings"`
 }
 
 func (q *Queries) CreateTurn(ctx context.Context, arg CreateTurnParams) (Turn, error) {
-	row := q.db.QueryRow(ctx, createTurn, arg.ID, arg.SessionID)
+	row := q.db.QueryRow(ctx, createTurn, arg.ID, arg.SessionID, arg.Settings)
 	var i Turn
 	err := row.Scan(
 		&i.ID,
@@ -36,6 +37,7 @@ func (q *Queries) CreateTurn(ctx context.Context, arg CreateTurnParams) (Turn, e
 		&i.EventBytes,
 		&i.TokenUsage,
 		&i.ArtifactCaptureStarted,
+		&i.Settings,
 	)
 	return i, err
 }
@@ -113,7 +115,7 @@ func (q *Queries) FindInputBatch(ctx context.Context, arg FindInputBatchParams) 
 }
 
 const getActiveTurn = `-- name: GetActiveTurn :one
-SELECT id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started FROM turns WHERE session_id = $1 AND status IN ('queued', 'in_progress', 'waiting')
+SELECT id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started, settings FROM turns WHERE session_id = $1 AND status IN ('queued', 'in_progress', 'waiting')
 `
 
 func (q *Queries) GetActiveTurn(ctx context.Context, sessionID pgtype.UUID) (Turn, error) {
@@ -132,12 +134,13 @@ func (q *Queries) GetActiveTurn(ctx context.Context, sessionID pgtype.UUID) (Tur
 		&i.EventBytes,
 		&i.TokenUsage,
 		&i.ArtifactCaptureStarted,
+		&i.Settings,
 	)
 	return i, err
 }
 
 const getTurn = `-- name: GetTurn :one
-SELECT t.id, t.session_id, t.status, t.created_at, t.started_at, t.completed_at, t.cancel_requested_at, t.outcome, t.event_count, t.event_bytes, t.token_usage, t.artifact_capture_started FROM turns t JOIN sessions s ON s.id = t.session_id
+SELECT t.id, t.session_id, t.status, t.created_at, t.started_at, t.completed_at, t.cancel_requested_at, t.outcome, t.event_count, t.event_bytes, t.token_usage, t.artifact_capture_started, t.settings FROM turns t JOIN sessions s ON s.id = t.session_id
 WHERE s.tenant_id = $1 AND t.session_id = $2 AND t.id = $3
 `
 
@@ -163,6 +166,7 @@ func (q *Queries) GetTurn(ctx context.Context, arg GetTurnParams) (Turn, error) 
 		&i.EventBytes,
 		&i.TokenUsage,
 		&i.ArtifactCaptureStarted,
+		&i.Settings,
 	)
 	return i, err
 }
@@ -283,7 +287,7 @@ WHERE id = $4 AND session_id = $5
     AND status = $6
     AND status IN ('queued', 'in_progress', 'waiting')
     AND ($1::text <> 'in_progress' OR cancel_requested_at IS NULL)
-RETURNING id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started
+RETURNING id, session_id, status, created_at, started_at, completed_at, cancel_requested_at, outcome, event_count, event_bytes, token_usage, artifact_capture_started, settings
 `
 
 type TransitionTurnParams struct {
@@ -318,6 +322,7 @@ func (q *Queries) TransitionTurn(ctx context.Context, arg TransitionTurnParams) 
 		&i.EventBytes,
 		&i.TokenUsage,
 		&i.ArtifactCaptureStarted,
+		&i.Settings,
 	)
 	return i, err
 }

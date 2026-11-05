@@ -5,7 +5,7 @@ SELECT id, deleted_at, engine FROM sessions WHERE tenant_id = $1 AND id = $2 FOR
 SELECT * FROM turns WHERE session_id = $1 AND status IN ('queued', 'in_progress', 'waiting');
 
 -- name: CreateTurn :one
-INSERT INTO turns(id, session_id) VALUES ($1, $2) RETURNING *;
+INSERT INTO turns(id, session_id, settings) VALUES ($1, $2, $3) RETURNING *;
 
 -- name: GetTurn :one
 SELECT t.* FROM turns t JOIN sessions s ON s.id = t.session_id

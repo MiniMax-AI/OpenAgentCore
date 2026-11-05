@@ -231,7 +231,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	request := h.read(testExecutionRequest)
 	var prompt proto.PromptRequestPayload
 	_ = request.DecodePayload(&prompt)
-	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.AgentStateKey != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
+	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.AgentStateKey != h.session.ID || prompt.Turn.Model != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
 	if _, err := h.bound().Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {

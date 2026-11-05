@@ -112,7 +112,7 @@ func (s *Session) prepareNative() error {
 	s.mu.Unlock()
 	// A model with effort options is advertised only with its "thinking" variant.
 	variant := ""
-	if s.req.ExecutionControls != nil && s.req.ExecutionControls.ReasoningEffort != "" {
+	if s.req.Turn.ReasoningEffort != "" {
 		variant = "thinking"
 	}
 	model, err := advertisedModel(session.ConfigOptions, s.opts.Model, variant)
@@ -130,7 +130,7 @@ func (s *Session) prepareNative() error {
 	}
 	if variant != "" {
 		// A selected variant takes no model default, so the Session's effort is set explicitly.
-		return s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "thinkingEffort", "value": s.req.ExecutionControls.ReasoningEffort}, nil, false)
+		return s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "thinkingEffort", "value": s.req.Turn.ReasoningEffort}, nil, false)
 	}
 	return nil
 }

@@ -57,7 +57,7 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 			}
 			credentials := &recordingCredentials{token: "scoped-token"}
 			session := sessions.Session{TenantID: uuid.NewString(), Engine: engine}
-			request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), session, snapshot, caps, sessions.ExecutionBinding{})
+			request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), session, snapshot, caps, sessions.ExecutionBinding{}, sessions.TurnSettings{})
 			if !allowed {
 				if err == nil || err.Error() != "The configured engine does not support this MCP connection origin." || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
 					t.Fatal("unverified profile bypassed public policy", err)
@@ -111,7 +111,7 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				}
 				if !allowed {
 					credentials := &recordingCredentials{token: "scoped-token"}
-					request, requestErr := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, caps, sessions.ExecutionBinding{})
+					request, requestErr := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, caps, sessions.ExecutionBinding{}, sessions.TurnSettings{})
 					if requestErr == nil || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
 						t.Fatal("request bypassed capability checks before credential lookup", requestErr)
 					}
@@ -143,7 +143,7 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 					t.Fatal("anonymous binding validation changed", err)
 				}
 				credentials := &recordingCredentials{token: "scoped-token"}
-				request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: engine}, snapshot, caps, sessions.ExecutionBinding{})
+				request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: engine}, snapshot, caps, sessions.ExecutionBinding{}, sessions.TurnSettings{})
 				if len(credentials.requests) != 0 {
 					t.Fatal("anonymous or invalid binding reached credential lookup")
 				}

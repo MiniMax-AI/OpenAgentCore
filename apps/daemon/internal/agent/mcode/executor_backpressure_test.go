@@ -14,7 +14,7 @@ func TestExecutorBlockedPromptWriteCanBeCancelledOrClosed(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			e, _ := executorFixture(t, "executor-backpressure", true)
 			out := make(chan proto.Envelope, 32)
-			turn, err := e.StartTurn(t.Context(), "blocked", proto.TextInput(strings.Repeat("x", 4*1024*1024)), out)
+			turn, err := e.StartTurn(t.Context(), "blocked", proto.TurnSettings{}, proto.TextInput(strings.Repeat("x", 4*1024*1024)), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestExecutorBlockedPromptWriteCanBeCancelledOrClosed(t *testing.T) {
 func TestExecutorUnknownSteeringOutcomeCannotBecomeAppliedCancellation(t *testing.T) {
 	e, _ := executorFixture(t, "executor-steer-unknown", true)
 	out := make(chan proto.Envelope, 32)
-	turn, err := e.StartTurn(t.Context(), "unknown-input", proto.TextInput("wait"), out)
+	turn, err := e.StartTurn(t.Context(), "unknown-input", proto.TurnSettings{}, proto.TextInput("wait"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

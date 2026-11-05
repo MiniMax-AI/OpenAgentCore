@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"os"
 	"path/filepath"
 	"slices"
@@ -141,12 +142,11 @@ func TestNormaliseProviderConfig_Nil(t *testing.T) {
 
 func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", map[string]any{
-		"model": "fixture-model",
 		"model_provider": map[string]any{"protocol": "responses",
 			"base_url": "https://x/v1",
 			"api_key":  "sk-x",
 		},
-	}, nil)
+	}, proto.TurnSettings{Model: "fixture-model"}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 }
 
 func TestBuildSessionPlan_NoProviderLeavesBuiltinDefault(t *testing.T) {
-	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, nil)
+	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -205,7 +205,7 @@ func mustReadFile(t *testing.T, path string) string {
 // Codex's default unbounded connection retries keep a Turn whose model host
 // is unreachable in progress forever.
 func TestModelConnectionRetriesStayBounded(t *testing.T) {
-	plan, err := BuildSessionPlan(t.TempDir(), "bounded", map[string]any{}, nil)
+	plan, err := BuildSessionPlan(t.TempDir(), "bounded", map[string]any{}, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestModelConnectionRetriesStayBounded(t *testing.T) {
 // An active Codex goal starts native turns on its own whenever its thread is
 // idle, which would run work after the Turn ends.
 func TestGoalsStayDisabled(t *testing.T) {
-	plan, err := BuildSessionPlan(t.TempDir(), "goals", map[string]any{}, nil)
+	plan, err := BuildSessionPlan(t.TempDir(), "goals", map[string]any{}, proto.TurnSettings{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestGoalsStayDisabled(t *testing.T) {
 func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
 	root := t.TempDir()
 	const token = "synthetic-private-provider-token"
-	plan, err := BuildSessionPlan(root, "stable-session", map[string]any{"model": "fixture-model", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": token}}, nil)
+	plan, err := BuildSessionPlan(root, "stable-session", map[string]any{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": token}}, proto.TurnSettings{Model: "fixture-model"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

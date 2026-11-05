@@ -168,7 +168,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 			}
 			assertPreparationOnly(t, root)
 			out := make(chan proto.Envelope, 16)
-			turn, err := e.StartTurn(t.Context(), "recovery-run", proto.TextInput("continue"), out)
+			turn, err := e.StartTurn(t.Context(), "recovery-run", proto.TurnSettings{}, proto.TextInput("continue"), out)
 			if err == nil {
 				t.Fatal("missing history started a Turn")
 			}

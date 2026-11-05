@@ -40,7 +40,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	if _, err = pool.Exec(t.Context(), "UPDATE sessions SET created_at='2026-09-28T00:00:00Z' WHERE id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status,created_at,started_at,completed_at,outcome) VALUES($1,$2,'failed','2026-09-28T00:00:00Z','2026-09-28T00:00:01Z','2026-09-28T00:00:02Z','{"error_code":"engine_failed","error":"private-secret-canary"}')`, turn, session.ID); err != nil {
+	if _, err = pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status,created_at,started_at,completed_at,outcome,settings) VALUES($1,$2,'failed','2026-09-28T00:00:00Z','2026-09-28T00:00:01Z','2026-09-28T00:00:02Z','{"error_code":"engine_failed","error":"private-secret-canary"}','{}')`, turn, session.ID); err != nil {
 		t.Fatal(err)
 	}
 	payload, _ := json.Marshal(map[string]any{"id": item, "turn_id": turn, "type": "command_execution", "status": "failed", "command": "example", "exit_code": 1, "duration_ms": 5})

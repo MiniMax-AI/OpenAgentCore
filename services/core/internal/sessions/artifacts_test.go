@@ -268,8 +268,8 @@ func (s *fakeArtifactStorage) WithSessionDeletion(context.Context, string, strin
 	return nil
 }
 
-func (s *fakeArtifactStorage) UpdateSessionMetadata(context.Context, string, string, []byte) (Session, error) {
-	s.t.Fatal("unexpected call to UpdateSessionMetadata")
+func (s *fakeArtifactStorage) UpdateSession(context.Context, string, string, []byte, ConfigureSession) (Session, error) {
+	s.t.Fatal("unexpected call to UpdateSession")
 	return Session{}, nil
 }
 

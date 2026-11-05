@@ -105,7 +105,7 @@ func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launc
 	return e, nil
 }
 
-func (e *executor) StartTurn(ctx context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func (e *executor) StartTurn(ctx context.Context, runID string, _ proto.TurnSettings, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

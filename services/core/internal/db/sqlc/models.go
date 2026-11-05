@@ -119,6 +119,7 @@ type EnvironmentInputReservation struct {
 	SettledAt      pgtype.Timestamptz `json:"settled_at"`
 	IsInitial      bool               `json:"is_initial"`
 	FailureCode    pgtype.Text        `json:"failure_code"`
+	Settings       []byte             `json:"settings"`
 }
 
 type EnvironmentSetup struct {
@@ -503,6 +504,7 @@ type Turn struct {
 	EventBytes             int64              `json:"event_bytes"`
 	TokenUsage             []byte             `json:"token_usage"`
 	ArtifactCaptureStarted bool               `json:"artifact_capture_started"`
+	Settings               []byte             `json:"settings"`
 }
 
 type TurnEvent struct {

@@ -87,7 +87,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 		t.Run(skew.String(), func(t *testing.T) {
 			s, w, owner := managedIdleClockFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at) VALUES($1,$2,'in_progress',clock_timestamp())", turn, owner.SessionID)
+			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at,settings) VALUES($1,$2,'in_progress',clock_timestamp(),'{}')", turn, owner.SessionID)
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
 			before := runtimeDatabaseTime(t, s)

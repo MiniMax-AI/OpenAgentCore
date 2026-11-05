@@ -43,8 +43,8 @@ func newFunctionTurn(t *testing.T, pool *pgxpool.Pool, status string) functionTu
 func addTurn(t *testing.T, pool *pgxpool.Pool, session pgtype.UUID, status string) pgtype.UUID {
 	t.Helper()
 	turn := uuid.New()
-	exec(t, pool, `INSERT INTO turns(id, session_id, status, completed_at)
-		VALUES ($1, $2, $3::text, CASE WHEN $3::text IN ('completed', 'failed', 'cancelled') THEN clock_timestamp() END)`, turn, session, status)
+	exec(t, pool, `INSERT INTO turns(id, session_id, status, completed_at, settings)
+		VALUES ($1, $2, $3::text, CASE WHEN $3::text IN ('completed', 'failed', 'cancelled') THEN clock_timestamp() END, '{}')`, turn, session, status)
 	return pgID(turn)
 }
 

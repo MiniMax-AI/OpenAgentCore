@@ -26,7 +26,7 @@ func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPay
 	if err := os.WriteFile(entry, []byte("version-one"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, AgentOptions: map[string]any{"model": "fixture"}}
+	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{}}
 }
 
 func runPersistentExecutorHelper() {
@@ -135,7 +135,7 @@ func runPersistentExecutorHelper() {
 func consumeExecutorTurn(t *testing.T, owner agent.Executor, id, input string) (agent.Turn, <-chan proto.Envelope) {
 	t.Helper()
 	out := make(chan proto.Envelope, 16)
-	turn, err := owner.StartTurn(t.Context(), id, proto.TextInput(input), out)
+	turn, err := owner.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput(input), out)
 	if err != nil || turn == nil {
 		t.Fatalf("StartTurn: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestExecutorLateTurnEventInvalidatesWithoutRetargeting(t *testing.T) {
 		t.Fatal("unknown native outcome marked settled")
 	}
 	next := make(chan proto.Envelope, 1)
-	if turn, err := owner.StartTurn(t.Context(), "third", proto.TextInput("hello"), next); turn != nil || err == nil {
+	if turn, err := owner.StartTurn(t.Context(), "third", proto.TurnSettings{}, proto.TextInput("hello"), next); turn != nil || err == nil {
 		t.Fatal("invalid executor accepted input")
 	}
 }
@@ -262,7 +262,7 @@ func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 	rejected := make(chan proto.Envelope, 1)
 	cancelled, stop := context.WithCancel(t.Context())
 	stop()
-	if turn, err := owner.StartTurn(cancelled, "not-written", proto.TextInput("hello"), rejected); turn != nil || err == nil {
+	if turn, err := owner.StartTurn(cancelled, "not-written", proto.TurnSettings{}, proto.TextInput("hello"), rejected); turn != nil || err == nil {
 		t.Fatal("cancelled admission reached native input")
 	}
 	select {
@@ -275,7 +275,7 @@ func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := make(chan proto.Envelope, 8)
-	turn, err := owner.StartTurn(t.Context(), "unknown-write", proto.TextInput("hello"), out)
+	turn, err := owner.StartTurn(t.Context(), "unknown-write", proto.TurnSettings{}, proto.TextInput("hello"), out)
 	if turn == nil || err == nil {
 		t.Fatalf("attempted write must preserve unknown Turn ownership: %T %v", turn, err)
 	}

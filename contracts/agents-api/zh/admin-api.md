@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 0b0be1a0a0d85119e047330c178258481e71f645d577554b5619d3a9b201a794
+source_hash: 32e834142d199c6ba6ec276e6cd4365c551235e9d2233d296f3f18ab90e86046
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -135,7 +135,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 
 ## 执行配置 {#execution-configuration}
 
-`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` 报告 Session 在创建时冻结的模型、Harness、原生参数和模型提供商。它仅读取已存储的配置：绝不会联系提供商、启动 Turn 或唤醒沙箱。响应带有 `Cache-Control: no-store`。
+`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` 报告 Session 当前的模型，以及它在创建时冻结的 Harness、原生参数和模型提供商。经 Session 更新改变的模型，其来源读为 `session`。它仅读取已存储的配置：绝不会联系提供商、启动 Turn 或唤醒沙箱。响应带有 `Cache-Control: no-store`。
 
 ```json
 {
@@ -186,10 +186,12 @@ Core 会记录是哪个项目 API 密钥完成了每次成功的公共写入；�
 | Source File 上传、删除 | `create`、`delete` | `file` |
 | Vault 创建、删除 | `create`、`delete` | `vault` |
 | Credential 创建、替换、删除（静态和 OAuth） | `create`、`update`、`delete` | `credential`（`vault`） |
+| Automation 创建、更新、暂停、恢复、删除 | `create`、`update`、`delete` | `automation` |
+| Automation 手动调用 | `create` | `automation_invocation`（`automation`） |
 
 上述两条路由仅接受列出的参数；未知、重复或空参数会返回 400，项目不存在则返回 404。
 
-`GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` 按请求顺序返回同一类型下 1–100 个资源的创建密钥。`resource_type` 可以是 `agent`、`session`、`environment`、`environment_template`、`skill`、`skill_version`、`file`、`vault`、`credential` 或 `artifact`。
+`GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` 按请求顺序返回同一类型下 1–100 个资源的创建密钥。`resource_type` 可以是 `agent`、`session`、`environment`、`environment_template`、`skill`、`skill_version`、`file`、`vault`、`credential`、`artifact`、`automation` 或 `automation_invocation`。
 
 ```json
 {"data":[

@@ -78,10 +78,10 @@ func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
 			busy := kind == "in_progress" || kind == "waiting" || kind == "subagent_in_progress" || kind == "subagent_waiting" || kind == "file_write"
 			switch kind {
 			case "queued", "in_progress", "waiting":
-				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,$3)`, uuid.NewString(), session.ID, kind)
+				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,$3,'{}')`, uuid.NewString(), session.ID, kind)
 			case "subagent_queued", "subagent_in_progress", "subagent_waiting":
 				parent, child := uuid.NewString(), uuid.NewString()
-				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp())`, parent, session.ID)
+				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp(),'{}')`, parent, session.ID)
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, session.ID, parent)
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, session.ID, owner.DeviceID, parent)
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn',$4,clock_timestamp())`, uuid.NewString(), session.ID, child, strings.TrimPrefix(kind, "subagent_"))
@@ -325,7 +325,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 		runtimeSuspensionSQL(t, s.pool, `INSERT INTO sessions(id,tenant_id,engine,idempotency_key,request_hash,configuration) SELECT $1::uuid,tenant_id,engine,$1::text,$1::text,configuration FROM sessions WHERE id=$2`, id, session.ID)
 		runtimeSuspensionSQL(t, s.pool, `INSERT INTO environments(id,session_id) VALUES($1,$2)`, uuid.NewString(), id)
 		if i <= 34 {
-			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'in_progress')`, uuid.NewString(), id)
+			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'in_progress','{}')`, uuid.NewString(), id)
 		}
 		if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 			t.Fatal(err)

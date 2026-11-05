@@ -43,6 +43,16 @@ func (q *Queries) GetSessionExecutionConfiguration(ctx context.Context, arg GetS
 	return i, err
 }
 
+const markSessionModelSource = `-- name: MarkSessionModelSource :exec
+UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model,source}', '"session"')
+WHERE session_id = $1
+`
+
+func (q *Queries) MarkSessionModelSource(ctx context.Context, sessionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markSessionModelSource, sessionID)
+	return err
+}
+
 const saveSessionExecutionConfiguration = `-- name: SaveSessionExecutionConfiguration :exec
 INSERT INTO session_execution_configuration(session_id, configuration, deployment_provider_revision)
 VALUES ($1, $2, $3)

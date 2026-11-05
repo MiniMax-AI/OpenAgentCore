@@ -66,6 +66,7 @@ var Declaration = harnessconfig.Declaration{
 	},
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
+	SessionUpdates:     harnessconfig.SessionUpdates{Model: proto.CapabilityUnsupported, ReasoningEffort: proto.CapabilityUnsupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilityUnsupported},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
 	// Native MiniMax Code ignores global instructions (AGENTS.md) over 32 KiB.
 	MaxInstructionsBytes: 32 * 1024,

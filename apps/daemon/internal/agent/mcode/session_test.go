@@ -18,8 +18,8 @@ import (
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
-		"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example/v1", "api_key": "fixture-key", "context_window": 64000, "max_output_tokens": 4096}, "system_prompt": "Current instructions",
+	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), Turn: proto.TurnSettings{Model: "fixture"}, AgentOptions: map[string]any{
+		"model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example/v1", "api_key": "fixture-key", "context_window": 64000, "max_output_tokens": 4096}, "system_prompt": "Current instructions",
 	}, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 }
 
@@ -71,7 +71,7 @@ func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload
 	if err != nil {
 		return nil, err
 	}
-	turn, err := e.StartTurn(ctx, req.RunID, req.Input, out)
+	turn, err := e.StartTurn(ctx, req.RunID, proto.TurnSettings{}, req.Input, out)
 	if err != nil {
 		return nil, err
 	}

@@ -45,8 +45,8 @@ func newEnvironment(t *testing.T, pool *pgxpool.Pool, kind, status string) (pgty
 
 func reserveInput(t *testing.T, pool *pgxpool.Pool, session pgtype.UUID) {
 	t.Helper()
-	exec(t, pool, `INSERT INTO environment_input_reservations(id, session_id, idempotency_key, batch, created_at, deadline)
-		VALUES ($1, $2, 'input', '[{}]', clock_timestamp(), clock_timestamp() + interval '1 hour')`, uuid.New(), session)
+	exec(t, pool, `INSERT INTO environment_input_reservations(id, session_id, idempotency_key, batch, settings, created_at, deadline)
+		VALUES ($1, $2, 'input', '[{}]', '{}', clock_timestamp(), clock_timestamp() + interval '1 hour')`, uuid.New(), session)
 }
 
 func kinds(changes []sessions.SessionChange) []string {
@@ -192,7 +192,7 @@ func readEnvironmentState(t *testing.T, pool *pgxpool.Pool, session pgtype.UUID)
 func TestFailEnvironmentThroughTheBindingCommitsWithItsTransaction(t *testing.T) {
 	pool := pgtest.Open(t)
 	tenant, session, _ := newEnvironment(t, pool, "openai_hosted", "connected")
-	exec(t, pool, `INSERT INTO turns(id, session_id) VALUES ($1, $2)`, uuid.New(), session)
+	exec(t, pool, `INSERT INTO turns(id, session_id, settings) VALUES ($1, $2, '{}')`, uuid.New(), session)
 	reserveInput(t, pool, session)
 	const reason = "Failed to provision environment"
 	fail := func(tx pgx.Tx) error {

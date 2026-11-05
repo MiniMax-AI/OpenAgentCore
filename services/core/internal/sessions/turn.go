@@ -28,6 +28,8 @@ type Turn struct {
 	CancelRequestedAt     time.Time
 	Usage                 json.RawMessage
 	Outcome               json.RawMessage
+	// Settings are bound when the Turn's input is accepted.
+	Settings TurnSettings
 	// ArtifactCaptureStarted is private Runtime coordination, never a wire field.
 	ArtifactCaptureStarted bool `json:"-"`
 }

@@ -2,6 +2,7 @@ package codex
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -28,11 +29,10 @@ func TestExecutionControlsMapToNativeSettings(t *testing.T) {
 				{"tools.web_search.location.city", `"Paris"`}, {"tools.web_search.location.timezone", `"Europe/Paris"`}}},
 		{"empty domain list stays distinct from null", &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "low", AllowedDomains: []string{}}},
 			[][2]string{{"web_search", `"disabled"`}, {"tools.web_search.context_size", `"low"`}, {"tools.web_search.allowed_domains", `[]`}}},
-		{"reasoning and tier", &proto.ExecutionControls{ReasoningEffort: "max", ReasoningSummary: "concise", ServiceTier: "priority"},
-			[][2]string{{"model_reasoning_effort", `"max"`}, {"model_reasoning_summary", `"concise"`}, {"service_tier", `"priority"`}}},
+		{"reasoning summary", &proto.ExecutionControls{ReasoningSummary: "concise"}, [][2]string{{"model_reasoning_summary", `"concise"`}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": "test-model"}, tc.controls)
+			plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{}, proto.TurnSettings{}, tc.controls)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -55,11 +55,29 @@ func TestExecutionControlsRejectUndeclaredValues(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, controls := range []proto.ExecutionControls{
 		{WebSearch: &proto.WebSearchControl{Mode: "indexed", ContextSize: "medium"}},
-		{TextVerbosity: "invalid"}, {ReasoningEffort: "ultra"}, {ReasoningSummary: "none"}, {ServiceTier: "scale"},
+		{TextVerbosity: "invalid"}, {ReasoningSummary: "none"},
 	} {
-		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, &controls); err == nil {
+		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, proto.TurnSettings{}, &controls); err == nil {
 			plan.Cleanup()
 			t.Fatal("undeclared controls accepted", controls)
+		}
+	}
+}
+
+func TestTurnSettingsReachNativeConfigAndRejectUndeclaredValues(t *testing.T) {
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, proto.TurnSettings{Model: "m", ReasoningEffort: "max", ServiceTier: "priority"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.Cleanup()
+	if plan.Model != "m" || !slices.Contains(plan.ExtraConfig, [2]string{"model_reasoning_effort", `"max"`}) || !slices.Contains(plan.ExtraConfig, [2]string{"service_tier", `"priority"`}) {
+		t.Fatalf("turn settings not applied: %v", plan.ExtraConfig)
+	}
+	for _, turn := range []proto.TurnSettings{{ReasoningEffort: "ultra"}, {ServiceTier: "scale"}} {
+		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, turn, nil); err == nil {
+			plan.Cleanup()
+			t.Fatal("undeclared turn setting accepted", turn)
 		}
 	}
 }

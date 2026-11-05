@@ -24,7 +24,7 @@ func TestExecutorCancellationRequiresNativeTerminalCleanup(t *testing.T) {
 				allow()
 			}
 			out := make(chan proto.Envelope, 20)
-			turn, err := e.StartTurn(t.Context(), "cancel", proto.TextInput("hold"), out)
+			turn, err := e.StartTurn(t.Context(), "cancel", proto.TurnSettings{}, proto.TextInput("hold"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +60,7 @@ func TestExecutorCancellationRequiresNativeTerminalCleanup(t *testing.T) {
 			}
 			if confirmed {
 				nextOut := make(chan proto.Envelope, 20)
-				next, err := e.StartTurn(ctx, "next", proto.TextInput("answer"), nextOut)
+				next, err := e.StartTurn(ctx, "next", proto.TurnSettings{}, proto.TextInput("answer"), nextOut)
 				if err != nil || !awaitExecutorTurn(t, next, nextOut).Reusable {
 					t.Fatal("confirmed cleanup prevented reuse", err)
 				}
@@ -83,7 +83,7 @@ func TestExecutorCancellationRequiresNativeTerminalCleanup(t *testing.T) {
 func TestExecutorCloseCleansNativeTerminalsAfterNormalCompletion(t *testing.T) {
 	e, root := executorFixture(t, "terminal-cleanup")
 	out := make(chan proto.Envelope, 20)
-	turn, err := e.StartTurn(t.Context(), "normal", proto.TextInput("answer"), out)
+	turn, err := e.StartTurn(t.Context(), "normal", proto.TurnSettings{}, proto.TextInput("answer"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,7 +43,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				t.Fatal("prepared native schema changed with caller memory")
 			}
 			out := make(chan proto.Envelope, 16)
-			if _, err := e.StartTurn(t.Context(), "run", proto.TextInput("hello"), out); err != nil {
+			if _, err := e.StartTurn(t.Context(), "run", proto.TurnSettings{}, proto.TextInput("hello"), out); err != nil {
 				t.Fatal(err)
 			}
 			for event := range out {

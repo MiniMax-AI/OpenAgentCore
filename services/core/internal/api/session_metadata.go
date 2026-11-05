@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
@@ -20,36 +21,85 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request struct {
-		Agent    json.RawMessage `json:"agent"`
+		Agent *struct {
+			Model     *string `json:"model"`
+			Reasoning *struct {
+				Effort json.RawMessage `json:"effort"`
+			} `json:"reasoning"`
+			ServiceTier json.RawMessage `json:"service_tier"`
+			Tools       json.RawMessage `json:"tools"`
+		} `json:"agent"`
 		Review   *string         `json:"review"`
 		Metadata json.RawMessage `json:"metadata"`
 	}
 	_ = json.Unmarshal(raw, &request)
-	// An agent object without members changes nothing, as in the official update.
-	if request.Agent != nil && !emptyObject(request.Agent) {
-		writeFieldError(w, &fieldError{param: "agent", message: "Updating the Session agent is not supported."})
+	if request.Agent != nil && request.Agent.Tools != nil {
+		writeFieldError(w, &fieldError{param: "agent.tools", message: "Updating the Session tools is not supported."})
 		return
 	}
-	if err := rejectAutoReview(request.Review); writeFieldError(w, err) {
+	if request.Agent == nil && request.Review == nil && request.Metadata == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
 		return
 	}
-	if len(request.Metadata) == 0 {
-		if request.Review == nil && request.Agent == nil {
-			writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
+	command := sessions.UpdateSessionCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id")}
+	if request.Metadata != nil {
+		var values map[string]string
+		_ = json.Unmarshal(request.Metadata, &values)
+		command.Metadata = metadataOrEmpty(values)
+		if writeFieldError(w, metadataFieldError(metadata.Validate(command.Metadata))) {
 			return
 		}
-		h.getSession(w, r)
-		return
 	}
-	var values map[string]string
-	_ = json.Unmarshal(request.Metadata, &values)
-	values = metadataOrEmpty(values)
-	if writeFieldError(w, metadataFieldError(metadata.Validate(values))) {
-		return
+	configure := func(engine string, stored json.RawMessage) (json.RawMessage, error) {
+		var fields, agent, reasoning map[string]json.RawMessage
+		_ = json.Unmarshal(stored, &fields) // The stored configuration was validated at creation.
+		_ = json.Unmarshal(fields["agent"], &agent)
+		_ = json.Unmarshal(agent["reasoning"], &reasoning)
+		if reasoning == nil {
+			reasoning = map[string]json.RawMessage{}
+		}
+		if a := request.Agent; a != nil {
+			if a.Model != nil {
+				if _, err := harnessconfig.ValidateModel(*a.Model); err != nil {
+					return nil, &fieldError{param: "agent.model", message: err.Error()}
+				}
+				agent["model"], _ = json.Marshal(*a.Model)
+			}
+			if a.Reasoning != nil && a.Reasoning.Effort != nil {
+				reasoning["effort"] = a.Reasoning.Effort
+			}
+			if a.ServiceTier != nil {
+				agent["service_tier"] = a.ServiceTier
+				if isNull(a.ServiceTier) {
+					agent["service_tier"] = json.RawMessage(`"auto"`)
+				}
+			}
+		}
+		if request.Review != nil {
+			delete(fields, "review")
+			if *request.Review == "auto_review" {
+				fields["review"], _ = json.Marshal(*request.Review)
+			}
+		}
+		agent["reasoning"], _ = json.Marshal(reasoning)
+		fields["agent"], _ = json.Marshal(agent)
+		updated, err := json.Marshal(fields)
+		if err != nil {
+			return nil, err
+		}
+		if err := h.Policy.ValidateSessionUpdate(engine, stored, updated); err != nil {
+			return nil, &fieldError{message: err.Error(), code: "unsupported_or_invalid_configuration"}
+		}
+		return updated, nil
 	}
-	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), Metadata: values})
+	if request.Agent != nil || request.Review != nil {
+		command.Configure = configure
+	}
+	session, err := h.Sessions.UpdateSession(r.Context(), command)
 	if err != nil {
-		writeSessionsError(w, r, err)
+		if !writeFieldError(w, err) {
+			writeSessionsError(w, r, err)
+		}
 		return
 	}
 	h.respondSession(w, r, session)
@@ -119,12 +169,4 @@ func metadataFieldError(err error) error {
 		return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid 'metadata.%s': string contains U+0000, which this service cannot store.", key)}
 	}
 	return err
-}
-
-// rejectAutoReview accepts review none; automatic review has no Harness-native equivalent.
-func rejectAutoReview(review *string) error {
-	if review != nil && *review == "auto_review" {
-		return &fieldError{param: "review", message: "Automatic action review is not supported. Use review none."}
-	}
-	return nil
 }

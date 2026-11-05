@@ -72,6 +72,7 @@ var Declaration = harnessconfig.Declaration{
 	},
 	Placements:             []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:             []string{"service", "environment"},
+	SessionUpdates:         harnessconfig.SessionUpdates{Model: proto.CapabilityUnsupported, ReasoningEffort: proto.CapabilityUnsupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilityUnsupported},
 	WhitespaceOnlyText:     proto.CapabilitySupported,
 	ValidateConfiguration:  validateConfiguration,
 	ValidateTools:          validateTools,

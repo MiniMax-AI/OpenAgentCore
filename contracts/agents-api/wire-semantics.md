@@ -195,8 +195,7 @@ These official fields have no Core meaning. A request that sets one returns 400 
 
 | Field | Param |
 | --- | --- |
-| Session update `agent` with any member; `{}` changes nothing | `agent` |
-| Session `review: auto_review` on create or update; `none` is accepted and responses omit `review` | `review` |
+| Session update `agent.tools` | `agent.tools` |
 | `environment.environment_id` | `environment_id` |
 | `environment.container_size`; responses carry `container_size: null` | `container_size` |
 | `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
@@ -212,6 +211,7 @@ A Session's effective configuration must also pass execution admission, which ap
 | --- | --- |
 | A `reasoning.effort`, `reasoning.summary`, `service_tier` (including `ultrafast`), `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
 | `compaction.async: true`, `experimental.time_awareness: true`, or an `automations` or `computer_use` tool, on every Harness, since none runs them natively | A message naming the field, such as `compaction.async=true is not supported.` |
+| A `review: auto_review` the Harness does not declare, on create or update; `none` is always accepted and responses omit it | A message naming the field, such as `review "auto_review" is not supported by this Harness.` |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
 | A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
@@ -231,7 +231,7 @@ Omitted, null and explicit `medium` text verbosity give the same Session configu
 
 ### Configuration snapshot
 
-Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit; an inline `x_agents_core` that omits `harness` keeps the saved Harness. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions.
+Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit; an inline `x_agents_core` that omits `harness` keeps the saved Harness. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions. The snapshot changes only through a Session update, and each root Turn takes the settings current when Core accepts the input that creates it.
 
 `stream` defaults to false. `stream` and `agent_id` cannot be null. Omitted or null `metadata` is `{}`.
 
@@ -251,7 +251,9 @@ Keys are scoped to the Project; any key of the Project, including one issued aft
 
 ### Update and list
 
-`POST /agents/sessions/{session_id}` changes only `metadata`: null or `{}` clears it and an object replaces all pairs. A body with only `review` or an empty `agent` changes nothing and returns the Session; a body with none of `metadata`, `agent` or `review` returns 400. An `agent` with members is rejected ([unsupported fields](#unsupported-fields)). Execution state and the creation retry identity are unchanged.
+`POST /agents/sessions/{session_id}` applies only the members present, in one transaction, and returns the Session. `metadata` null or `{}` clears it and an object replaces all pairs. `agent.model`, `agent.reasoning.effort` (null selects the model's default), `agent.service_tier` (null becomes `auto`) and `review` change the snapshot for Turns whose input is accepted later; a Turn that already exists, with its Subagents, keeps its settings. `agent.tools` is rejected ([unsupported fields](#unsupported-fields)). An empty `agent` changes nothing, and a body with none of `metadata`, `agent` or `review` returns 400.
+
+A changed value that the Harness does not declare it applies natively between Turns, or a `review` it does not declare, returns 400 `unsupported_or_invalid_configuration` naming the field, and nothing is written. An unchanged value always passes. The creation retry identity is unchanged.
 
 `GET /agents/sessions` accepts `agent_id`, which matches the Session's immutable root Agent ID, including inline Agent IDs and Agents that were since updated or deleted. The filter applies before pagination; an empty `agent_id` is a filter, not an omission. The [`metadata` filter](#query-parameters) applies too.
 

@@ -107,6 +107,9 @@ type EnvironmentInputReservation struct {
 	Deadline  time.Time
 	SettledAt *time.Time
 	Receipts  []InputReceipt
+	// Settings are bound when the reservation is created and become the
+	// Turn's settings when it is admitted.
+	Settings TurnSettings
 }
 
 type EnvironmentInputWork struct{ TenantID, SessionID, ReservationID string }

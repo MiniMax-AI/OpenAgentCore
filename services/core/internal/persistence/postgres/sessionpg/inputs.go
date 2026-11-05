@@ -43,8 +43,12 @@ func withInputs(ctx context.Context, runner pgunit.Transactor, tenantID, session
 	})
 }
 
-func (t *SessionTx) CreateTurn(ctx context.Context) (sessions.Turn, error) {
-	row, err := t.q.CreateTurn(ctx, sqlc.CreateTurnParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session})
+func (t *SessionTx) CreateTurn(ctx context.Context, settings sessions.TurnSettings) (sessions.Turn, error) {
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return sessions.Turn{}, err
+	}
+	row, err := t.q.CreateTurn(ctx, sqlc.CreateTurnParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session, Settings: encoded})
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -130,6 +134,9 @@ func (t *SessionTx) reservationFromRow(ctx context.Context, row sqlc.Environment
 	if err := json.Unmarshal(row.Batch, &result.Inputs); err != nil {
 		return sessions.EnvironmentInputReservation{}, fmt.Errorf("decode Environment input: %w", err)
 	}
+	if err := json.Unmarshal(row.Settings, &result.Settings); err != nil {
+		return sessions.EnvironmentInputReservation{}, fmt.Errorf("decode Environment input settings: %w", err)
+	}
 	if row.State != sessions.EnvironmentInputAdmitted {
 		return result, nil
 	}
@@ -144,9 +151,21 @@ func (t *SessionTx) reservationFromRow(ctx context.Context, row sqlc.Environment
 	return result, nil
 }
 
-func (t *SessionTx) CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool) (sessions.EnvironmentInputReservation, error) {
+func (t *SessionTx) LoadTurnSettings(ctx context.Context) (sessions.TurnSettings, error) {
+	configuration, err := t.q.GetSessionConfiguration(ctx, t.session)
+	if err != nil {
+		return sessions.TurnSettings{}, err
+	}
+	return sessions.TurnSettingsOf(configuration)
+}
+
+func (t *SessionTx) CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool, settings sessions.TurnSettings) (sessions.EnvironmentInputReservation, error) {
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return sessions.EnvironmentInputReservation{}, err
+	}
 	row, err := t.q.CreateEnvironmentInputReservation(ctx, sqlc.CreateEnvironmentInputReservationParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session, IdempotencyKey: key, Batch: batch, IsInitial: initial,
+		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session, IdempotencyKey: key, Batch: batch, IsInitial: initial, Settings: encoded,
 	})
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, storable(err)

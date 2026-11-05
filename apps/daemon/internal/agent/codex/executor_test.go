@@ -84,7 +84,7 @@ func TestExecutorNormalTurnsKeepProcessAndThread(t *testing.T) {
 	var previous agent.Turn
 	for _, id := range []string{"one", "two"} {
 		out := make(chan proto.Envelope, 20)
-		turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)
+		turn, err := e.StartTurn(t.Context(), id, proto.TurnSettings{}, proto.TextInput("answer"), out)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,11 +126,11 @@ func TestExecutorFreezesPreparedConfiguration(t *testing.T) {
 			assertPreparationOnly(t, root)
 			cwd := e.prepared.plan.Cwd
 			// Caller-owned data cannot revise the prepared native configuration.
-			req.AgentOptions["model"] = "different-model"
+			req.Turn.Model = "different-model"
 			req.AgentSessionID = "different-thread"
 			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
 			out := make(chan proto.Envelope, 20)
-			turn, err := e.StartTurn(t.Context(), "actual-run", proto.TextInput("actual prompt"), out)
+			turn, err := e.StartTurn(t.Context(), "actual-run", proto.TurnSettings{}, proto.TextInput("actual prompt"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -189,7 +189,7 @@ func TestExecutorUnavailableOwnerStartsNoTurn(t *testing.T) {
 				t.Fatal(err)
 			}
 			out := make(chan proto.Envelope, 1)
-			if turn, err := e.StartTurn(t.Context(), "late-run", proto.TextInput("must not start"), out); turn != nil || err == nil {
+			if turn, err := e.StartTurn(t.Context(), "late-run", proto.TurnSettings{}, proto.TextInput("must not start"), out); turn != nil || err == nil {
 				t.Fatal("unavailable executor started a Turn", err)
 			}
 			if len(out) != 0 {
@@ -203,11 +203,11 @@ func TestExecutorUnavailableOwnerStartsNoTurn(t *testing.T) {
 func TestExecutorCancellationSettlesThenReuses(t *testing.T) {
 	e, root := executorFixture(t, "complete")
 	out := make(chan proto.Envelope, 20)
-	first, err := e.StartTurn(t.Context(), "cancel", proto.TextInput("hold"), out)
+	first, err := e.StartTurn(t.Context(), "cancel", proto.TurnSettings{}, proto.TextInput("hold"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.StartTurn(t.Context(), "overlap", proto.TextInput("answer"), make(chan proto.Envelope, 20)); err == nil {
+	if _, err := e.StartTurn(t.Context(), "overlap", proto.TurnSettings{}, proto.TextInput("answer"), make(chan proto.Envelope, 20)); err == nil {
 		t.Fatal("overlapping turn admitted")
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -219,7 +219,7 @@ func TestExecutorCancellationSettlesThenReuses(t *testing.T) {
 		t.Fatal("cancelled healthy executor unavailable")
 	}
 	secondOut := make(chan proto.Envelope, 20)
-	second, err := e.StartTurn(t.Context(), "next", proto.TextInput("hold"), secondOut)
+	second, err := e.StartTurn(t.Context(), "next", proto.TurnSettings{}, proto.TextInput("hold"), secondOut)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestExecutorStartErrorsRetainExactOwnership(t *testing.T) {
 			out := make(chan proto.Envelope, 20)
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
-			turn, err := e.StartTurn(ctx, "before", proto.TextInput("answer"), out)
+			turn, err := e.StartTurn(ctx, "before", proto.TurnSettings{}, proto.TextInput("answer"), out)
 			if turn != nil || !errors.Is(err, context.Canceled) {
 				t.Fatal(turn, err)
 			}
@@ -259,7 +259,7 @@ func TestExecutorStartErrorsRetainExactOwnership(t *testing.T) {
 				t.Fatal("pre-admission output was retained or closed")
 			default:
 			}
-			turn, err = e.StartTurn(t.Context(), "after", proto.TextInput("answer"), out)
+			turn, err = e.StartTurn(t.Context(), "after", proto.TurnSettings{}, proto.TextInput("answer"), out)
 			if turn == nil || err == nil {
 				t.Fatal("uncertain submission lost owner", err)
 			}
@@ -313,7 +313,7 @@ func TestExecutorCloseRetainsPlanUntilReaped(t *testing.T) {
 func TestExecutorCloseSeparatesTurnFailureFromResourceCleanup(t *testing.T) {
 	e, root := executorFixture(t, "interrupt-error")
 	out := make(chan proto.Envelope, 20)
-	turn, err := e.StartTurn(t.Context(), "cancel-failure", proto.TextInput("hold"), out)
+	turn, err := e.StartTurn(t.Context(), "cancel-failure", proto.TurnSettings{}, proto.TextInput("hold"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +339,7 @@ func TestExecutorCloseSeparatesTurnFailureFromResourceCleanup(t *testing.T) {
 func TestExecutorCloseTerminatesAfterMissingCancellationTerminal(t *testing.T) {
 	e, root := executorFixture(t, "interrupt-no-terminal")
 	out := make(chan proto.Envelope, 20)
-	turn, err := e.StartTurn(t.Context(), "missing-terminal", proto.TextInput("hold"), out)
+	turn, err := e.StartTurn(t.Context(), "missing-terminal", proto.TurnSettings{}, proto.TextInput("hold"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

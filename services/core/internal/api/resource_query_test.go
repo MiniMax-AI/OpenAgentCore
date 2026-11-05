@@ -58,7 +58,7 @@ func (s *missingResourceStore) DeleteSession(_ context.Context, command sessions
 	return s.missing(command.TenantID)
 }
 
-func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, command sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
+func (s *missingResourceStore) UpdateSession(_ context.Context, command sessions.UpdateSessionCommand) (sessions.Session, error) {
 	return sessions.Session{}, s.missing(command.TenantID)
 }
 
@@ -84,7 +84,7 @@ func (s *missingResourceStore) DeleteEnvironmentTemplate(_ context.Context, comm
 // wire serves the Agent, Session and Environment template lookups from s.
 func (s *missingResourceStore) wire(_ *Dependencies, f *testFakes) {
 	f.agentsReader.getAgent, f.agents.delete, f.agents.update = s.GetAgent, s.DeleteAgent, s.UpdateAgent
-	f.sessionsReader.getSession, f.sessions.deleteSession, f.sessions.updateSessionMetadata = s.GetSession, s.DeleteSession, s.UpdateSessionMetadata
+	f.sessionsReader.getSession, f.sessions.deleteSession, f.sessions.updateSession = s.GetSession, s.DeleteSession, s.UpdateSession
 	f.environmentTemplatesReader.get, f.environmentTemplates.update, f.environmentTemplates.delete = s.GetEnvironmentTemplate, s.UpdateEnvironmentTemplate, s.DeleteEnvironmentTemplate
 }
 

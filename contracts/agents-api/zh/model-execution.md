@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 676dda3abe26188f998a8b0ff1cfa761135d6f04cff19433a5e5bd6ec23e7149
+source_hash: 8c9223d103d7c98f3eed195505b0d1feebc80e520058f4572dd51c5a5ec4fc43
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -119,7 +119,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 提供对象时会替换整个对象；`{}` 会清除它，null 则无效。Session 在选择模型或提供商但未提供原生参数时，会使用 `{}`，而不会继承另一个模型的参数。否则，使用已保存 Agent 提供的对象；使用部署模型的内联 Session 使用部署对象。更改 Harness 会清除继承的参数；对模型、提供商或 Harness 的 Agent 更新如果未提供 `harness_config`，也会清除继承的参数。不进行深度合并。仅设置原生参数的内联扩展会保留已保存的 Harness。
 
-Core 会在写入 Session 前验证解析后的配置，并将其冻结在 Session 的 Agent 配置中；管理员的 execution-configuration 读取结果会显示其值和来源。原生参数不属于机密信息；提供商密钥保存在单独加密的配置包中。重新连接会使用冻结的配置，无法更改提供商、协议或参数；不兼容的冻结配置会导致失败。仅仅支持某种协议，并不能说明结构化输出、工具发现、Web 搜索、详细程度或图像输入是否可用；连接受支持也不能证明远程模型接受某个参数。
+Core 会在写入 Session 前验证解析后的配置，并将其冻结在 Session 的 Agent 配置中；管理员的 execution-configuration 读取结果会显示其值和来源。原生参数不属于机密信息；提供商密钥保存在单独加密的配置包中。Session 更新可以为之后的 Turn 更改模型；提供商、协议和原生参数保持冻结。重新连接会使用冻结的配置，无法更改提供商、协议或参数；不兼容的冻结配置会导致失败。仅仅支持某种协议，并不能说明结构化输出、工具发现、Web 搜索、详细程度或图像输入是否可用；连接受支持也不能证明远程模型接受某个参数。
 
 ## 部署默认值 {#deployment-defaults}
 

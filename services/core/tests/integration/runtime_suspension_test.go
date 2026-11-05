@@ -49,7 +49,7 @@ func runtimeSuspensionSQL(t *testing.T, pool *pgxpool.Pool, query string, args .
 func runtimeSuspensionCompleted(t *testing.T, pool *pgxpool.Pool, owner deployment.Allocation) string {
 	t.Helper()
 	id := uuid.NewString()
-	runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '10 minutes')`, id, owner.SessionID)
+	runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp()-interval '10 minutes','{}')`, id, owner.SessionID)
 	return id
 }
 
@@ -79,16 +79,16 @@ func TestRuntimeSuspensionRequiresIdleAndNoPendingWork(t *testing.T) {
 			}
 			switch kind {
 			case "queued", "in_progress", "waiting":
-				runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,$3)`, uuid.NewString(), owner.SessionID, kind)
+				runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,$3,'{}')`, uuid.NewString(), owner.SessionID, kind)
 			case "subagent_queued", "subagent_in_progress", "subagent_waiting":
 				child := uuid.NewString()
 				runtimeSuspensionSQL(t, pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, completed)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, completed)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn',$4,clock_timestamp())`, uuid.NewString(), owner.SessionID, child, strings.TrimPrefix(kind, "subagent_"))
 			case "initial_input":
-				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,created_at,deadline) VALUES($1,$2,'initial','[{}]',true,clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
+				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,created_at,deadline,settings) VALUES($1,$2,'initial','[{}]',true,clock_timestamp(),clock_timestamp()+interval '1 minute','{}')`, uuid.NewString(), owner.SessionID)
 			case "input_reservation":
-				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
+				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline,settings) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute','{}')`, uuid.NewString(), owner.SessionID)
 			case "file_write":
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64))
 			}
