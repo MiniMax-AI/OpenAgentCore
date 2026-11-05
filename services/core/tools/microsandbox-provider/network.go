@@ -16,10 +16,6 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-var carrierGradeNAT = netip.MustParsePrefix("100.64.0.0/10")
-
-func isPrivate(a netip.Addr) bool { return a.IsPrivate() || carrierGradeNAT.Contains(a) }
-
 // resolveTimeout bounds the lookup of Core's address.
 const resolveTimeout = 5 * time.Second
 
@@ -84,7 +80,7 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 		switch {
 		case err != nil || (ipErr != nil && !sandbox.ValidDomain(host)):
 			fmt.Fprintf(report, "unsupported %s\n", endpoint)
-		case ipErr == nil && isPrivate(ip.Unmap()):
+		case ipErr == nil && !sandbox.PublicAddress(ip.Unmap()):
 		default:
 			endpoints = append(endpoints, [2]string{host, strconv.Itoa(p)})
 		}

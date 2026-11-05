@@ -89,3 +89,6 @@ SET node_id=sqlc.arg(destination)::uuid, compute_phase=sqlc.arg(phase),
     compute_state=sqlc.arg(state)::jsonb, compute_revision=a.compute_revision+1,
     compute_phase_changed_at=CASE WHEN a.compute_phase=sqlc.arg(phase)::text THEN a.compute_phase_changed_at ELSE clock_timestamp() END
 FROM moved WHERE a.id=moved.id RETURNING a.*;
+
+-- name: GetSessionEnvironmentID :one
+SELECT environment_id FROM sessions WHERE id = $1;

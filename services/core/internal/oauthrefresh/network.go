@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 func parseEndpoint(raw string) (*url.URL, error) {
@@ -60,7 +62,7 @@ func (p *networkPolicy) dialContext(ctx context.Context, network, address string
 	// service after validation. HTTPS still verifies the original hostname.
 	for _, item := range addresses {
 		ip, ok := netip.AddrFromSlice(item.IP)
-		if !ok || item.Zone != "" || (!trusted && !publicAddress(ip.Unmap())) {
+		if !ok || item.Zone != "" || (!trusted && !sandbox.PublicAddress(ip.Unmap())) {
 			return nil, ErrRefresh
 		}
 	}
@@ -74,11 +76,4 @@ func (p *networkPolicy) dialContext(ctx context.Context, network, address string
 		}
 	}
 	return nil, ErrRefresh
-}
-
-var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
-
-func publicAddress(ip netip.Addr) bool {
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() &&
-		!ip.IsLinkLocalUnicast() && !sharedAddressSpace.Contains(ip)
 }

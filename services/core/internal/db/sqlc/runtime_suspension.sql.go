@@ -76,6 +76,17 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	return i, err
 }
 
+const getSessionEnvironmentID = `-- name: GetSessionEnvironmentID :one
+SELECT environment_id FROM sessions WHERE id = $1
+`
+
+func (q *Queries) GetSessionEnvironmentID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getSessionEnvironmentID, id)
+	var environment_id pgtype.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
+}
+
 const moveSuspendedRuntimeCompute = `-- name: MoveSuspendedRuntimeCompute :one
 WITH moved AS (
     UPDATE runtime_placements p SET node_id=$1::uuid

@@ -47,14 +47,14 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	if err := t.q.RecordStandaloneDetach(ctx, t.session); err != nil {
 		return err
 	}
-	environment, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
+	environment, err := t.q.GetSessionEnvironmentID(ctx, t.session)
 	if err != nil {
 		return err
 	}
 	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {
 		return err
 	}
-	return t.q.ExpireUncomputedStandaloneEnvironment(ctx, environment.Environment.ID)
+	return t.q.ExpireUncomputedStandaloneEnvironment(ctx, environment)
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {
