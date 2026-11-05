@@ -51,6 +51,9 @@ func TestRemoveSessionStateKeepsOnlyTheNamedKey(t *testing.T) {
 			kept, removed = append(kept, keep), append(removed, other)
 		}
 	}
+	if err := os.WriteFile(filepath.Join(stateRoot, "runtime", ".DS_Store"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := RemoveSessionState(stateRoot, runtimeRoot, "keep"); err != nil {
 		t.Fatal(err)
 	}

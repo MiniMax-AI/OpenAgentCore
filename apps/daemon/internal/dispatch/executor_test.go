@@ -283,20 +283,6 @@ func poolRequest(id string) proto.ExecutionPreparePayload {
 	return req
 }
 
-func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
-	e := &reusableExecutor{}
-	r, s, calls := executorRouter(t, e, time.Minute)
-	executorAdmission(t, r, s, "one", executorRequest())
-	req := executorRequest()
-	req.SessionID = "another"
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "scope", req)); err == nil {
-		t.Fatal("two sessions shared native state")
-	}
-	if calls.Load() != 1 {
-		t.Fatal("mismatched session invoked native preparation")
-	}
-}
-
 func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
 	var mu sync.Mutex
 	var owners []*reusableExecutor
@@ -332,6 +318,20 @@ func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
 	}
 }
 
+func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
+	e := &reusableExecutor{}
+	r, s, calls := executorRouter(t, e, time.Minute)
+	executorAdmission(t, r, s, "one", executorRequest())
+	req := executorRequest()
+	req.SessionID = "another"
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "scope", req)); err == nil {
+		t.Fatal("two sessions shared native state")
+	}
+	if calls.Load() != 1 {
+		t.Fatal("mismatched session invoked native preparation")
+	}
+}
+
 func TestUnboundRuntimeKeepsSessionsSideBySide(t *testing.T) {
 	owner := &reusableExecutor{}
 	r, s, calls := executorRouter(t, owner, time.Minute)
@@ -341,6 +341,7 @@ func TestUnboundRuntimeKeepsSessionsSideBySide(t *testing.T) {
 		t.Fatalf("unbound Runtime closes=%d prepares=%d, want 0 and 2", owner.closes.Load(), calls.Load())
 	}
 }
+
 func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {
 	for name, change := range map[string]func(*proto.PromptRequestPayload){
 		"no environment":       func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },

@@ -2,9 +2,9 @@ package localworkspace
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"sync"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -71,7 +71,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	if b == nil && r.LocalEnvironment == nil {
 		return r, nil
 	}
-	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment ||
+	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || !canonicalID(r.AgentStateKey) ||
 		r.DisableExecutionEnvironment {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}

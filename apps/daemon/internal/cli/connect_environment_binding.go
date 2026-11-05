@@ -65,6 +65,7 @@ func bindEnvironmentRuntime(remote string, bound machineapi.Enrollment, workspac
 	if err := localworkspace.Bind(bound.EnvironmentID, workspace, capabilityDirectory); err != nil {
 		return errors.New("connect: local Runtime layout unavailable")
 	}
+	bound.SessionID = "" // The Runtime binds to its Environment; the receipt's Session is not part of it.
 	return saveEnvironmentBinding(root, environmentBinding{RemoteURL: remote, Enrollment: bound, LocalWorkspace: workspace, CapabilityDirectory: capabilityDirectory})
 }
 

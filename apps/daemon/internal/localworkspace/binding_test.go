@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -39,7 +38,8 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 		"other Environment": func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
-		"none": func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
+		"non-canonical Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = "x y" },
+		"none":                  func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := valid
@@ -68,28 +68,6 @@ func TestBindingServesSessionsInSequence(t *testing.T) {
 		if _, err = b.Prepare(t.Context(), configured); err != nil {
 			t.Fatalf("Session %s: %v", key, err)
 		}
-	}
-}
-
-func TestBindingRemovesOtherSessionState(t *testing.T) {
-	b, _ := testBinding(t)
-	keep, other := uuid.NewString(), uuid.NewString()
-	var dirs []string
-	for _, key := range []string{keep, other} {
-		dir, err := agent.StateDir(b.runtimeRoot, "codex", key)
-		if err != nil || os.MkdirAll(dir, 0o700) != nil {
-			t.Fatal(err)
-		}
-		dirs = append(dirs, dir)
-	}
-	if err := b.RemoveOtherSessionState(keep); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(dirs[0]); err != nil {
-		t.Fatal("kept Session state removed")
-	}
-	if _, err := os.Stat(dirs[1]); !os.IsNotExist(err) {
-		t.Fatal("other Session state kept")
 	}
 }
 

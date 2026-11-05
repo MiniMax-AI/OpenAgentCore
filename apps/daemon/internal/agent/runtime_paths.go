@@ -56,7 +56,7 @@ func safeRuntimePathPart(value string) string {
 // Sessions, so it also covers state left by earlier processes and checkpoints.
 func RemoveSessionState(stateRoot, runtimeRoot, keepKey string) error {
 	keep := safeRuntimePathParts(keepKey)
-	if len(keep) == 0 {
+	if len(keep) != 1 {
 		return fmt.Errorf("agent: invalid agent state key %q", keepKey)
 	}
 	for _, root := range []string{stateRoot, runtimeRoot} {
@@ -68,6 +68,9 @@ func RemoveSessionState(stateRoot, runtimeRoot, keepKey string) error {
 			return err
 		}
 		for _, kind := range kinds {
+			if !kind.IsDir() {
+				continue
+			}
 			states := filepath.Join(root, "runtime", kind.Name(), "state")
 			entries, err := os.ReadDir(states)
 			if err != nil && !os.IsNotExist(err) {

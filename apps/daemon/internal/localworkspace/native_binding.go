@@ -10,7 +10,7 @@ import (
 )
 
 func newNativeBinding(environment, workspace, capabilities string) (*Binding, error) {
-	if id, err := uuid.Parse(environment); err != nil || id == uuid.Nil || id.String() != environment {
+	if !canonicalID(environment) {
 		return nil, errors.New("local workspace requires a canonical Environment identity")
 	}
 	for _, path := range []string{workspace, capabilities} {
@@ -23,6 +23,11 @@ func newNativeBinding(environment, workspace, capabilities string) (*Binding, er
 		return nil, errors.New("local workspace root must be an existing directory")
 	}
 	return &Binding{environment: environment, workspace: workspace, capabilityRoot: capabilities, writer: &fileWriter{}}, nil
+}
+
+func canonicalID(value string) bool {
+	id, err := uuid.Parse(value)
+	return err == nil && id != uuid.Nil && id.String() == value
 }
 
 // ReadToolEnvironment reads explicit initialization values for this installation.
