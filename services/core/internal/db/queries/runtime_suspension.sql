@@ -43,6 +43,14 @@ UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
 FROM sessions s JOIN environments e ON e.id = s.environment_id
 WHERE s.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released';
 
+-- name: ExpireUncomputedStandaloneEnvironment :exec
+-- An unattached standalone Environment whose compute is all released has nothing to resume, so it ends.
+UPDATE environments e SET status = 'expired'
+WHERE e.id = $1 AND NOT e.session_owned AND e.status NOT IN ('failed', 'expired')
+  AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+  AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released');
+
 -- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN sessions s ON s.environment_id = a.environment_id

@@ -23,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -241,18 +240,11 @@ func (t *creationTx) AttachEnvironment(ctx context.Context, environment string) 
 	switch {
 	case row.AttachedSessionID.Valid:
 		return sessions.ErrEnvironmentAttached
-	case row.Environment.SessionOwned:
-		return sessions.ErrNotFound
 	case row.Environment.Status == "failed" || row.Environment.Status == "expired":
 		return sessions.ErrEnvironmentTerminal
 	}
 	t.environment = id
-	err = t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: id})
-	var violation *pgconn.PgError
-	if errors.As(err, &violation) && violation.Code == "23505" && violation.ConstraintName == "sessions_attached_environment" {
-		return sessions.ErrEnvironmentAttached
-	}
-	if err != nil {
+	if err := t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: id}); err != nil {
 		return err
 	}
 	// A Runtime that already connected to the Environment serves this Session.

@@ -42,11 +42,19 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	if err := t.q.ReleaseUnallocatedRuntimePlacement(ctx, t.session); err != nil {
 		return err
 	}
-	// Detaching starts the idle clock of a standalone Environment's compute.
+	// Detaching starts the idle clock of a standalone Environment's compute, and
+	// ends an Environment whose compute was released while the Session held it.
 	if err := t.q.RecordStandaloneDetach(ctx, t.session); err != nil {
 		return err
 	}
-	return t.q.MarkSessionDeleted(ctx, t.session)
+	environment, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
+	if err != nil {
+		return err
+	}
+	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {
+		return err
+	}
+	return t.q.ExpireUncomputedStandaloneEnvironment(ctx, environment.Environment.ID)
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {

@@ -71,10 +71,11 @@ type CreationTx interface {
 	// A deleted or mismatched one is ErrIdempotencyConflict. Cursor is the
 	// Session's event sequence before anything the transaction admits.
 	UpsertSession(ctx context.Context, session NewSession) (Creation, error)
-	// AttachEnvironment locks the tenant's standalone Environment and attaches
-	// the new Session to it. A missing or Session-owned one is ErrNotFound,
-	// one with a live Session ErrEnvironmentAttached and a failed or expired
-	// one ErrEnvironmentTerminal.
+	// AttachEnvironment locks the tenant's Environment and attaches the new
+	// Session to it. A missing one, or a Session-owned one whose Session is
+	// gone, is ErrNotFound; one with a live Session, Session-owned or not, is
+	// ErrEnvironmentAttached; and a failed or expired one is
+	// ErrEnvironmentTerminal. It runs before the deployment lock.
 	AttachEnvironment(ctx context.Context, environment string) error
 	// SaveModelExecution seals the Session's model provider bundle.
 	SaveModelExecution(ctx context.Context, provider v1.ModelProviderInput) error
@@ -144,12 +145,13 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 	environment, retained := input.EnvironmentID, false
 	var target sandbox.DeploymentSpec
 	if environment != "" {
-		// Attaching starts hosted work, so it meets the same deployment state
-		// as a new Environment; the Environment's own admission already ran.
-		if _, err := s.admitHosted(ctx, tx); err != nil {
+		// Lock order is Session, Environment, deployment. Attaching starts hosted
+		// work, so it meets the same deployment state as a new Environment; the
+		// Environment's own admission already ran.
+		if err := tx.AttachEnvironment(ctx, environment); err != nil {
 			return nil, err
 		}
-		if err := tx.AttachEnvironment(ctx, environment); err != nil {
+		if _, err := s.admitHosted(ctx, tx); err != nil {
 			return nil, err
 		}
 	} else if creates {

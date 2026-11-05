@@ -67,6 +67,10 @@ type AutomationInvocation struct {
 	AttemptedAt        pgtype.Timestamptz `json:"attempted_at"`
 }
 
+type DeletableEnvironment struct {
+	ID pgtype.UUID `json:"id"`
+}
+
 type DeploymentModelProvider struct {
 	Harness         string             `json:"harness"`
 	Protocol        string             `json:"protocol"`

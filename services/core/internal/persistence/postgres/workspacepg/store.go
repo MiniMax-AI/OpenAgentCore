@@ -331,10 +331,14 @@ func (e *Execution) change(ctx context.Context, ref workspacefs.Reference, apply
 }
 
 // withEnvironment runs apply under the Environment lock, after the attached
-// Session's, and reports whether a Session-owned Environment lost its Session.
+// Session's, and reports whether the Environment's workspace may be deleted.
 func (e *Execution) withEnvironment(ctx context.Context, tenant, environment string, apply func(context.Context, *sqlc.Queries, bool) error) error {
-	err := sessionpg.WithEnvironment(ctx, e.lease, pgunit.PathID(tenant), pgunit.PathID(environment), func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, _ pgtype.UUID) error {
-		return apply(ctx, q, locked.Deleted)
+	err := sessionpg.WithEnvironment(ctx, e.lease, pgunit.PathID(tenant), pgunit.PathID(environment), func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession, _ pgtype.UUID) error {
+		deletable, err := q.EnvironmentWorkspaceDeletable(ctx, pgunit.PathID(environment))
+		if err != nil {
+			return err
+		}
+		return apply(ctx, q, deletable)
 	})
 	if errors.Is(err, sessions.ErrNotFound) {
 		return workspaces.ErrNotFound

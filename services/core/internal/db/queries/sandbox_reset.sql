@@ -63,7 +63,8 @@ WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
     AND (sqlc.arg(force)::boolean OR NOT EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
         OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
-        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
+        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
+        OR EXISTS (SELECT 1 FROM runtime_reset_retained_environments r WHERE r.environment_id = e.id))
 ORDER BY e.id LIMIT 32;
 
 -- name: GetSandboxResetProject :one

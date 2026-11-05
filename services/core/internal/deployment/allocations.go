@@ -235,8 +235,8 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			// Compute retention ends independently of the Session only when its
 			// initialized filesystem and native history can continue on new compute.
 			// Explicit archive/reset makes this locked eligibility check false.
-			// A standalone Environment is never replaced on new compute: its end
-			// expires it.
+			// A standalone Environment is replaced on new compute only while a
+			// Session is attached; unattached, its end expires it.
 			if !retain && lost && revoked.AttachedSessionID != "" {
 				return ErrAllocationConflict
 			}

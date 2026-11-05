@@ -354,6 +354,10 @@ func (t *allocationTx) Release(current deployment.Allocation) (deployment.Alloca
 	if err := placementpg.ReleasePlacement(t.ctx, t.q, t.environment); err != nil {
 		return deployment.Allocation{}, err
 	}
+	// Every release of an unattached standalone Environment's last compute ends it.
+	if err := t.q.ExpireUncomputedStandaloneEnvironment(t.ctx, t.environment); err != nil {
+		return deployment.Allocation{}, err
+	}
 	return released, nil
 }
 
