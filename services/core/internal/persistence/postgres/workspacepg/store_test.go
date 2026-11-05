@@ -429,3 +429,49 @@ func TestWorkspaceWritesRequireExecutionLease(t *testing.T) {
 		}
 	}
 }
+
+// An unattached standalone Environment's workspace is deleted once the
+// Environment ended; a live Session or a live Environment keeps it.
+func TestEndedStandaloneEnvironmentWorkspaceIsDeleted(t *testing.T) {
+	f := newFixture(t)
+	tenant, environment := uuid.NewString(), uuid.NewString()
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environments(id, tenant_id, configuration, session_owned, idempotency_key, request_hash, creator_kind, creator_id)
+		VALUES ($1, $2, '{"type":"openai_hosted"}', false, 'key', repeat('a', 64), 'user', 'creator')`, environment, tenant); err != nil {
+		t.Fatal(err)
+	}
+	record, err := f.execution.Bind(t.Context(), tenant, environment, *f.active, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.execution.MarkReady(t.Context(), record.Reference, attachment(record)); err != nil {
+		t.Fatal(err)
+	}
+	deletable := func() bool {
+		candidates, err := f.store.DeletionCandidates(t.Context(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(candidates) == 1
+	}
+	if deletable() || !errors.Is(f.execution.BeginDelete(t.Context(), record.Reference), workspaces.ErrConflict) {
+		t.Fatal("a live standalone Environment lost its workspace")
+	}
+	session := uuid.NewString()
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET status='expired' WHERE id=$1`, environment); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash, configuration, environment_id)
+		VALUES ($1, $2, 'codex', 'key', 'hash', '{}', $3)`, session, tenant, environment); err != nil {
+		t.Fatal(err)
+	}
+	if deletable() || !errors.Is(f.execution.BeginDelete(t.Context(), record.Reference), workspaces.ErrConflict) {
+		t.Fatal("an attached Session lost its workspace")
+	}
+	f.deleteSession(t, session)
+	if !deletable() {
+		t.Fatal("an ended, unattached Environment kept its workspace")
+	}
+	if err := f.execution.BeginDelete(t.Context(), record.Reference); err != nil {
+		t.Fatal(err)
+	}
+}

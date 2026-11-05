@@ -1,6 +1,7 @@
 package deploymentpg_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,6 +10,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // standaloneEnvironment stores an initialized standalone Environment of a
@@ -106,6 +110,28 @@ func TestUnattachedEnvironmentExpiresWhenRetentionEnds(t *testing.T) {
 	}
 }
 
+// attachSession stores a live Session attached to the Environment.
+func attachSession(t *testing.T, f fixture, key deployment.AllocationKey) uuid.UUID {
+	t.Helper()
+	session := uuid.New()
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash, configuration, environment_id)
+		VALUES ($1, $2, 'codex', 'key', 'hash', '{}', $3)`, session, key.TenantID, key.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	return session
+}
+
+// deleteSession deletes the Session through the storage path of the public delete.
+func deleteSession(t *testing.T, f fixture, key deployment.AllocationKey, session uuid.UUID) {
+	t.Helper()
+	store := sessionpg.New(pgunit.NewPool(f.pool), f.cipher)
+	if err := store.WithSessionDeletion(t.Context(), key.TenantID, session.String(), func(ctx context.Context, _ sessions.LockedSession, tx sessions.SessionDeletionTx) error {
+		return tx.ApplyDeletion(ctx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Deleting the attached Session starts the idle clock of an Environment that
 // outlives it, so it does not expire the moment it detaches.
 func TestDetachStartsTheIdleClock(t *testing.T) {
@@ -113,19 +139,58 @@ func TestDetachStartsTheIdleClock(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	owner := reserveStandalone(t, f, changes, installation, "disabled")
-	session := uuid.New()
-	if _, err := f.pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash, configuration, environment_id)
-		VALUES ($1, $2, 'codex', 'key', 'hash', '{}', $3)`, session, owner.Key().TenantID, owner.Key().EnvironmentID); err != nil {
+	// The compute has been idle for a day, so only the detach can make it busy.
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET created_at=clock_timestamp() - interval '1 day' WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlc.New(f.pool).RecordStandaloneDetach(t.Context(), pgtype.UUID{Bytes: session, Valid: true}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET deleted_at=now() WHERE id=$1`, session); err != nil {
-		t.Fatal(err)
-	}
+	deleteSession(t, f, owner.Key(), attachSession(t, f, owner.Key()))
 	if _, err := changes.ExpireIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired right after the detach", err)
+	}
+}
+
+// An Environment whose compute was released while a Session held it expires
+// when the Session detaches, so its workspace is deleted and a reset does not
+// wait for it.
+func TestDetachAfterReleasedComputeExpiresTheEnvironment(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "suspended")
+	config := uuid.New()
+	for _, statement := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO workspace_fs_configurations(id,adapter,parameters) VALUES($1,'fixture','{}')`, []any{config}},
+		{`INSERT INTO environment_workspaces(object_id,environment_id,configuration_id,state,attachment) VALUES($1,$2,$3,'ready','{}')`, []any{uuid.New(), owner.EnvironmentID, config}},
+		{`UPDATE runtime_allocations SET state='released', released_at=clock_timestamp() WHERE id=$1`, []any{owner.ID}},
+	} {
+		if _, err := f.pool.Exec(t.Context(), statement.sql, statement.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	session := attachSession(t, f, owner.Key())
+	if status := environmentStatus(t, f, owner.Key()); status != "pending" {
+		t.Fatal("the held Environment ended", status)
+	}
+	deleteSession(t, f, owner.Key(), session)
+	if status := environmentStatus(t, f, owner.Key()); status != "expired" {
+		t.Fatal("the detached Environment stayed", status)
+	}
+	candidates, err := sqlc.New(f.pool).ListWorkspaceDeletionCandidates(t.Context(), pgtype.UUID{Valid: true})
+	if err != nil || len(candidates) != 1 {
+		t.Fatal("workspace is not a deletion candidate", candidates, err)
+	}
+	if err := changes.StartReset(admin(t), installation, deployment.ResetRequest{ExpectedGeneration: view.Generation, Clear: deployment.ResetForce}); err != nil {
+		t.Fatal(err)
+	}
+	reset, err := f.service.View(t.Context())
+	if err != nil || reset.Reset == nil || reset.Reset.Remaining.Idle+reset.Reset.Remaining.Busy+reset.Reset.Remaining.Cleanup != 0 {
+		t.Fatal("the reset still waits", reset.Reset, err)
+	}
+	if _, err := changes.CompleteReset(t.Context(), installation, view.Generation, reset.Reset.RequestedAt); err != nil {
+		t.Fatal(err)
 	}
 }
 
