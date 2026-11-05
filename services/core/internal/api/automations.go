@@ -23,7 +23,7 @@ type Automations interface {
 	Resume(ctx context.Context, tenantID, id string) (automations.Automation, error)
 	Delete(ctx context.Context, tenantID, id string) (string, error)
 	Invoke(ctx context.Context, tenantID, id string) (automations.Invocation, error)
-	Record(context.Context) (int, error)
+	Record(context.Context, time.Time) (int, error)
 	Deliverable(ctx context.Context, limit int) ([]automations.Delivery, error)
 	Settle(context.Context, automations.Outcome) error
 }
@@ -49,6 +49,8 @@ func (h *Handler) registerAutomationRoutes(r chi.Router) {
 type automationTarget struct {
 	kind                 string
 	projection, contents json.RawMessage
+	// report writes the response for the error that came with the target.
+	report func(http.ResponseWriter, *http.Request, error)
 }
 
 func (h *Handler) createAutomation(w http.ResponseWriter, r *http.Request) {
@@ -81,19 +83,9 @@ func (h *Handler) createAutomation(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, err)
 		return
 	}
-	if body.Type == automations.Periodic {
-		if err := boundedText("expression", body.Expression, 256); err != nil {
-			writeFieldError(w, err)
-			return
-		}
-		if err := boundedText("timezone", body.Timezone, 128); err != nil {
-			writeFieldError(w, err)
-			return
-		}
-	}
 	target, err := h.automationTarget(r, body.Target)
 	if err != nil {
-		h.writeTargetError(w, r, err)
+		target.report(w, r, err)
 		return
 	}
 	a := automations.Automation{TenantID: tenantID(r), Type: body.Type, Name: body.Name, Metadata: metadataOrEmpty(body.Metadata), Expression: body.Expression, Timezone: body.Timezone, TargetType: target.kind, Target: target.projection, Contents: target.contents}
@@ -124,27 +116,9 @@ func (h *Handler) updateAutomation(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(raw, &body)
 	patch := automations.Patch{Name: body.Name, Metadata: body.Metadata, Expression: body.Expression, Timezone: body.Timezone}
-	if body.Name != nil {
-		if err := automationFields(body.Name, body.Metadata); err != nil {
-			writeFieldError(w, err)
-			return
-		}
-	} else if err := automationFields(nil, body.Metadata); err != nil {
+	if err := automationFields(body.Name, body.Metadata); err != nil {
 		writeFieldError(w, err)
 		return
-	}
-	for param, value := range map[string]*string{"expression": body.Expression, "timezone": body.Timezone} {
-		if value == nil {
-			continue
-		}
-		limit := 256
-		if param == "timezone" {
-			limit = 128
-		}
-		if err := boundedText(param, *value, limit); err != nil {
-			writeFieldError(w, err)
-			return
-		}
 	}
 	if body.RunAt != nil {
 		runAt := time.Unix(*body.RunAt, 0)
@@ -153,7 +127,7 @@ func (h *Handler) updateAutomation(w http.ResponseWriter, r *http.Request) {
 	if body.Target != nil {
 		target, err := h.automationTarget(r, body.Target)
 		if err != nil {
-			h.writeTargetError(w, r, err)
+			target.report(w, r, err)
 			return
 		}
 		patch.TargetType, patch.Target, patch.Contents = target.kind, target.projection, target.contents
@@ -180,7 +154,7 @@ func (h *Handler) listAutomations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.AutomationsReader.List(r.Context(), tenantID(r), automations.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, SessionID: r.URL.Query().Get("session_id")})
+	page, err := h.AutomationsReader.List(r.Context(), tenantID(r), automations.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending, SessionID: sessionFilter(r)})
 	if err != nil {
 		writeAutomationsError(w, r, err)
 		return
@@ -259,12 +233,13 @@ func (h *Handler) listAutomationInvocations(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, response)
 }
 
-// writeTargetError reports a target that failed validation: a field error, or
-// an error of the Session create or lookup rules the target reuses.
-func (h *Handler) writeTargetError(w http.ResponseWriter, r *http.Request, err error) {
-	if !writeFieldError(w, err) {
-		writeSessionsError(w, r, err)
+// sessionFilter reads the session_id filter. A supplied empty value matches no
+// Automation, as an empty agent_id matches no Session.
+func sessionFilter(r *http.Request) *string {
+	if values, present := r.URL.Query()["session_id"]; present {
+		return &values[0]
 	}
+	return nil
 }
 
 // automationFields checks the name and metadata of a request. A nil name is
@@ -285,6 +260,27 @@ func boundedText(param, value string, limit int) error {
 	return nil
 }
 
+// prefixTarget names a Session create field error under the target.
+func prefixTarget(err error) error {
+	var field *fieldError
+	if !errors.As(err, &field) {
+		return err
+	}
+	param := "target"
+	if field.param != "" {
+		param += "." + field.param
+	}
+	return &fieldError{param: param, message: field.message, code: field.code}
+}
+
+// writeTargetError reports a target that failed validation: a field error, or
+// an error of the Session lookup rules the target reuses.
+func writeTargetError(w http.ResponseWriter, r *http.Request, err error) {
+	if !writeFieldError(w, err) {
+		writeSessionsError(w, r, err)
+	}
+}
+
 // automationTarget validates a target and builds what is saved. A new_session
 // target is validated as the Session create body it replays; an
 // existing_session target must name a Session and hold deliverable text.
@@ -294,37 +290,39 @@ func (h *Handler) automationTarget(r *http.Request, raw json.RawMessage) (automa
 	var kind string
 	_ = json.Unmarshal(fields["type"], &kind)
 	if kind == "existing_session" {
-		return h.existingSessionTarget(r, raw, fields)
+		return h.existingSessionTarget(r, raw)
 	}
 	if kind != "new_session" && fields["type"] != nil {
 		if err := checkValue("target.type", fields["type"], shape{kind: enumValue, values: []string{"new_session", "existing_session"}}); err != nil {
-			return automationTarget{}, err
+			return automationTarget{report: writeTargetError}, err
 		}
 	}
-	return h.newSessionTarget(raw, fields)
+	return h.newSessionTarget(r, raw, fields)
 }
 
-func (h *Handler) existingSessionTarget(r *http.Request, raw json.RawMessage, fields map[string]json.RawMessage) (automationTarget, error) {
+func (h *Handler) existingSessionTarget(r *http.Request, raw json.RawMessage) (automationTarget, error) {
+	fail := automationTarget{report: writeTargetError}
 	if err := checkValue("target", raw, automationTargetParamExistingSession); err != nil {
-		return automationTarget{}, err
+		return fail, err
 	}
 	var target struct {
 		SessionID    string `json:"session_id"`
 		Instructions string `json:"instructions"`
 	}
 	_ = json.Unmarshal(raw, &target)
-	if len(target.Instructions) > maxInstructions {
-		return automationTarget{}, &fieldError{param: "target.instructions", message: "instructions must not exceed 1 MiB."}
+	if utf8.RuneCountInString(target.Instructions) > maxInstructions {
+		return fail, &fieldError{param: "target.instructions", message: "instructions must not exceed 1048576 characters."}
 	}
 	if _, err := executionInputs([]json.RawMessage{instructionsEvent(target.Instructions)}); err != nil {
-		return automationTarget{}, &fieldError{param: "target.instructions", message: "instructions must be non-empty text this service can store."}
+		return fail, &fieldError{param: "target.instructions", message: "instructions must be non-empty text this service can store."}
 	}
-	if _, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), target.SessionID); err != nil {
-		return automationTarget{}, err
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), target.SessionID)
+	if err != nil {
+		return fail, err
 	}
-	delete(fields, "type")
-	contents, _ := json.Marshal(fields)
-	projection, _ := json.Marshal(v1.AutomationTarget{Type: "existing_session", SessionID: &target.SessionID, Instructions: &target.Instructions})
+	// The saved target names the Session by its canonical id, whatever form the request used.
+	contents, _ := json.Marshal(map[string]string{"session_id": session.ID, "instructions": target.Instructions})
+	projection, _ := json.Marshal(v1.AutomationTarget{Type: "existing_session", SessionID: &session.ID, Instructions: &target.Instructions})
 	return automationTarget{kind: "existing_session", projection: projection, contents: contents}, nil
 }
 
@@ -335,61 +333,55 @@ func instructionsEvent(instructions string) json.RawMessage {
 	return event
 }
 
-func (h *Handler) newSessionTarget(raw json.RawMessage, fields map[string]json.RawMessage) (automationTarget, error) {
+func (h *Handler) newSessionTarget(r *http.Request, raw json.RawMessage, fields map[string]json.RawMessage) (automationTarget, error) {
+	fail := automationTarget{report: writeTargetError}
 	if err := checkValue("target", raw, automationTargetParamNewSession); err != nil {
-		return automationTarget{}, err
+		return fail, err
 	}
 	_, inline := fields["agent"]
 	_, saved := fields["agent_id"]
 	if inline == saved {
-		return automationTarget{}, &fieldError{param: "target", message: "Provide exactly one of agent and agent_id."}
+		return fail, &fieldError{param: "target", message: "Provide exactly one of agent and agent_id."}
 	}
 	if inline {
 		var agent map[string]json.RawMessage
 		_ = json.Unmarshal(fields["agent"], &agent)
 		if agent["x_agents_core"] != nil {
-			return automationTarget{}, &fieldError{param: "target.agent.x_agents_core", message: "x_agents_core is not supported in an automation target."}
-		}
-		if agent["model"] == nil {
-			return automationTarget{}, &fieldError{param: "target.agent.model", message: "agent.model is required in an automation target."}
+			return fail, &fieldError{param: "target.agent.x_agents_core", message: "x_agents_core is not supported in an automation target."}
 		}
 	}
 	delete(fields, "type")
 	contents, _ := json.Marshal(fields)
 	input, _, err := parseSessionRequest(contents)
 	if err != nil {
-		var field *fieldError
-		if errors.As(err, &field) {
-			param := "target"
-			if field.param != "" {
-				param += "." + field.param
-			}
-			err = &fieldError{param: param, message: field.message, code: field.code}
-		}
-		return automationTarget{}, err
+		return fail, prefixTarget(err)
 	}
 	target := v1.AutomationTarget{Type: "new_session", AgentID: input.AgentID, Environment: automationEnvironment(input), VaultIDs: input.VaultIDs, Metadata: input.Metadata}
 	_ = json.Unmarshal(fields["input"], &target.Input)
 	for i := range target.Input {
 		target.Input[i].Type = "message"
 	}
+	plan, report, err := h.planSession(r.Context(), tenantID(r), "", &input)
+	if err != nil {
+		return automationTarget{report: report}, prefixTarget(err)
+	}
 	if inline {
-		agent, err := resolveSessionAgent(input, nil)
+		var cfg configuration
+		_ = json.Unmarshal(plan.configuration, &cfg)
+		agent := cfg.Agent
+		tools, err := resourceTools(cfg)
 		if err != nil {
-			return automationTarget{}, err
+			return fail, err
 		}
-		config := v1.AutomationAgentConfig{Model: agent.Model, Reasoning: agent.Reasoning, Text: agent.Text, ServiceTier: agent.ServiceTier, Instructions: agent.Instructions, Tools: make([]json.RawMessage, 0, len(agent.Tools)), MultiAgent: agent.MultiAgent, Compaction: agent.Compaction, Experimental: agent.Experimental}
-		for _, tool := range agent.Tools {
-			config.Tools = append(config.Tools, withoutMCPHeaders(tool))
-		}
-		target.Agent = &config
+		target.Agent = &v1.AutomationAgentConfig{Model: agent.Model, Reasoning: v1.ReasoningResource{Effort: agent.Reasoning.Effort, Summary: agent.Reasoning.Summary}, Text: agent.Text, ServiceTier: agent.ServiceTier, Instructions: agent.Instructions, Tools: tools, MultiAgent: agent.MultiAgent, Compaction: agent.Compaction, Experimental: agent.Experimental}
 	}
 	projection, err := json.Marshal(target)
 	return automationTarget{kind: "new_session", projection: projection, contents: contents}, err
 }
 
 // automationEnvironment projects the environment the request supplied. A member
-// the request left out stays nil, which the resource shows as null: inherit.
+// the request left out stays nil, which the resource shows as null: inherit. A
+// self_hosted environment always lists its capability directories.
 func automationEnvironment(input sessionRequest) *v1.AutomationEnvironment {
 	env := input.Environment
 	result := &v1.AutomationEnvironment{Type: env.Type}
@@ -410,16 +402,19 @@ func automationEnvironment(input sessionRequest) *v1.AutomationEnvironment {
 		result.Desktop = json.RawMessage(`{"enabled":false}`)
 	}
 	if has("capability_directories") {
-		result.CapabilityDirectories = append([]string{}, env.CapabilityDirectories...)
+		result.CapabilityDirectories = env.CapabilityDirectories
+	}
+	if result.CapabilityDirectories == nil && env.Type == "self_hosted" {
+		result.CapabilityDirectories = []string{}
 	}
 	if has("skills") {
-		result.Skills = append([]json.RawMessage{}, env.Skills...)
+		result.Skills = env.Skills
 	}
 	if has("plugins") {
-		result.Plugins = append([]json.RawMessage{}, env.Plugins...)
+		result.Plugins = env.Plugins
 	}
 	if has("files") {
-		result.Files = append([]json.RawMessage{}, env.Files...)
+		result.Files = env.Files
 	}
 	if env.WorkspaceDirectory != "" {
 		result.WorkspaceDirectory = &env.WorkspaceDirectory

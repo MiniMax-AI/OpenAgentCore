@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"io"
 	"net"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"

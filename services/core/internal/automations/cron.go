@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Schedule is a parsed five-field crontab(5) expression in a time zone.
@@ -28,10 +29,10 @@ var (
 // next five years. timezone is an IANA name.
 func ParseSchedule(expression, timezone string) (*Schedule, error) {
 	fields := strings.Fields(expression)
-	if len(fields) != 5 {
-		return nil, &InvalidError{"expression", "expression must have five fields: minute, hour, day of month, month and day of week."}
+	if utf8.RuneCountInString(expression) > 256 || len(fields) != 5 {
+		return nil, &InvalidError{"expression", "expression must have five fields of at most 256 characters: minute, hour, day of month, month and day of week."}
 	}
-	if timezone == "" || timezone == "Local" {
+	if timezone == "" || timezone == "Local" || utf8.RuneCountInString(timezone) > 128 {
 		return nil, &InvalidError{"timezone", "timezone must be an IANA time zone name."}
 	}
 	location, err := time.LoadLocation(timezone)
@@ -127,13 +128,23 @@ func (s *Schedule) Next(after time.Time) (time.Time, bool) {
 			civil = civil.Add(time.Minute)
 		default:
 			t := time.Date(year, month, day, civil.Hour(), civil.Minute(), 0, 0, s.location)
-			if y, m, d := t.Date(); t.After(after) && y == year && m == month && d == day && t.Hour() == civil.Hour() && t.Minute() == civil.Minute() {
+			// Date may return either instant of a repeated minute; the earlier one is the occurrence.
+			_, before := t.Add(-24 * time.Hour).Zone()
+			if u := civil.Add(-time.Duration(before) * time.Second); u.Before(t) && s.atWall(u, civil) {
+				t = u
+			}
+			if s.atWall(t, civil) && t.After(after) {
 				return t, true
 			}
 			civil = civil.Add(time.Minute)
 		}
 	}
 	return time.Time{}, false
+}
+
+// atWall reports whether the instant shows the wall-clock minute of civil in the Schedule's zone.
+func (s *Schedule) atWall(t, civil time.Time) bool {
+	return t.In(s.location).Format("2006-01-02 15:04") == civil.Format("2006-01-02 15:04")
 }
 
 func (s *Schedule) dayMatches(civil time.Time) bool {

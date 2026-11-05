@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,15 +30,16 @@ const (
 // storage failures as failed; an invocation that failed for good is a settled
 // record, not a job failure.
 func (h *Handler) deliverAutomations(ctx context.Context) (*int64, int64, error) {
-	recorded, err := h.Automations.Record(ctx)
+	var settled, failed atomic.Int64
+	recorded, err := h.Automations.Record(ctx, time.Now())
 	if err != nil {
-		return nil, 1, err
+		log.Ctx(ctx).Error("Automation occurrences could not be recorded", "error", err)
+		failed.Add(1)
 	}
 	deliveries, err := h.Automations.Deliverable(ctx, automationBatch)
 	if err != nil {
-		return nil, 1, err
+		return nil, failed.Load() + 1, err
 	}
-	var settled, failed atomic.Int64
 	var wg sync.WaitGroup
 	for _, d := range deliveries {
 		wg.Add(1)
@@ -68,21 +70,18 @@ func (h *Handler) deliverAutomations(ctx context.Context) (*int64, int64, error)
 func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery) (automations.Outcome, bool) {
 	ctx, cancel := context.WithTimeout(context.WithValue(ctx, principalContextKey{}, d.Scope), automationDeliveryTimeout)
 	defer cancel()
-	response := &capturedResponse{header: http.Header{}}
+	response := httptest.NewRecorder()
 	outcome := automations.Outcome{InvocationID: d.InvocationID, Status: "completed"}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "/v1/agents/sessions", bytes.NewReader(d.Request))
-	if err != nil {
-		return outcome, false
-	}
+	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/v1/agents/sessions", bytes.NewReader(d.Request))
 	if d.TargetType == "new_session" {
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Idempotency-Key", d.InvocationID)
 		h.createSession(response, request)
-		if response.status == http.StatusCreated {
+		if response.Code == http.StatusCreated {
 			var session struct {
 				ID string `json:"id"`
 			}
-			if json.Unmarshal(response.body.Bytes(), &session) != nil || session.ID == "" {
+			if json.Unmarshal(response.Body.Bytes(), &session) != nil || session.ID == "" {
 				return outcome, false
 			}
 			outcome.SessionID = session.ID
@@ -102,7 +101,7 @@ func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery)
 			outcome.SessionID = target.SessionID
 			return outcome, true
 		}
-		if errors.Is(err, sessions.ErrInputPending) || errors.Is(err, sessions.ErrTurnConflict) || errors.Is(err, execution.ErrExecutionUnavailable) || ctx.Err() != nil {
+		if errors.Is(err, sessions.ErrTurnConflict) || errors.Is(err, execution.ErrExecutionUnavailable) || ctx.Err() != nil {
 			return outcome, false
 		}
 		writeInputError(response, request, err)
@@ -114,12 +113,12 @@ func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery)
 			Message string  `json:"message"`
 		} `json:"error"`
 	}
-	_ = json.Unmarshal(response.body.Bytes(), &envelope)
+	_ = json.Unmarshal(response.Body.Bytes(), &envelope)
 	code := envelope.Error.Type
 	if envelope.Error.Code != nil {
 		code = *envelope.Error.Code
 	}
-	if response.status == http.StatusServiceUnavailable && (code == "execution_unavailable" || code == "sandbox_reset_in_progress") || ctx.Err() != nil {
+	if response.Code == http.StatusServiceUnavailable && (code == "execution_unavailable" || code == "sandbox_reset_in_progress") || ctx.Err() != nil {
 		return outcome, false
 	}
 	outcome.Status, outcome.Code, outcome.Message = "failed", code, envelope.Error.Message
@@ -127,25 +126,4 @@ func (h *Handler) deliverAutomation(ctx context.Context, d automations.Delivery)
 		outcome.Code, outcome.Message = "internal_error", "The delivery could not be completed."
 	}
 	return outcome, true
-}
-
-// capturedResponse records a response written by a handler the delivery calls
-// in process.
-type capturedResponse struct {
-	header http.Header
-	status int
-	body   bytes.Buffer
-}
-
-func (c *capturedResponse) Header() http.Header { return c.header }
-
-func (c *capturedResponse) WriteHeader(status int) {
-	if c.status == 0 {
-		c.status = status
-	}
-}
-
-func (c *capturedResponse) Write(p []byte) (int, error) {
-	c.WriteHeader(http.StatusOK)
-	return c.body.Write(p)
 }

@@ -17,12 +17,14 @@ type Storage interface {
 	Delete(ctx context.Context, tenantID, id string) (string, error)
 	// Invoke queues a manual invocation of the Automation's current target.
 	Invoke(ctx context.Context, tenantID, id string) (Invocation, error)
-	// Record records the due occurrences of active Automations and returns how
-	// many it recorded.
+	// Record records the due occurrences of active Automations, each in its own
+	// transaction, and returns how many it recorded. A failing Automation does
+	// not stop the others; the error joins the failures.
 	Record(ctx context.Context, now time.Time) (int, error)
 	// Deliverable returns at most limit queued invocations to deliver: for each
 	// Automation, its oldest queued invocation that is manual or whose
-	// Automation is active.
+	// Automation is active, least recently attempted first. It marks them
+	// attempted. An invocation whose target cannot be opened is settled failed.
 	Deliverable(ctx context.Context, limit int) ([]Delivery, error)
 	// Settle settles a queued invocation and completes its one-time Automation
 	// when the invocation is scheduled. An invocation that is no longer queued
@@ -35,7 +37,7 @@ type ListQuery struct {
 	After     string
 	Limit     int
 	Ascending bool
-	SessionID string
+	SessionID *string
 }
 
 // Page is a page of Automations.
@@ -59,8 +61,8 @@ type Reader interface {
 	ListInvocations(ctx context.Context, tenantID, id string, query ListQuery) (InvocationPage, error)
 }
 
-// Service runs the Automation use cases.
-type Service struct{ storage Storage }
+// Service runs the Automation use cases; the storage runs the rest.
+type Service struct{ Storage }
 
 func NewService(storage Storage) (*Service, error) {
 	if storage == nil {
@@ -82,37 +84,17 @@ func (s *Service) Create(ctx context.Context, a Automation) (Automation, error) 
 	if err != nil {
 		return Automation{}, err
 	}
-	return s.storage.Create(ctx, a)
+	return s.Storage.Create(ctx, a)
 }
 
 func (s *Service) Update(ctx context.Context, tenantID, id string, p Patch) (Automation, error) {
-	return s.storage.Update(ctx, tenantID, id, func(a Automation) (Automation, error) { return a.Apply(p, time.Now()) })
+	return s.Storage.Update(ctx, tenantID, id, func(a Automation) (Automation, error) { return a.Apply(p, time.Now()) })
 }
 
 func (s *Service) Pause(ctx context.Context, tenantID, id string) (Automation, error) {
-	return s.storage.Update(ctx, tenantID, id, Automation.Pause)
+	return s.Storage.Update(ctx, tenantID, id, Automation.Pause)
 }
 
 func (s *Service) Resume(ctx context.Context, tenantID, id string) (Automation, error) {
-	return s.storage.Update(ctx, tenantID, id, func(a Automation) (Automation, error) { return a.Resume(time.Now()) })
-}
-
-func (s *Service) Delete(ctx context.Context, tenantID, id string) (string, error) {
-	return s.storage.Delete(ctx, tenantID, id)
-}
-
-func (s *Service) Invoke(ctx context.Context, tenantID, id string) (Invocation, error) {
-	return s.storage.Invoke(ctx, tenantID, id)
-}
-
-func (s *Service) Record(ctx context.Context) (int, error) {
-	return s.storage.Record(ctx, time.Now())
-}
-
-func (s *Service) Deliverable(ctx context.Context, limit int) ([]Delivery, error) {
-	return s.storage.Deliverable(ctx, limit)
-}
-
-func (s *Service) Settle(ctx context.Context, outcome Outcome) error {
-	return s.storage.Settle(ctx, outcome)
+	return s.Storage.Update(ctx, tenantID, id, func(a Automation) (Automation, error) { return a.Resume(time.Now()) })
 }

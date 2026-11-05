@@ -10,6 +10,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -152,47 +153,70 @@ func (s *Store) Invoke(ctx context.Context, tenantID, id string) (automations.In
 }
 
 // Record records the occurrence of each due active Automation of a live
-// Project and advances it, in one transaction. A concurrent pass skips rows
-// another holds, and the unique scheduled time keeps an occurrence single.
+// Project and advances it, each in its own transaction so that one failing
+// Automation stops no other. The unique scheduled time keeps an occurrence
+// single across concurrent passes.
 func (s *Store) Record(ctx context.Context, now time.Time) (int, error) {
+	due, err := s.pool.Queries().DueAutomationIDs(ctx, sqlc.DueAutomationIDsParams{Now: timestamp(&now), PageLimit: maxDue})
+	if err != nil {
+		return 0, err
+	}
 	recorded := 0
-	err := s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+	var failures []error
+	for _, d := range due {
+		switch ok, err := s.record(ctx, d.TenantID, d.ID, now); {
+		case err != nil:
+			failures = append(failures, err)
+		case ok:
+			recorded++
+		}
+	}
+	return recorded, errors.Join(failures...)
+}
+
+// record locks one Automation, rechecks that it is still due and records it.
+func (s *Store) record(ctx context.Context, tenant, id pgtype.UUID, now time.Time) (recorded bool, err error) {
+	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		due, err := q.DueAutomationIDs(ctx, sqlc.DueAutomationIDsParams{Now: timestamp(&now), PageLimit: maxDue})
+		row, err := q.LockAutomation(ctx, sqlc.LockAutomationParams{TenantID: tenant, ID: id})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // deleted since the pass listed it
+		}
 		if err != nil {
 			return err
 		}
-		for _, d := range due {
-			row, err := q.GetAutomation(ctx, sqlc.GetAutomationParams{TenantID: d.TenantID, ID: d.ID})
-			if err != nil {
-				return err
-			}
-			a, err := automation(row)
-			if err != nil {
-				return err
-			}
-			flags, err := q.AutomationFlags(ctx, d.ID)
-			if err != nil {
-				return err
-			}
-			a.Queued = flags.Queued
-			snapshot, err := json.Marshal(a.Resource())
-			if err != nil {
-				return err
-			}
-			occurrence, status, reason := a.Occurrence(now), "queued", pgtype.Text{}
-			if occurrence.Skipped {
-				status, reason = "skipped", text("pending_delivery")
-			}
-			if err := q.InsertScheduledInvocation(ctx, sqlc.InsertScheduledInvocationParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, AutomationID: d.ID, ScheduledAt: timestamp(&occurrence.ScheduledAt), AutomationSnapshot: snapshot, Status: status, SkipReason: reason}); err != nil {
-				return err
-			}
-			if err := q.AdvanceAutomation(ctx, sqlc.AdvanceAutomationParams{ID: d.ID, NextRunAt: timestamp(occurrence.Next), Completed: occurrence.Completed}); err != nil {
-				return err
-			}
-			recorded++
+		a, err := automation(sqlc.GetAutomationRow(row))
+		if err != nil {
+			return err
 		}
-		return nil
+		if a.Status != automations.Active || a.NextRunAt == nil || a.NextRunAt.After(now) {
+			return nil
+		}
+		flags, err := q.AutomationFlags(ctx, id)
+		if err != nil {
+			return err
+		}
+		a.Queued = flags.Queued
+		snapshot, err := json.Marshal(a.Resource())
+		if err != nil {
+			return err
+		}
+		occurrence := a.Occurrence(now)
+		invocation := sqlc.InsertScheduledInvocationParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, AutomationID: id, ScheduledAt: timestamp(&occurrence.ScheduledAt), AutomationSnapshot: snapshot, Status: "queued"}
+		if occurrence.Skipped {
+			invocation.Status, invocation.SkipReason = "skipped", text("pending_delivery")
+			var target struct {
+				SessionID string `json:"session_id"`
+			}
+			if json.Unmarshal(a.Target, &target) == nil {
+				invocation.SessionID, _ = pgunit.ParseID(target.SessionID)
+			}
+		}
+		if err := q.InsertScheduledInvocation(ctx, invocation); err != nil {
+			return err
+		}
+		recorded = true
+		return q.AdvanceAutomation(ctx, sqlc.AdvanceAutomationParams{ID: id, NextRunAt: timestamp(occurrence.Next), Completed: occurrence.Completed})
 	})
 	return recorded, err
 }
@@ -207,19 +231,20 @@ func (s *Store) Deliverable(ctx context.Context, limit int) ([]automations.Deliv
 		tenant, id := uuidString(row.TenantID), uuidString(row.AutomationID)
 		request, err := s.cipher.OpenAutomationTarget(row.Delivery, tenant, id)
 		if err != nil {
-			return nil, err
+			log.Ctx(ctx).Error("Automation target could not be opened", "automation_id", id, "error", err)
+			if err := s.Settle(ctx, automations.Outcome{InvocationID: uuidString(row.ID), Status: "failed", Code: "internal_error", Message: "The saved target could not be opened."}); err != nil {
+				return nil, err
+			}
+			continue
 		}
-		deliveries = append(deliveries, automations.Delivery{InvocationID: uuidString(row.ID), AutomationID: id, TargetType: row.TargetType, Request: request,
+		deliveries = append(deliveries, automations.Delivery{InvocationID: uuidString(row.ID), TargetType: row.TargetType, Request: request,
 			Scope: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: tenant, OrganizationID: row.OrganizationID, ProjectID: row.ProjectID}, SubjectKind: row.SubjectKind, SubjectID: row.SubjectID}})
 	}
 	return deliveries, nil
 }
 
 func (s *Store) Settle(ctx context.Context, outcome automations.Outcome) error {
-	id, err := pgunit.ParseID(outcome.InvocationID)
-	if err != nil {
-		return nil
-	}
+	id, _ := pgunit.ParseID(outcome.InvocationID)
 	params := sqlc.SettleInvocationParams{ID: id, Status: outcome.Status, ErrorCode: text(outcome.Code), ErrorMessage: text(outcome.Message)}
 	if session, err := pgunit.ParseID(outcome.SessionID); err == nil {
 		params.SessionID = session
@@ -255,7 +280,10 @@ func (s *Store) List(ctx context.Context, tenantID string, query automations.Lis
 	if err != nil {
 		return automations.Page{}, automations.ErrNotFound
 	}
-	params := sqlc.ListAutomationsParams{TenantID: tenant, SessionID: pgtype.Text{String: query.SessionID, Valid: query.SessionID != ""}, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending}
+	params := sqlc.ListAutomationsParams{TenantID: tenant, PageLimit: int32(query.Limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: query.Ascending}
+	if query.SessionID != nil {
+		params.SessionID = pgtype.Text{String: *query.SessionID, Valid: true}
+	}
 	var rows []sqlc.ListAutomationsRow
 	err = s.pool.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)

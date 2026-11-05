@@ -59,9 +59,9 @@ type Invocation struct {
 // Delivery is a queued invocation ready to deliver, with the Project that owns
 // the Automation and the opened target request.
 type Delivery struct {
-	InvocationID, AutomationID, TargetType string
-	Scope                                  identity.Principal
-	Request                                json.RawMessage
+	InvocationID, TargetType string
+	Scope                    identity.Principal
+	Request                  json.RawMessage
 }
 
 // Outcome settles a queued invocation. Status is completed or failed.

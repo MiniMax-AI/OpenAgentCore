@@ -33,6 +33,7 @@ CREATE TABLE automation_invocations (
     error_code text,
     error_message text,
     delivery bytea,
+    attempted_at timestamptz,
     UNIQUE (automation_id, scheduled_at),
     CHECK ((scheduled_at IS NULL) = (automation_snapshot IS NULL)),
     CHECK ((status = 'skipped') = (skip_reason IS NOT NULL)),

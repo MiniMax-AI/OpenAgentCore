@@ -2,11 +2,11 @@ package api
 
 import (
 	"context"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/automations"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )

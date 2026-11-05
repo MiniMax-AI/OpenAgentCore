@@ -36,7 +36,7 @@ func TestAutomationsOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deliver, err := api.NewAutomationDelivery(deps)
+	_, deliver, err := api.NewHandlerWithDelivery(deps)
 	if err != nil {
 		t.Fatal(err)
 	}

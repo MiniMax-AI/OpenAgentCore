@@ -233,7 +233,7 @@ def go_shape(document, schema, required=False):
     elif kind == 'array':
         fields = ['kind: arrayValue', 'items: &' + go_shape(document, value['items'])]
     elif kind == 'integer':
-        fields = ['kind: integerValue', f'minimum: {value.get("minimum", 0)}']
+        fields = ['kind: integerValue'] + ([f'minimum: {value["minimum"]}'] if 'minimum' in value else [])
     else:
         fields = [{'string': 'kind: stringValue', 'boolean': 'kind: booleanValue'}[kind]]
     if required:

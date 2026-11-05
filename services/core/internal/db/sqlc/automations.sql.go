@@ -69,31 +69,35 @@ func (q *Queries) DeleteAutomation(ctx context.Context, arg DeleteAutomationPara
 }
 
 const deliverableInvocations = `-- name: DeliverableInvocations :many
-SELECT id, automation_id, tenant_id, target_type, delivery, created_at, subject_kind, subject_id, organization_id, project_id FROM (
-    SELECT DISTINCT ON (i.automation_id) i.id, i.automation_id, a.tenant_id, (a.target->>'type')::text AS target_type, i.delivery, i.created_at,
-        p.subject_kind, p.subject_id, s.organization_id, s.project_id
-    FROM automation_invocations i
-    JOIN automations a ON a.id = i.automation_id
-    JOIN projects p ON p.tenant_id = a.tenant_id AND p.archived_at IS NULL
-    JOIN execution_project_scopes s ON s.tenant_id = a.tenant_id
-    WHERE i.status = 'queued' AND (i.scheduled_at IS NULL OR a.status = 'active')
-    ORDER BY i.automation_id, i.created_at, i.id
-) oldest
-ORDER BY created_at, id
-LIMIT $1
+WITH picked AS (
+    SELECT id, automation_id, tenant_id, target_type, delivery, created_at, attempted_at, subject_kind, subject_id, organization_id, project_id FROM (
+        SELECT DISTINCT ON (i.automation_id) i.id, i.automation_id, a.tenant_id, (a.target->>'type')::text AS target_type, i.delivery, i.created_at, i.attempted_at,
+            p.subject_kind, p.subject_id, s.organization_id, s.project_id
+        FROM automation_invocations i
+        JOIN automations a ON a.id = i.automation_id
+        JOIN projects p ON p.tenant_id = a.tenant_id AND p.archived_at IS NULL
+        JOIN execution_project_scopes s ON s.tenant_id = a.tenant_id
+        WHERE i.status = 'queued' AND (i.scheduled_at IS NULL OR a.status = 'active')
+        ORDER BY i.automation_id, i.created_at, i.id
+    ) oldest
+    ORDER BY attempted_at NULLS FIRST, created_at, id
+    LIMIT $1
+), marked AS (
+    UPDATE automation_invocations u SET attempted_at = statement_timestamp() FROM picked WHERE u.id = picked.id
+)
+SELECT id, automation_id, tenant_id, target_type, delivery, subject_kind, subject_id, organization_id, project_id FROM picked
 `
 
 type DeliverableInvocationsRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	AutomationID   pgtype.UUID        `json:"automation_id"`
-	TenantID       pgtype.UUID        `json:"tenant_id"`
-	TargetType     string             `json:"target_type"`
-	Delivery       []byte             `json:"delivery"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	SubjectKind    string             `json:"subject_kind"`
-	SubjectID      string             `json:"subject_id"`
-	OrganizationID string             `json:"organization_id"`
-	ProjectID      string             `json:"project_id"`
+	ID             pgtype.UUID `json:"id"`
+	AutomationID   pgtype.UUID `json:"automation_id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	TargetType     string      `json:"target_type"`
+	Delivery       []byte      `json:"delivery"`
+	SubjectKind    string      `json:"subject_kind"`
+	SubjectID      string      `json:"subject_id"`
+	OrganizationID string      `json:"organization_id"`
+	ProjectID      string      `json:"project_id"`
 }
 
 func (q *Queries) DeliverableInvocations(ctx context.Context, pageLimit int32) ([]DeliverableInvocationsRow, error) {
@@ -111,7 +115,6 @@ func (q *Queries) DeliverableInvocations(ctx context.Context, pageLimit int32) (
 			&i.TenantID,
 			&i.TargetType,
 			&i.Delivery,
-			&i.CreatedAt,
 			&i.SubjectKind,
 			&i.SubjectID,
 			&i.OrganizationID,
@@ -132,7 +135,6 @@ SELECT a.tenant_id, a.id FROM automations a
 WHERE a.status = 'active' AND a.next_run_at <= $1::timestamptz
   AND EXISTS (SELECT 1 FROM projects p WHERE p.tenant_id = a.tenant_id AND p.archived_at IS NULL)
 ORDER BY a.next_run_at LIMIT $2
-FOR UPDATE OF a SKIP LOCKED
 `
 
 type DueAutomationIDsParams struct {
@@ -314,10 +316,9 @@ func (q *Queries) InsertManualInvocation(ctx context.Context, arg InsertManualIn
 
 const insertScheduledInvocation = `-- name: InsertScheduledInvocation :exec
 INSERT INTO automation_invocations (id, automation_id, scheduled_at, automation_snapshot, status, skip_reason, session_id, delivery)
-SELECT $1, a.id, $2, $3, $4::text, $5::text,
-    CASE WHEN $4::text = 'skipped' AND a.target->>'type' = 'existing_session' THEN (a.target->>'session_id')::uuid END,
+SELECT $1, a.id, $2, $3, $4::text, $5::text, $6,
     CASE WHEN $4::text = 'queued' THEN a.target_contents END
-FROM automations a WHERE a.id = $6
+FROM automations a WHERE a.id = $7
 ON CONFLICT (automation_id, scheduled_at) DO NOTHING
 `
 
@@ -327,6 +328,7 @@ type InsertScheduledInvocationParams struct {
 	AutomationSnapshot []byte             `json:"automation_snapshot"`
 	Status             string             `json:"status"`
 	SkipReason         pgtype.Text        `json:"skip_reason"`
+	SessionID          pgtype.UUID        `json:"session_id"`
 	AutomationID       pgtype.UUID        `json:"automation_id"`
 }
 
@@ -337,6 +339,7 @@ func (q *Queries) InsertScheduledInvocation(ctx context.Context, arg InsertSched
 		arg.AutomationSnapshot,
 		arg.Status,
 		arg.SkipReason,
+		arg.SessionID,
 		arg.AutomationID,
 	)
 	return err

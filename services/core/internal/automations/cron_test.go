@@ -30,6 +30,7 @@ func TestScheduleNext(t *testing.T) {
 		{"zone offset", "0 9 * * *", "Asia/Shanghai", "2026-03-01T00:00:00Z", "2026-03-01T01:00:00Z"},
 		{"nonexistent minute is skipped", "30 2 * * *", "America/New_York", "2026-03-07T12:00:00Z", "2026-03-09T06:30:00Z"},
 		{"repeated hour fires once", "30 1 * * *", "America/New_York", "2026-10-31T12:00:00Z", "2026-11-01T05:30:00Z"},
+		{"repeated hour east of UTC fires at its first instant", "30 2 * * *", "Europe/Berlin", "2026-10-24T12:00:00Z", "2026-10-25T00:30:00Z"},
 		{"after the repeated hour", "30 1 * * *", "America/New_York", "2026-11-01T05:30:00Z", "2026-11-02T06:30:00Z"},
 	} {
 		schedule, err := ParseSchedule(test.expression, test.timezone)

@@ -130,7 +130,7 @@ func (value Automation) MarshalJSON() ([]byte, error) {
 // AutomationAgentConfig projects AutomationAgentConfigResource.
 type AutomationAgentConfig struct {
 	Model        string            `json:"model" binding:"required"`
-	Reasoning    Reasoning         `json:"reasoning" binding:"required"`
+	Reasoning    ReasoningResource `json:"reasoning" binding:"required"`
 	Text         TextConfig        `json:"text" binding:"required"`
 	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast,ultrafast"`
 	Instructions *string           `json:"instructions" binding:"required" extensions:"x-nullable"`
@@ -815,6 +815,12 @@ type ReasoningItem struct {
 	Type    string        `json:"type" binding:"required" enums:"reasoning"`
 	Status  *string       `json:"status" binding:"required" extensions:"x-nullable" enums:"in_progress,completed,incomplete"`
 	Summary []SummaryText `json:"summary" binding:"required"`
+}
+
+// ReasoningResource projects ReasoningResource.
+type ReasoningResource struct {
+	Effort  *string `json:"effort" binding:"required" extensions:"x-nullable" enums:"none,minimal,low,medium,high,xhigh,max"`
+	Summary *string `json:"summary" binding:"required" extensions:"x-nullable" enums:"concise,detailed,auto"`
 }
 
 // RequiredAction projects SessionRequiredActionResource.

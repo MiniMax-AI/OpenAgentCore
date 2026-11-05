@@ -32,7 +32,7 @@
   "AutomationAgentConfig": {
     "sources": ["#/components/schemas/AutomationAgentConfigResource"],
     "fields": {
-      "reasoning": {"type": "Reasoning"}
+      "reasoning": {"type": "ReasoningResource"}
     },
     "order": ["model", "reasoning", "text", "service_tier", "instructions", "tools", "multi_agent", "compaction", "experimental"]
   },
@@ -348,6 +348,9 @@
   },
   "Reasoning": {
     "sources": ["#/components/schemas/ReasoningParam"]
+  },
+  "ReasoningResource": {
+    "sources": ["#/components/schemas/ReasoningResource"]
   },
   "ReasoningItem": {
     "sources": ["#/components/schemas/ReasoningItemResource"],

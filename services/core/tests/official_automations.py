@@ -48,6 +48,17 @@ def main():
         inline = automations.create(type="periodic", name="inline", expression="*/5 * * * *", timezone="Asia/Shanghai",
                                     target={"type": "new_session", "agent": {"model": "saved-model", "instructions": "Inline."}, "environment": {"type": "none"}, "input": MESSAGE})
         assert inline.target.agent.model == "saved-model" and inline.target.agent_id is None
+        assert inline.target.agent.reasoning.effort is None and inline.target.agent.reasoning.summary is None
+        # Reasoning keeps both members and a self-hosted environment lists its directories.
+        rich = automations.create(type="periodic", name="rich", expression="0 0 1 1 *", timezone="UTC",
+                                  target={"type": "new_session", "agent": {"model": "saved-model", "reasoning": {"effort": "low"}}, "environment": {"type": "none"}, "input": MESSAGE})
+        assert rich.target.agent.reasoning.effort == "low" and rich.target.agent.reasoning.summary is None
+        provider = {"x_agents_core": {"model_provider": {"protocol": "responses", "base_url": "https://model.fixture.example/v1", "api_key": "fixture-model-key"}}}
+        hosted = agents.create(model="saved-model", extra_body=provider)
+        own = automations.create(type="periodic", name="own", expression="0 0 1 1 *", timezone="UTC", target={"type": "new_session", "agent_id": hosted.id, "environment": {"type": "self_hosted", "workspace_directory": "/workspace"}, "input": MESSAGE})
+        assert own.target.environment.type == "self_hosted" and own.target.environment.capability_directories == []
+        for extra in (rich, own):
+            automations.delete(extra.id)
         once = automations.create(type="once", name="later", run_at=int(time.time()) + 3600, target=existing)
         assert once.target.session_id == session.id and once.target.instructions == "wake up" and once.status == "active"
         for created in (periodic, inline, once):
@@ -56,6 +67,7 @@ def main():
         assert [a.id for a in automations.list(order="asc", limit=2).data] == [periodic.id, inline.id]
         assert [a.id for a in automations.list(after=inline.id).data] == [periodic.id]
         assert [a.id for a in automations.list(session_id=session.id).data] == [once.id]
+        assert automations.list(session_id="").data == []
         fails(NotFoundError, lambda: automations.list(after="missing"))
         fails(NotFoundError, lambda: other.beta.agents.automations.retrieve(periodic.id))
 
@@ -104,10 +116,16 @@ def main():
         fails(BadRequestError, lambda: automations.create(type="once", name="bad", run_at=int(time.time()) - 5, target=existing), "run_at")
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {**new_session, "environment": {"type": "openai_hosted", "environment_id": "env"}}}))
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {**new_session, "agent": {"model": "m"}}}), "target")
-        fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {k: v for k, v in new_session.items() if k != "agent_id"} | {"agent": {"instructions": "no model"}}}), "target.agent.model")
+        inline_target = {k: v for k, v in new_session.items() if k != "agent_id"}
+        fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": inline_target | {"agent": {"instructions": "no model"}}}))
+        fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": inline_target | {"agent": {"model": "m", "tools": [{"type": "automations"}]}}}))
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {k: v for k, v in new_session.items() if k != "agent_id"} | {"agent": {"model": "m", "x_agents_core": {"harness": "codex"}}}}), "target.agent.x_agents_core")
         fails(BadRequestError, lambda: automations.create(**periodic_args | {"target": {**existing, "instructions": ""}}), "target.instructions")
         fails(NotFoundError, lambda: automations.create(**periodic_args | {"target": {**existing, "session_id": "missing"}}))
+        # A Session named in another uuid form is saved under its canonical id.
+        urn = automations.create(**periodic_args | {"name": "urn", "target": {**existing, "session_id": "urn:uuid:" + session.id}})
+        assert urn.target.session_id == session.id and urn.id in [a.id for a in automations.list(session_id=session.id).data]
+        automations.delete(urn.id)
         assert len(automations.list(limit=100).data) == count
 
         # Delete removes the Automation and its records, not the Session.

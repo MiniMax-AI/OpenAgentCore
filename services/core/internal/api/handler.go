@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 
@@ -197,82 +196,21 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
 		return
 	}
-	if input.templateID != "" {
-		template, err := h.EnvironmentTemplatesReader.Resolve(r.Context(), tenantID(r), input.templateID)
-		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeEnvironmentTemplatesError(w, r, err)
-			}
-			return
-		}
-		if err := applyTemplateEnvironment(&input, template); err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) && !writeFieldError(w, err) {
-				writeSessionsError(w, r, err)
-			}
-			return
-		}
-	}
-	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
+	plan, report, err := h.planSession(r.Context(), tenantID(r), key, &input)
 	if err != nil {
 		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeAgentsError(w, r, err)
+			report(w, r, err)
 		}
 		return
 	}
-	err = h.prepareSessionModelConfiguration(r.Context(), &input, saved, inheritedProvider)
-	var configuration json.RawMessage
-	if err == nil {
-		configuration, err = resolve(input, tenantID(r), key, saved)
-	}
-	if err == nil {
-		configuration, err = freezeSessionHarnessConfig(configuration, input.resolvedHarnessConfig)
-	}
-	if err == nil {
-		configuration, err = h.bindSessionCredentials(r.Context(), tenantID(r), configuration)
-		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeVaultsError(w, r, err)
-			}
-			return
-		}
-	}
-	selectedEngine := h.Engine
-	var provider *v1.ModelProviderInput
-	var providerSource v1.ExecutionSource
-	var deploymentRevision uuid.UUID
-	if err == nil {
-		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)
-	}
-	if err == nil {
-		if invalid := h.Policy.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
-			err = fmt.Errorf("Harness %s does not support the requested Agent/environment configuration: %w", selectedEngine, invalid)
-		}
-	}
-	if err == nil {
-		err = validateSessionModelConfiguration(selectedEngine, provider, configuration)
-	}
-	if err != nil {
-		if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			return
-		}
-		var required *modelProviderRequiredError
-		switch {
-		case errors.As(err, &required):
-			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
-		case writeStoredDataError(w, r, err):
-		case !writeFieldError(w, err):
-			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
-		}
-		return
-	}
-	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
+	executionConfiguration := sessionExecutionProjection(input, plan.saved, plan.inheritedProvider, plan.provider, plan.engine, plan.configuration)
 	createInput := sessions.CreateSession{
 		ExecutionConfiguration:     &executionConfiguration,
-		ModelProvider:              provider,
-		ModelProviderSource:        providerSource,
-		DeploymentProviderRevision: deploymentRevision,
+		ModelProvider:              plan.provider,
+		ModelProviderSource:        plan.source,
+		DeploymentProviderRevision: plan.revision,
 		Creator:                    sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
-		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
+		Engine: plan.engine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: plan.configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
 	}
 	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {

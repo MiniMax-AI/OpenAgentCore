@@ -64,6 +64,7 @@ type AutomationInvocation struct {
 	ErrorCode          pgtype.Text        `json:"error_code"`
 	ErrorMessage       pgtype.Text        `json:"error_message"`
 	Delivery           []byte             `json:"delivery"`
+	AttemptedAt        pgtype.Timestamptz `json:"attempted_at"`
 }
 
 type DeploymentModelProvider struct {

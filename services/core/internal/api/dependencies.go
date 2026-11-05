@@ -106,34 +106,23 @@ type Handler struct {
 
 // NewHandler builds the HTTP handler from complete dependencies.
 func NewHandler(deps Dependencies) (http.Handler, error) {
-	h, err := newHandler(deps)
-	if err != nil {
-		return nil, err
-	}
-	return CanonicalPaths(h.routes()), nil
+	handler, _, err := NewHandlerWithDelivery(deps)
+	return handler, err
 }
 
-// NewAutomationDelivery returns the pass that records due Automation
-// occurrences and delivers queued invocations through the handler's Session
-// create and input paths.
-func NewAutomationDelivery(deps Dependencies) (func(context.Context) (*int64, int64, error), error) {
-	h, err := newHandler(deps)
-	if err != nil {
-		return nil, err
-	}
-	return h.deliverAutomations, nil
-}
-
-func newHandler(deps Dependencies) (*Handler, error) {
+// NewHandlerWithDelivery builds the HTTP handler and the pass that records due
+// Automation occurrences and delivers queued invocations through the handler's
+// Session create and input paths.
+func NewHandlerWithDelivery(deps Dependencies) (http.Handler, func(context.Context) (*int64, int64, error), error) {
 	if err := deps.validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	deps.Installation.Object = "core.installation"
 	h := &Handler{Dependencies: deps, harnesses: make(map[string]bool, len(deps.Harnesses))}
 	for _, kind := range deps.Harnesses {
 		h.harnesses[kind] = true
 	}
-	return h, nil
+	return CanonicalPaths(h.routes()), h.deliverAutomations, nil
 }
 
 func (d Dependencies) validate() error {
