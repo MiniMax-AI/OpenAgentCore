@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: d2353e23d1424b76a2e8f9d171bcb06e5c5c70a7d56d49ff95b2b7a71cdc080b
+source_hash: 9001c5e3f7f6ebe759a40f035aa55d422a420fda60474dcdc2cc3f1edf28a086
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -98,7 +98,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 | Session Executor | Runtime | 空闲过期、关闭或确认失效时执行 `Executor.Close` |
 | Turn | 由 Runtime 跟踪的适配器 `Turn` | `AwaitSettlement` 确认结算完成 |
 
-Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 依据输入和该 Turn 的 `proto.TurnSettings`（与准备时的取值相同）创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
+Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 依据输入和该 Turn 的 `proto.TurnSettings`创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
 
 Executor 按下列状态转移。每个 Turn 在 `StartTurn` 与 `AwaitSettlement` 之间运行。
 
@@ -114,7 +114,7 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
+**绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。唯一例外是声明标为可变的 `turn` 设置（`SessionUpdates.Model`、`ReasoningEffort`、`ReasoningEffortReset`、`ServiceTier`，以及 `Execution.Reviews` 非空时的 `review`）：已保留的 Executor 接受 `turn` 在这些设置上不同的 prepare，`StartTurn` 会收到它。适配器要么在 Turn 输入之前以原生方式应用不同的 `turn`，要么不声明该变更。Core 不为 `review` 增加检查：声明了某个值的 Harness 对每个根 Turn 应用它，任何未声明的值都会使更新被拒绝。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
 
 **每 Turn 状态。** 每个 Turn 都会获得全新的包装器、输出通道和回执状态。引导和函数接口均属于该 Turn。原生回调必须在异步工作开始前捕获来源 Turn，因此迟到事件绝不会被归到当前活动的 Turn 上。原生进程、query 或传输连接、固定能力配置和原生 session 身份均属于 Executor。不要重置已完成的 `sync.Once` 值，也不要复用旧 Turn 对象。
 

@@ -439,7 +439,7 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 	return nil
 }
 
-// ValidateTurnSettings rejects an effort or tier the Harness does not
+// ValidateTurnSettings rejects an effort, tier or review the Harness does not
 // declare. Core admission and the Runtime call it with the same settings.
 func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	o := d.Execution
@@ -451,7 +451,7 @@ func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
 		}
 	}
-	return nil
+	return d.ValidateReview(turn.Review)
 }
 
 // ValidateReview rejects a review value the Harness does not declare. None is
@@ -463,8 +463,8 @@ func (d Declaration) ValidateReview(review string) error {
 	return nil
 }
 
-// ValidateSessionUpdate rejects a change of model, effort or tier that the
-// Harness does not declare it applies natively between root Turns. Unchanged
+// ValidateSessionUpdate rejects a change of model, effort, tier or review that
+// the Harness does not declare it applies natively between root Turns. Unchanged
 // settings pass.
 func (d Declaration) ValidateSessionUpdate(before, after proto.TurnSettings) error {
 	u := d.SessionUpdates
@@ -476,7 +476,7 @@ func (d Declaration) ValidateSessionUpdate(before, after proto.TurnSettings) err
 		field   string
 		changed bool
 		support proto.CapabilitySupport
-	}{{"agent.model", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", before.ServiceTier != after.ServiceTier, u.ServiceTier}} {
+	}{{"agent.model", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", before.ServiceTier != after.ServiceTier, u.ServiceTier}, {"review", before.Review != after.Review, proto.CapabilityFromBool(len(d.Execution.Reviews) > 0)}} {
 		if check.changed && !check.support.IsSupported() {
 			return fmt.Errorf("%s cannot be changed on this Harness.", check.field)
 		}

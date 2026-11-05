@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 1154cf99b5c9d5f2d3d1079b074df946946f2b490a617eac0074cb666ff0385b
+source_hash: 0e75ba6190e98e793e0ade3aa07c20e3eadc2e08db6d8dc3f94a2bd1e7e6ae2d
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -93,7 +93,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | --- | --- |
 | Device ID 和连接 | 经认证的 Runtime 路由与连接所有权 |
 | Session ID / Environment ID | Core 拥有的配置与工作区绑定；payload validator 要求时使用规范 UUID |
-| Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留 |
+| Executor ID | Runtime 拥有的原生资源，可在配置相同的已结算 Turn 之间保留，其 Harness 声明可变的 `turn` 设置除外 |
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
 | Run ID | 一次执行尝试；输出、取消、活动输入和 function 的 `Envelope.id` |
@@ -222,7 +222,7 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 
 | 字段 | Core 设置方式 |
 | --- | --- |
-| `turn` | 始终设置：根 Turn 的 `model`，以及 Agent 设置时的 `reasoning_effort` 和非 `auto` 的 `service_tier`。只读工作区 preparation 发送空的 `turn` |
+| `turn` | 始终设置：根 Turn 的 `model`，以及 Agent 设置时的 `reasoning_effort` 和非 `auto` 的 `service_tier`，`review` 为 `auto_review` 时还有 `review`。已保留的 Executor 只接受其 Harness 声明可变的 `turn` 设置发生变化；其他差异一律为 `configuration_conflict`。只读工作区 preparation 发送空的 `turn` |
 | `agent_options` | 始终设置 Agent 的 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning summary，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验这些值和 `turn` 设置；原生选项名称属于适配器 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |

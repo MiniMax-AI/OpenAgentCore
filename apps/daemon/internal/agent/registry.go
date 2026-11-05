@@ -12,17 +12,17 @@ import (
 // Registry keeps the daemon-advertised capability descriptor and execution
 // factories for each agent_kind. Safe for concurrent use.
 type Registry struct {
-	mu             sync.RWMutex
-	executors      map[string]ExecutorFactory
-	kinds          map[string]proto.SupportedAgentKind
-	configurations map[string]harnessconfig.Configuration
+	mu           sync.RWMutex
+	executors    map[string]ExecutorFactory
+	kinds        map[string]proto.SupportedAgentKind
+	declarations map[string]harnessconfig.Declaration
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		executors:      make(map[string]ExecutorFactory),
-		kinds:          make(map[string]proto.SupportedAgentKind),
-		configurations: make(map[string]harnessconfig.Configuration),
+		executors:    make(map[string]ExecutorFactory),
+		kinds:        make(map[string]proto.SupportedAgentKind),
+		declarations: make(map[string]harnessconfig.Declaration),
 	}
 }
 
@@ -55,4 +55,11 @@ func (r *Registry) ResolveExecutor(kind string) (ExecutorFactory, error) {
 		return nil, fmt.Errorf("agent: executor unavailable for %q", kind)
 	}
 	return factory, nil
+}
+
+// Declaration returns the declaration a kind was registered with.
+func (r *Registry) Declaration(kind string) harnessconfig.Declaration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.declarations[kind]
 }

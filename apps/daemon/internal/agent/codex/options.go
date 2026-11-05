@@ -97,10 +97,6 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, turn
 		return plan, err
 	}
 
-	if err := harnessconfiguration.Declaration.ValidateTurnSettings(turn); err != nil {
-		return plan, err
-	}
-
 	plan.Model = turn.Model
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
