@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 27ab04dbb3aaf2792d54710372b370588d35db931af8f2e6b88a34d78030b7f9
+source_hash: 623be858995bb486e05f51505fbb1d9bd87a0c5bcbef0a9ad54b90bf109216c9
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -161,7 +161,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<package>/declaration.go` 导出一个 `agent.Declaration`，然后运行 `make generate-harness-catalog`，它会把该声明列入生成的 `harnessDeclarations`。绑定由共享的 `harnessconfig.Declaration` 加上 `Discover` 函数组成。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。发现过程只用 `agent.Narrow` 收窄声明的能力，绝不扩大；不可用的描述符来自 `agent.Unavailable`。将版本门控和工厂选择条件保留在适配器内部。
 
-Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
+Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。一个 Runtime 依次服务多个 Session，因此每个 Session 的原生状态目录（原生历史或配置目录、启动主目录和临时数据）都位于 `agent.StateDir(StateRoot, kind, key)` 或 `agent.StateDir(RuntimeRoot, kind, key)` 之下，其中 `key` 为请求的 `AgentStateKey`；任何 Session 私有状态都不放在别处。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序注册该 Runtime：
 
