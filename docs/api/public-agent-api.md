@@ -44,7 +44,7 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 | Resource | Path | What it is |
 | --- | --- | --- |
 | [Agents](#agents) | `/agents` | Reusable configuration: model, instructions, tools, Harness |
-| [Sessions](#sessions) | `/agents/sessions` | One agent conversation with its own Environment |
+| [Sessions](#sessions) | `/agents/sessions` | One agent conversation with its Environment, its own or an attached [standalone Environment](../../contracts/agents-api/environments.md#standalone-environments) |
 | [Input events](#send-input) | `/agents/sessions/{id}/events` (POST) | Messages, cancellation and tool results |
 | [Event stream](#stream-events) | `/agents/sessions/{id}/events` (GET) | Live server-sent events |
 | [Turns and Items](#turns-and-items) | `/agents/sessions/{id}/turns`, `/items` | Durable history |
@@ -213,7 +213,7 @@ agents "/agents" -d '{
 
 ## Sessions
 
-A Session is one conversation with a fixed configuration and its own Environment.
+A Session is one conversation with a fixed configuration and an Environment, its own or an attached [standalone Environment](../../contracts/agents-api/environments.md#standalone-environments).
 
 ### Create a Session
 

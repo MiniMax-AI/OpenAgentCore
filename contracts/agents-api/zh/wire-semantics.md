@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 0451a59630b6a1b8d0d284dfb4beb965fc5e6be69ee2e8768ece8b71d3df59ec
+source_hash: 1a7981877fca9c2d546118389e8e0ff21c4530196c520700f871c9b62b13c22f
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -125,8 +125,8 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 默认值 | 接受范围 | 其他值 |
 | --- | --- | --- | --- |
-| Agents、Sessions、Environments、Items、Turn Items、Environment 模板、Automations、Automation invocations、Vaults、Credentials、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
-| Turns、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
+| Agents、Sessions、Items、Turn Items、Environment 模板、Automations、Automation invocations、Vaults、Credentials、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
+| Turns、Environments、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
 | Files | 10000 | 1–10000 | 400，code 为 null，"limit must be between 1 and 10000." |
 

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 805756d31736322ddf260434b041ba43bb18e0fe211cd10aa2da040a970ca7ba
+source_hash: e32f87ac58adff4460b831019f3cbd9d86c226bbef03640151084ea2b4e317ff
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -71,8 +71,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Core 没有预热 beta 的门控；官方的创建和列出需要该 beta 的访问权限。
 - `vault_ids` 必须为 null 或 `[]`；非空列表返回 400。Credential 只能通过 Session 到达 Environment。
 - 独立 Environment 以自己的网络策略创建，不会为后续 Session 放宽。若该策略无法到达模型提供方，挂载返回 400 `model_provider_unreachable`；官方服务没有此错误。
-- `POST /agents/environments` 的 `Idempotency-Key` 永不过期，而官方服务在组织、项目和创建者范围内去重 24 小时。Core 将它限定在项目和创建者范围内。同一个键搭配不同正文时的官方错误码尚未验证；Core 返回 409 `idempotency_conflict`。
-- 不支持检查点时，空闲的 Environment 在空闲超时后过期；确认计算丢失的 Environment 也会过期。两者都不会在新计算上被替换。
+- `POST /agents/environments` 的 `Idempotency-Key` 永不过期，而官方服务在组织、项目和创建者范围内去重 24 小时。Core 将它限定在项目和创建者范围内。同一个键搭配不同正文时的官方响应尚未验证；Core 返回 409 `idempotency_conflict`。
+- 不支持检查点时，空闲且未挂载的 Environment 在空闲超时后过期；确认计算丢失的 Environment 也会过期。两者都不会在新计算上被替换。
 
 **列表**（[lists](wire-semantics.md#lists)）
 
@@ -210,7 +210,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
-- 独立 Environment：`environment.environment_id` 的 `not` 约束按 schema 顺序报告第一个违规成员，其消息文本没有样本；schema 未列出的成员返回未知参数错误。Core 对未挂载的已准备 Environment 读作 `ready`，准备完成前创建后读作 `pending`。官方服务如何处理对仍为 `pending` 的 Environment 的挂载、是否列出 `failed` 和 `expired` 的 Environment，以及挂载前的文件路由（Core 返回 409），均没有官方样本。
+- 独立 Environment：`environment.environment_id` 的 `not` 约束按 schema 顺序报告第一个违规成员，其消息文本没有样本；schema 未列出的成员返回未知参数错误。Core 对未挂载的已准备 Environment 读作 `ready`，准备完成前创建后读作 `pending`。重试一次未完成的创建会返回处于当前状态的 Environment，可能是 `pending`，而不是 409。列表显示调用方创建的 Environment，检索和挂载则接受项目内的任何调用方。官方服务如何处理对仍为 `pending` 的 Environment 的挂载、是否列出 `failed` 和 `expired` 的 Environment，以及挂载前的文件路由（Core 返回 409），均没有官方样本。
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
 - Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：

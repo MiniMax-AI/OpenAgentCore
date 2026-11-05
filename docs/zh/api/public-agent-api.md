@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: ed050299de0e943275b2a52fa644ec61bf5a149fd5eeafad8ed833521fc56714
+source_hash: 1483155688bff477c72fdea76deed27513e346a6bb245d521e891542f8fd1e87
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -46,7 +46,7 @@ agents /agents
 | 资源 | 路径 | 用途 |
 | --- | --- | --- |
 | [Agents](#agents) | `/agents` | 可复用配置：模型、指令、工具和 Harness |
-| [Sessions](#sessions) | `/agents/sessions` | 一次 Agent 对话及其独立的 Environment |
+| [Sessions](#sessions) | `/agents/sessions` | 一次 Agent 对话及其 Environment，自有的或挂载的[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments) |
 | [输入事件](#send-input) | `/agents/sessions/{id}/events`（POST） | 消息、取消和工具结果 |
 | [事件流](#stream-events) | `/agents/sessions/{id}/events`（GET） | 实时的服务器发送事件 |
 | [Turns 和 Items](#turns-and-items) | `/agents/sessions/{id}/turns`、`/items` | 持久化历史 |
@@ -215,7 +215,7 @@ agents "/agents" -d '{
 
 ## Sessions {#sessions}
 
-Session 是一次使用固定配置并拥有独立 Environment 的对话。
+Session 是一次使用固定配置的对话，拥有自有的 Environment，或挂载一个[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
 
 ### 创建 Session {#create-a-session}
 

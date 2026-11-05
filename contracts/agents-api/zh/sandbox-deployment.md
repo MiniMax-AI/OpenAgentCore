@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: c9b1fa302e52e7a40bfcc04bfd7971043cc0d98b49a96da66b992df319a4544a
+source_hash: 901cdd19f4fa0933c61614930b1326263a389667e09f21395f14ee95f031128f
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -15,7 +15,7 @@ source_hash: c9b1fa302e52e7a40bfcc04bfd7971043cc0d98b49a96da66b992df319a4544a
 | 路由 | 效果 |
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | 读取安全的当前配置、推出、重置和资源计数 |
-| `PATCH /core/v1/sandbox/deployment` | 更新整个部署的空闲挂起策略，不改变配置代次 |
+| `PATCH /core/v1/sandbox/deployment` | 更新整个部署的空闲超时，不改变配置代次 |
 | `POST /core/v1/sandbox/deployment` | 选择初始提供商和资源 |
 | `PUT /core/v1/sandbox/deployment` | 在线更改同一提供商的目标 |
 | `POST /core/v1/sandbox/deployment/reset` | 启动托管资源的持久清除或将其升级为持久清除 |
@@ -100,7 +100,7 @@ E2B 把 `template` 声明为 discovered。空 `path` 列出该密钥的模板，
 GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url`（只读：安装公开 URL，即使配置前也存在）、`mode`、`generation`、`owner_epoch`、`reset`、`rollout`、`suspension`、`resources` 和 `credential_configured`。已配置的部署还会返回 `specification`、`specification_digest`、`configuration` 和 `metadata`：这是适配器对其选择器及其记录的观测结果所作的公开投影，绝不会包含原始存储值或机密。E2B 返回 `configuration.template`、`configuration.api_url`、`configuration.domain`，并在记录后返回 `metadata.template_build`。OpenSandbox 返回 `configuration.api_url`、`configuration.image` 和空的 `metadata` 对象。microsandbox 返回空的 `configuration` 和 `metadata` 对象以及 `credential_configured: false`；未配置的部署则不含这两个对象。
 
 - `metadata.template_build` 为 `{status, resources: {cpus, memory_mib, root_disk_mib}}`：这是保存选择时 Core 通过固定版本 SDK 读取的构建。GET 绝不会调用 E2B，因此 E2B 中断期间该操作仍保持低成本。验证仅接受 CPU 数量和内存与所选值一致的 `ready` 构建；`root_disk_mib` 是构建的原生磁盘大小，Core 不会强制执行该值。未知值为 null，`metadata: {}` 表示未记录任何观测，在不提供凭据的情况下提交完全相同的 PUT 也不会刷新它。
-- 所选提供商声明 checkpoint 支持时，`suspension` 为 `{idle_seconds, retention_seconds}`，即 Core 的 [suspension policy](../../../docs/zh/sandbox-provider.md#suspension)；其他部署（包括未配置的部署）返回 null。
+- `idle_seconds` 是部署的空闲超时，对每个提供商都适用。所选提供商声明 checkpoint 支持时，`suspension` 为 `{retention_seconds}`，即 Core 的 [suspension policy](../../../docs/zh/sandbox-provider.md#suspension)；其他部署（包括未配置的部署）返回 null。
 - 请求中的 `resources` 和响应中的 `specification.resources` 是每个沙箱的限制。响应中的 `resources.allocations` 和 `resources.pending` 分别计算尚未释放的分配，以及尚未分配沙箱的待处理托管 Environment；`resources.running` 计算计算资源正在运行的未释放分配，因此不含已挂起的分配。
 - 未配置的部署具有空的提供商且没有 specification。microsandbox 使用 `mode: nodes`；E2B 和 OpenSandbox 使用 `mode: direct`，且没有合成节点。
 - `generation` 标识已保存的选择。`owner_epoch` 用于对执行所有者和节点连接进行栅栏隔离；它不能替代 `expected_generation`。
@@ -136,9 +136,11 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 ## 挂起策略 {#suspension-policy}
 
-`PATCH /core/v1/sandbox/deployment` 接受 `{"idle_seconds": 300}`。`idle_seconds` 是必填整数，范围为 30–86400 秒，默认为 300。该设置保存在 Core 的数据库中。只有已配置且声明 checkpoint 支持的提供商可修改；未配置、不支持或正在重置的部署拒绝写入。成功返回当前部署视图，`suspension.idle_seconds` 反映已保存的值。
+`PATCH /core/v1/sandbox/deployment` 接受 `{"idle_seconds": 300}`。`idle_seconds` 是必填整数，范围为 30–86400 秒，默认为 300。该设置保存在 Core 的数据库中。每个已配置的提供商都可修改；未配置或正在重置的部署拒绝写入。成功返回当前部署视图，`idle_seconds` 反映已保存的值。
 
-变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配，并在 retained slot 已满时[提前结束符合条件的检查点的保留期](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级策略；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
+支持 checkpoint 时，空闲超时触发[挂起](../../../docs/zh/sandbox-provider.md#suspension)。不支持时，未挂载的独立 Environment 的空闲分配在超时后使该 Environment 过期，而 Session 持有的分配继续运行。
+
+变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配，并在 retained slot 已满时[提前结束符合条件的检查点的保留期](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级设置，提供商不支持 checkpoint 时为 **空闲时间**；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
 
 ## 代次所有权与推出 {#generation-ownership-and-rollout}
 
@@ -250,7 +252,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 | 部署 `specification.network` | `public` 和 `domains` | 仅 `public`；`domains` 必须为空，私有网络不可达 | 仅 `public`；`domains` 必须为空 |
 | 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib`，以及作为配额请求的 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`，作为资源限制应用；无磁盘字段 |
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
-| 部署 `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`；Core 用 SDK 的原生 pause 暂停空闲的 E2B 沙箱 | `null`：不支持 checkpoint，空闲沙箱继续运行 |
+| 部署 `suspension` | `{retention_seconds}` | `{retention_seconds}`；Core 用 SDK 的原生 pause 暂停空闲的 E2B 沙箱 | `null`：不支持 checkpoint，Session 持有的沙箱继续运行，未挂载的独立 Environment 在 `idle_seconds` 后过期 |
 | 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | Core 中尚未释放的 OpenSandbox 沙箱，以及正在等待沙箱的托管 Environment |
 | 注册令牌 `max_active`、`max_retained` | 两个限制均适用；省略的限制在注册时推导 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；OpenSandbox 没有节点 |
 | 节点列表和详情 | 已注册节点 | 空列表；详情返回 404 | 空列表；详情返回 404 |

@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 047dd87a9881448e7078f272b5d0376917c6c8409c71c0deb232272536c77b04
+source_hash: a3c5c4ff320b94acc3dfc00907fce770cd938081367e35e700811c6a0ec6b473
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment，或挂载此前由 `POST /agents/environments` 准备好的 Environment（[独立 Environment](#standalone-environments)）。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -43,6 +43,11 @@ Core 在事件中发出 `ready`，资源对未挂载 Session 的已准备独立 
 ```mermaid
 stateDiagram-v2
     [*] --> pending
+    pending --> ready
+    ready --> connected
+    connected --> ready
+    disconnected --> ready
+    ready --> expired
     pending --> connected
     connected --> disconnected
     disconnected --> connected
@@ -56,7 +61,7 @@ stateDiagram-v2
 
 Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 记录自己持有项目、不可变配置和准备输入，由 Session 引用它；一个 Environment 至多挂载一个存活的 Session。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 自有 Environment 的 Session 删除后，读取会隐藏该 Environment，而 Core 仍保留该记录，用于结算和清理。独立 Environment 的存续不受其 Session 影响。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Session 自有的 Environment。Environment 记录自己持有项目、不可变配置和准备输入，由 Session 引用它；一个 Environment 至多挂载一个存活的 Session。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 自有 Environment 的 Session 删除后，读取会隐藏该 Environment，而 Core 仍保留该记录，用于结算和清理。独立 Environment 的存续不受其 Session 影响。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
 
@@ -66,9 +71,9 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 **创建。** 请求体为 `{environment, vault_ids}`。`environment` 取 [Session 的 `environment`](#placements) 中的 `openai_hosted` 成员，不含 `environment_id`，可以指定模板；Core 解析并应用模板的方式与 Session 相同。`vault_ids` 可以为 null 或 `[]`；非空列表返回 400。`Idempotency-Key` 为 1–256 字节，限定在项目和创建者范围内。键和发送的正文都相同的重试返回原 Environment，即使所指定的模板此后已被删除；不同正文返回 409 `idempotency_conflict`。Core 校验 hosted Session 为其 Environment 所需的接纳（部署、工作区存储、网络策略），冻结 Skills，封存 setup 和初始文件，并返回 201，Environment 状态为 `pending`。随后开始供给，调用方无需操作。
 
-**列出和检索。** `GET /agents/environments` 只列出项目的独立 Environment，包括 `failed` 和 `expired` 的，使用官方分页（`limit` 1–100，默认 20；`order`；`after`），以 `type=openai_hosted` 为唯一取值。`GET /agents/environments/{id}` 对两种 Environment 都有效。没有挂载 Session、处于 `pending`、`connected` 或 `disconnected` 的已准备 Environment 读作 `ready`；挂载 Session 后读作连接状态，`failed` 和 `expired` 始终如实读出。
+**列出和检索。** `GET /agents/environments` 只列出调用方在项目中创建的独立 Environment，包括 `failed` 和 `expired` 的，使用官方分页（`limit` 1–100，默认 20；`order`；`after`），以 `type=openai_hosted` 为唯一取值。`GET /agents/environments/{id}` 对两种 Environment 和项目内的任何调用方都有效。没有挂载 Session、处于 `pending`、`connected` 或 `disconnected` 的已准备 Environment 读作 `ready`；挂载 Session 后读作连接状态，`failed` 和 `expired` 始终如实读出。
 
-**挂载。** 带有 `environment: {"type": "openai_hosted", "environment_id": "…"}`（9–256 个字符）的 `POST /agents/sessions` 以该 Environment 冻结的配置运行 Session。`environment_id` 旁的其他成员返回 400，`param` 为该成员（`environment.packages` 等），`x_agents_core.environment` 同样如此。Harness、模型和工具来自 Session。Core 的返回如下：
+**挂载。** 带有 `environment: {"type": "openai_hosted", "environment_id": "…"}`（9–256 个字符）的 `POST /agents/sessions` 在该 Environment 上运行 Session，使用其冻结的配置。`environment_id` 旁的其他成员返回 400，`param` 为该成员（`environment.packages` 等），`x_agents_core.environment` 同样如此。Harness、模型和工具来自 Session。Core 的返回如下：
 
 | 情况 | 响应 |
 | --- | --- |
@@ -79,11 +84,11 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 `pending` 的 Environment 可以挂载：Session 的首个输入像任何 hosted 输入一样等待准备完成，已挂起或已释放的分配会被唤醒。工作区和网络接纳在创建时已执行，不再重复，但部署必须接纳新的 hosted 工作：重置待定或接纳关闭时，挂载与内联创建一样被拒绝。两个并发挂载有且仅有一个成功。
 
-**卸载。** 删除 Session 是唯一的卸载方式。Environment 立即可再次挂载，并保留其工作区和准备结果。
+**卸载。** 删除 Session 是唯一的卸载方式。Environment 立即可再次挂载，并保留其工作区和准备结果；其空闲时间从删除时起算。
 
-**文件。** 未挂载 Session 时，[Environment files](environment-files.md) 的路由返回 409 `conflict_error`，“Attach a session to this environment before using its files.”
+**文件。** 没有挂载 Session 时（首次挂载前和卸载后），[Environment files](environment-files.md) 的路由返回 409 `conflict_error`，“Attach a session to this environment before using its files.”
 
-**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于 Provider。支持检查点时，它在空闲超时（`idle_seconds`，默认 300 秒）后挂起，并在 24 小时保留期结束时过期。不支持检查点时它无法挂起，因此在 `idle_seconds` 内没有活动后过期；尚无任何活动时，空闲时间从创建起算。两种情况下，确认计算丢失后它都会过期，因为 Core 从不在新计算上替换它：没有可重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载。
+**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于 Provider。支持检查点时，它在空闲超时（`idle_seconds`，默认 300 秒）后挂起，并在 24 小时保留期结束时过期。不支持检查点时它无法挂起，因此在 `idle_seconds` 内没有活动后过期；尚无任何活动时，空闲时间从创建起算。两种情况下，确认计算丢失后它都会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有可重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载，Core 会在它结束后删除其工作区。
 
 ## 放置方式 {#placements}
 

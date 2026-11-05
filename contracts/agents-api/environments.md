@@ -36,11 +36,16 @@ An Environment read stays within the caller's Project, hides an Environment whos
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `ready`, `connected`, `disconnected`, `suspended`, `expired`, `failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | The same seven states, with a nullable error |
 
-Core emits `ready` in events, and the resource reads `ready` for a prepared, standalone Environment that no Session is attached to ([projection](#standalone-environments)). It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
+Core emits `ready` in events, and the resource reads `ready` for a prepared, standalone Environment that no Session is attached to, before the first attach and again after a detach ([projection](#standalone-environments)). It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending
+    pending --> ready
+    ready --> connected
+    connected --> ready
+    disconnected --> ready
+    ready --> expired
     pending --> connected
     connected --> disconnected
     disconnected --> connected
@@ -54,7 +59,7 @@ stateDiagram-v2
 
 Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
 
-Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment row holds its own Project, immutable configuration and preparation input, and the Session names it; at most one live Session is attached to an Environment. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session of a Session-owned Environment is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A standalone Environment outlives its Sessions. A Session with `none` has no Environment.
+Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair a Session-owned Environment. The Environment row holds its own Project, immutable configuration and preparation input, and the Session names it; at most one live Session is attached to an Environment. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session of a Session-owned Environment is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A standalone Environment outlives its Sessions. A Session with `none` has no Environment.
 
 A managed outer Environment must exclude broader application credentials and other tenants’ secrets.
 
@@ -64,7 +69,7 @@ A managed outer Environment must exclude broader application credentials and oth
 
 **Create.** The body is `{environment, vault_ids}`. `environment` takes the `openai_hosted` member of the [Session `environment`](#placements) without `environment_id`, and may name a Template; Core resolves and applies the Template as it does for a Session. `vault_ids` may be null or `[]`; a nonempty list returns 400. The `Idempotency-Key` is 1–256 bytes and scoped to the Project and creator. A retry with the same key and the same body as sent returns the original Environment, even if the named Template was deleted since; a different body returns 409 `idempotency_conflict`. Core validates the admission that a hosted Session needs for its Environment (deployment, workspace storage, network policy), freezes Skills, seals the setup and initial files, and returns 201 with the Environment in status `pending`. Provisioning then starts and needs no caller action.
 
-**List and retrieve.** `GET /agents/environments` lists only standalone Environments of the Project, including `failed` and `expired` ones, in the official pagination (`limit` 1–100, default 20; `order`; `after`) with `type=openai_hosted` as the only value. `GET /agents/environments/{id}` serves both kinds. A prepared Environment with no attached Session in `pending`, `connected` or `disconnected` reads `ready`; once a Session is attached it reads the connection status, and `failed` and `expired` always read as such.
+**List and retrieve.** `GET /agents/environments` lists the standalone Environments that the caller created in the Project, including `failed` and `expired` ones, in the official pagination (`limit` 1–100, default 20; `order`; `after`) with `type=openai_hosted` as the only value. `GET /agents/environments/{id}` serves both kinds and any caller of the Project. A prepared Environment with no attached Session in `pending`, `connected` or `disconnected` reads `ready`; once a Session is attached it reads the connection status, and `failed` and `expired` always read as such.
 
 **Attach.** `POST /agents/sessions` with `environment: {"type": "openai_hosted", "environment_id": "…"}` (9–256 characters) runs the Session on that Environment, with its frozen configuration. Any other member beside `environment_id` returns 400 with the member as `param` (`environment.packages`, …), as does `x_agents_core.environment`. The Harness, model and tools come from the Session. Core returns:
 
@@ -77,11 +82,11 @@ A managed outer Environment must exclude broader application credentials and oth
 
 A `pending` Environment is accepted: the Session's first input waits for preparation like any hosted input, and a suspended or released allocation wakes. Workspace and network admission ran at create and do not repeat, but the deployment must admit new hosted work: a pending reset or closed admission rejects the attach like an inline create. Two concurrent attaches have exactly one winner.
 
-**Detach.** Deleting the Session is the only detach. The Environment is attachable at once and keeps its workspace and preparation.
+**Detach.** Deleting the Session is the only detach. The Environment is attachable at once and keeps its workspace and preparation; its idle time counts from the deletion.
 
-**Files.** Before a Session is attached, [Environment files](./environment-files.md) routes return 409 `conflict_error`, "Attach a session to this environment before using its files."
+**Files.** While no Session is attached, before the first attach and after a detach, [Environment files](./environment-files.md) routes return 409 `conflict_error`, "Attach a session to this environment before using its files."
 
-**Lifecycle without a Session.** An unattached Environment provisions and initializes without a Harness, and its lifetime depends on the Provider. With checkpoint support it suspends after the idle timeout (`idle_seconds`, 300 seconds by default) and expires when its 24-hour retention ends. Without checkpoint support it cannot be suspended, so it expires after `idle_seconds` without activity; before any activity the idle time counts from creation. Either way it expires after confirmed compute loss, because Core never replaces it on new compute: nothing identifies the work to replay. A [sandbox reset](./sandbox-deployment.md#reset) also expires it. An expired Environment cannot be attached.
+**Lifecycle without a Session.** An unattached Environment provisions and initializes without a Harness, and its lifetime depends on the Provider. With checkpoint support it suspends after the idle timeout (`idle_seconds`, 300 seconds by default) and expires when its 24-hour retention ends. Without checkpoint support it cannot be suspended, so it expires after `idle_seconds` without activity; before any activity the idle time counts from creation. Either way it expires after confirmed compute loss, including compute released while a Session held it once that Session is deleted, because Core never replaces it on new compute: nothing identifies the work to replay. A [sandbox reset](./sandbox-deployment.md#reset) also expires it. An expired Environment cannot be attached, and Core deletes its workspace once it ends.
 
 ## Placements
 

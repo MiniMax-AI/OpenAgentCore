@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 5b4a649929c3df402d9adb589854b63fbd2f2233bf04cf0872f50f1b85991084
+source_hash: 099c83ccd5b76ee3c700696190de131cdfac4896ff5875cad7d4efa66df0f5db
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
@@ -178,7 +178,7 @@ adapter 不实现这些行为，但依赖它们。代码层面的机制见 [Core
 - Core 从不在离线 node、超时或空读取时释放 allocation，也不对不[在线](../../contracts/agents-api/zh/node-generation-protocol.md#connection)的 node 执行 lifecycle 操作。保留的归属需要精确的提供商证据：socket 路径、实例缺失或空列表都不证明已清理，也不授权替代。
 - Placement 是自动的，调用方不能选择 node。活动 allocation 即使离线也保留原 node。确认释放后，符合条件的保留 Session 可以再次预约兼容容量，包括在其他 node 上。释放 active 容量前必须确认 source 已拆除，未知操作保留其预约。等待、排序和 generation 选择由[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)负责。
 - 挂载了 Session 时，Core 在 Turn 之间观察已连接的计算资源仍是该 Environment 的 running allocation。该检查不改变任何状态。运行中的计算资源从不到期，没有[确认](#confirmed-compute-loss)的不可达、已停止或缺失实例不授权丢弃保留的工作区或历史，也不授权选择替代计算资源。
-- Core 在一个[暂停策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)下，暂停每个声明 checkpoint 支持的提供商的空闲 allocation。
+- Core 在一个[暂停策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)下，暂停每个声明 checkpoint 支持的提供商的空闲 allocation。空闲超时对每个提供商是同一个设置；不支持 checkpoint 时，它使未挂载的独立 Environment 过期。
 - 禁用提供商会停止新的托管准入和引导，但从不阻塞既有 Session 的取消、函数结果或 input 重试结果。
 
 ```mermaid
