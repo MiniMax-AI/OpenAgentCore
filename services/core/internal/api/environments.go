@@ -16,7 +16,7 @@ import (
 // Project's self_hosted Environments.
 type EnvironmentsReader interface {
 	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
-	ListEnvironments(ctx context.Context, tenant, after string, limit int, ascending bool) ([]sessions.Environment, bool, error)
+	ListEnvironments(ctx context.Context, tenant string, creator identity.Subject, after string, limit int, ascending bool) ([]sessions.Environment, bool, error)
 	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 }
 
@@ -55,7 +55,7 @@ func (h *Handler) listEnvironments(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, &fieldError{param: "type", message: "Invalid 'type': unknown value. Supported values are: 'openai_hosted'."})
 		return
 	}
-	page, more, err := h.EnvironmentsReader.ListEnvironments(r.Context(), tenantID(r), options.after, options.limit, options.ascending)
+	page, more, err := h.EnvironmentsReader.ListEnvironments(r.Context(), tenantID(r), sessionCreator(r), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return

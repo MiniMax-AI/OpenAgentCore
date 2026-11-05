@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -107,15 +108,15 @@ func LoadEnvironmentInput(ctx context.Context, q *sqlc.Queries, session pgtype.U
 	return state, nil
 }
 
-// ListEnvironments reads a page of the tenant's standalone Environments,
-// whatever their status, after the cursor Environment in (created, ID) order.
+// ListEnvironments reads a page of the standalone Environments the creator
+// made in the tenant, whatever their status, after the cursor Environment in (created, ID) order.
 // It reports whether more follow. A missing cursor is sessions.ErrNotFound.
-func (s *Store) ListEnvironments(ctx context.Context, tenantID, cursor string, limit int, ascending bool) ([]sessions.Environment, bool, error) {
+func (s *Store) ListEnvironments(ctx context.Context, tenantID string, creator identity.Subject, cursor string, limit int, ascending bool) ([]sessions.Environment, bool, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return nil, false, err
 	}
-	params := sqlc.ListStandaloneEnvironmentsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
+	params := sqlc.ListStandaloneEnvironmentsParams{TenantID: tenant, CreatorKind: pgtype.Text{String: creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: creator.ID, Valid: true}, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
 	var page []sessions.Environment
 	more := false
 	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {

@@ -43,6 +43,7 @@ SELECT sqlc.embed(e), s.id AS attached_session_id,
        EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
 FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND NOT e.session_owned
+  AND e.creator_kind = sqlc.arg(creator_kind) AND e.creator_id = sqlc.arg(creator_id)
   AND (sqlc.narg(after_created)::timestamptz IS NULL
        OR (NOT sqlc.arg(ascending)::boolean AND (e.created_at, e.id) < (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid))
        OR (sqlc.arg(ascending)::boolean AND (e.created_at, e.id) > (sqlc.narg(after_created)::timestamptz, sqlc.arg(after_id)::uuid)))

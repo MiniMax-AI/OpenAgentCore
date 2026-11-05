@@ -398,15 +398,15 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 type fakeEnvironmentsReader struct {
 	t                              testing.TB
 	getEnvironment                 func(context.Context, string, string) (sessions.Environment, error)
-	listEnvironments               func(context.Context, string, string, int, bool) ([]sessions.Environment, bool, error)
+	listEnvironments               func(context.Context, string, identity.Subject, string, int, bool) ([]sessions.Environment, bool, error)
 	projectExecutorCredentialState func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 }
 
-func (f *fakeEnvironmentsReader) ListEnvironments(a0 context.Context, a1 string, a2 string, a3 int, a4 bool) ([]sessions.Environment, bool, error) {
+func (f *fakeEnvironmentsReader) ListEnvironments(a0 context.Context, a1 string, a2 identity.Subject, a3 string, a4 int, a5 bool) ([]sessions.Environment, bool, error) {
 	if f.listEnvironments == nil {
 		unexpectedCall(f.t, "ListEnvironments")
 	}
-	return f.listEnvironments(a0, a1, a2, a3, a4)
+	return f.listEnvironments(a0, a1, a2, a3, a4, a5)
 }
 
 func (f *fakeEnvironmentsReader) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {

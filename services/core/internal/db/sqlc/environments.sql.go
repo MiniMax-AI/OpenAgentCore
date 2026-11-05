@@ -231,19 +231,22 @@ SELECT e.id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_de
        EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
 FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE e.tenant_id = $1 AND NOT e.session_owned
-  AND ($2::timestamptz IS NULL
-       OR (NOT $3::boolean AND (e.created_at, e.id) < ($2::timestamptz, $4::uuid))
-       OR ($3::boolean AND (e.created_at, e.id) > ($2::timestamptz, $4::uuid)))
+  AND e.creator_kind = $2 AND e.creator_id = $3
+  AND ($4::timestamptz IS NULL
+       OR (NOT $5::boolean AND (e.created_at, e.id) < ($4::timestamptz, $6::uuid))
+       OR ($5::boolean AND (e.created_at, e.id) > ($4::timestamptz, $6::uuid)))
 ORDER BY
-    CASE WHEN $3::boolean THEN e.created_at END ASC,
-    CASE WHEN $3::boolean THEN e.id END ASC,
-    CASE WHEN NOT $3::boolean THEN e.created_at END DESC,
-    CASE WHEN NOT $3::boolean THEN e.id END DESC
-LIMIT $5
+    CASE WHEN $5::boolean THEN e.created_at END ASC,
+    CASE WHEN $5::boolean THEN e.id END ASC,
+    CASE WHEN NOT $5::boolean THEN e.created_at END DESC,
+    CASE WHEN NOT $5::boolean THEN e.id END DESC
+LIMIT $7
 `
 
 type ListStandaloneEnvironmentsParams struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CreatorKind  pgtype.Text        `json:"creator_kind"`
+	CreatorID    pgtype.Text        `json:"creator_id"`
 	AfterCreated pgtype.Timestamptz `json:"after_created"`
 	Ascending    bool               `json:"ascending"`
 	AfterID      pgtype.UUID        `json:"after_id"`
@@ -259,6 +262,8 @@ type ListStandaloneEnvironmentsRow struct {
 func (q *Queries) ListStandaloneEnvironments(ctx context.Context, arg ListStandaloneEnvironmentsParams) ([]ListStandaloneEnvironmentsRow, error) {
 	rows, err := q.db.Query(ctx, listStandaloneEnvironments,
 		arg.TenantID,
+		arg.CreatorKind,
+		arg.CreatorID,
 		arg.AfterCreated,
 		arg.Ascending,
 		arg.AfterID,
