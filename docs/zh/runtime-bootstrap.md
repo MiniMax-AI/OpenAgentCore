@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: 50bfbec00d4aec47aab573e3f0c99ff3bd6ebababf97b859d37101a60657b786
+source_hash: 794beca77df7755794769b9b9d3b4da841a3a58594cb3664405535760dbb581b
 ---
 
 Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供商向 Runtime 交付一个引导文件，该文件是此次启动中 Runtime 唯一的认证输入，也是其 Environment 绑定的唯一来源。
@@ -53,7 +53,6 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `device_id` | Core 签发的 daemon 身份的规范非零 UUID |
 | `credential` | Core 签发的非空 daemon 凭据，不含空白或 NUL |
 | `environment_id` | Runtime 所服务 Environment 的规范非零 UUID |
-| `session_id` | 该 Environment 的一个 Session 的规范非零 UUID。Runtime 绑定到 Environment，忽略此字段 |
 | `workspace` | 工作区的干净绝对目录；打包的 Runtime 布局中为 `runtimebootstrap.RuntimeWorkspace`。Runtime 将其作为 `runtimebootstrap.PublicWorkspace`（`/workspace`）提供，这是应用与 Core 使用的路径 |
 | `suspend_control` | 必填布尔值。当且仅当提供商声明[检查点支持](./sandbox-provider.md)时，Core 将其置为 true，提供商原样转交 |
 
