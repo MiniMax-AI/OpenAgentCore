@@ -106,7 +106,7 @@ func assertSelfHostedMCPRejectionHasNoWrites(t *testing.T, pool *pgxpool.Pool, t
 	for _, table := range []string{"sessions", "environments", "turns", "turn_inputs", "session_items", "session_events", "environment_input_reservations"} {
 		var count int
 		where := "session_id IN (SELECT id FROM sessions WHERE tenant_id=$1)"
-		if table == "sessions" {
+		if table == "sessions" || table == "environments" {
 			where = "tenant_id=$1"
 		}
 		if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE "+where, tenant).Scan(&count); err != nil || count != 0 {

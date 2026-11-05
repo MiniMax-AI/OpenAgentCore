@@ -41,7 +41,7 @@ func TestDiagnosticSnapshotCancellationReleasesTransaction(t *testing.T) {
 			}()
 			var readerPID int
 			for readerPID == 0 {
-				err = pool.QueryRow(t.Context(), `SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND backend_xmin IS NOT NULL AND query LIKE $1 LIMIT 1),0)`, "%FROM "+table+"%").Scan(&readerPID)
+				err = pool.QueryRow(t.Context(), `SELECT COALESCE((SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND backend_xmin IS NOT NULL AND query LIKE $1 LIMIT 1),0)`, "%"+table+"%").Scan(&readerPID)
 				if err != nil {
 					t.Fatal(err)
 				}

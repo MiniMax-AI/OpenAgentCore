@@ -78,7 +78,7 @@ func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
 	for _, configuration := range [][]byte{nil, []byte(`{}`), []byte(` { } `)} {
 		input.Configuration = configuration
 		got, err := s.CreateSession(t.Context(), tenant, input)
-		if err != nil || got.ID != first.ID || string(got.Configuration) != "{}" || got.Creator == nil || *got.Creator != FixtureCreator() {
+		if err != nil || got.ID != first.ID || string(got.Configuration) != `{"environment":{"type":"none"}}` || got.Creator == nil || *got.Creator != FixtureCreator() {
 			t.Fatal("canonical retry changed identity or creator", err)
 		}
 	}
