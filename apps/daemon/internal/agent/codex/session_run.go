@@ -33,7 +33,9 @@ func (s *Session) startNative(ctx context.Context, plan SessionPlan, turn proto.
 	if turn.Review == "auto_review" {
 		turnParams.ApprovalPolicy, turnParams.ApprovalsReviewer = approvalPolicyOnRequest, turn.Review
 	}
-	s.resolvedModel = turn.Model
+	if turn.Model != "" {
+		s.resolvedModel = turn.Model
+	}
 	turnCtx, turnCancel := context.WithTimeout(ctx, 10*time.Second)
 	_, ackErr := s.rpc.requestWithResult(turnCtx, "turn/start", turnParams, s.bindTurnResult)
 	turnCancel()
