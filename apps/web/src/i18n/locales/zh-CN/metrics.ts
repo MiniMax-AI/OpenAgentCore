@@ -172,7 +172,7 @@ export const metrics = {
       processed: "处理",
       failed: "失败",
       empty: "Core 没有报告后台任务。",
-      names: { scheduler: "执行调度", runtime_sampler: "Runtime 采样", history_cleanup: "历史清理", audit_cleanup: "审计清理" },
+      names: { scheduler: "执行调度", runtime_sampler: "Runtime 采样", automation_delivery: "Automation 投递", history_cleanup: "历史清理", audit_cleanup: "审计清理" },
       health: { ok: "正常", failing: "失败", stopped: "已停止", unknown: "未知" },
     },
   },

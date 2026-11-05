@@ -1,7 +1,7 @@
 ---
 title: "Core 指标"
 source: contracts/agents-api/core-metrics.md
-source_hash: bb6125b122a9cb46664db9d9536c0e799a3e1b789daed0f62941c0bc2bed6405
+source_hash: 79bdf1be68c3765366370f2da4fbb032bda1474adc8c096410f2a8c0f93361db
 ---
 
 `GET /core/v1/metrics?range=1h|6h|24h|7d` 报告 Core 自身的健康状况：进程、执行队列与槽位、PostgreSQL 和后台任务。它要求 Core 密钥（[Core 管理 API](admin-api.md)）。
@@ -59,9 +59,10 @@ Core 解析自身的 cgroup，包括嵌套与子树挂载，并报告该 cgroup 
 
 ## 后台任务 {#background-jobs}
 
-`jobs` 列出 `scheduler`、`runtime_sampler`、`history_cleanup` 和 `audit_cleanup`。每项包含 `status`（首次运行前为 `unknown`，之后为 `ok`、`failing`，循环禁用或结束时为 `stopped`）、`last_run_at`（上次一轮结束时间）、`processed` 和 `failed`，后两者描述上次一轮。
+`jobs` 列出 `scheduler`、`runtime_sampler`、`automation_delivery`、`history_cleanup` 和 `audit_cleanup`。每项包含 `status`（首次运行前为 `unknown`，之后为 `ok`、`failing`，循环禁用或结束时为 `stopped`）、`last_run_at`（上次一轮结束时间）、`processed` 和 `failed`，后两者描述上次一轮。
 
 - scheduler 的 `processed` 统计上次轮询选中的 Turn 和 Environment 工作。
 - Runtime sampler 的 `processed` 和 `failed` 统计上次扫描成功观察和未能观察的目标。
+- Automation 投递任务的 `processed` 统计上一轮记录的触发和结算的 invocation 数；`failed` 统计存储失败。永久失败的 invocation 是已结算的记录，不计入。
 - 清理任务的 `processed` 统计删除的行数。
-- scheduler 和清理任务失败时，`processed` 为 null，`failed` 为 1；`failed` 不估算丢失行数或失败 Turn 数量。
+- scheduler、Automation 投递任务和清理任务失败时，`processed` 为 null，`failed` 为 1；`failed` 不估算丢失行数或失败 Turn 数量。

@@ -172,7 +172,7 @@ export const metrics = {
       processed: "Processed",
       failed: "Failed",
       empty: "Core reports no background jobs.",
-      names: { scheduler: "Execution scheduling", runtime_sampler: "Runtime sampling", history_cleanup: "History cleanup", audit_cleanup: "Audit cleanup" },
+      names: { scheduler: "Execution scheduling", runtime_sampler: "Runtime sampling", automation_delivery: "Automation delivery", history_cleanup: "History cleanup", audit_cleanup: "Audit cleanup" },
       health: { ok: "Healthy", failing: "Failing", stopped: "Stopped", unknown: "Unknown" },
     },
   },

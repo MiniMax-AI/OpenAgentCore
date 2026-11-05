@@ -40,7 +40,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth`, with `metadata` | [Vaults and Credentials](./vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
-| Automations | all 10 operations | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
+| Automations and invocations | create, retrieve, update, list, delete, pause, resume; invocation create, retrieve, list | Implemented; `created_by` is always `developer` | [Automations](./automations.md) |
 | Environments collection | create, list (`/agents/environments`) | Not supported: 404 `unsupported_operation`; Core's Environments are Session-scoped | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 | Session traces | list | Not supported: 404 `unsupported_operation` | [Unsupported operations](./wire-semantics.md#unsupported-operations) |
 
@@ -127,6 +127,10 @@ Each item is Core's deliberate or native behavior where the official service beh
 - File names hold 1–1,024 bytes; the official service accepts empty and longer names.
 - A `SKILL.md` front-matter key other than `name`, `description`, `license`, `compatibility` and `metadata` is rejected; the official service accepts unknown keys ([upload a bundle](./source-files.md#upload-a-bundle)).
 
+**Automations** ([Automations](./automations.md))
+
+- An empty `instructions` in an `existing_session` target returns 400 at create and update; the pinned schema allows 0 bytes, and Core cannot send an empty message.
+
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
 - MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
@@ -195,6 +199,19 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
 - The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
+- Automations, where the pinned sources are silent ([Automations](./automations.md)):
+  - A target `existing_session` delivers its `instructions` as one `agent.session.input.message` with one `input_text` part, since the schema defines no notification Item or event.
+  - The cron grammar is Vixie crontab beyond "standard five-field". A nonexistent daylight saving minute is skipped, and a repeated one fires once at its first instant.
+  - After downtime, only the latest due occurrence is recorded.
+  - `pending_delivery` skips an occurrence while any invocation of the Automation is queued.
+  - A `once` Automation completes when its scheduled invocation is terminal.
+  - Pause holds a queued scheduled invocation until resume; manual invocations still deliver, in every status.
+  - Pausing a paused Automation and resuming an active one return it unchanged. Pausing or resuming a completed one, resuming a `once` Automation whose past `run_at` has no pending invocation, and changing `run_at` after its scheduled invocation exists return 409 `conflict_error`.
+  - A past `run_at`, a timing field of the other type, a target of another type, an invalid cron expression or time zone, and an inline `agent` without `model` return 400 `invalid_request_error` with Core's own params and messages.
+  - A skipped `existing_session` invocation carries the target's `session_id`; a `new_session` invocation has null until its Session exists.
+  - A `limit` outside 1–100 is clamped, and an unresolved `after` returns 404.
+  - Create validates shapes, Core's Session rules and that the target Session exists; saved references resolve at each invocation.
+  - Invocations are kept until the Automation is deleted. A deleted target Session fails each delivery.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.

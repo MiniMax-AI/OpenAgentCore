@@ -51,6 +51,7 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 | [Files](#files) | `/files`, `/agents/environments/{id}/files`, `/agents/sessions/{id}/artifacts` | Uploads, workspace files and outputs |
 | [Skills](#skills) | `/skills` | Versioned capability bundles |
 | [Environment Templates](#environment-templates) | `/agents/environments/templates` | Reusable workspace setup |
+| [Automations](#automations) | `/agents/automations` | Scheduled Session creation or instructions |
 | [Vaults](#vaults) | `/vaults` | Write-only credentials for MCP servers |
 | Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [Subagents](../../contracts/agents-api/subagents.md) |
 
@@ -65,6 +66,7 @@ Core has the routes of the pinned SDK, listed in [upstream-routes.json](https://
 | Stop the current Turn, or recover after a lost response | [Cancel](#cancel), [idempotency](#idempotency) |
 | Call your own code from the agent | [Function tools](#function-tools) |
 | Give the agent Skills, packages, files and setup commands | [Skills](#skills), [Environment Templates](#environment-templates) |
+| Start a Session or send instructions on a schedule | [Automations](#automations) |
 | Connect an MCP server with credentials | [Vaults](#vaults) and [Execution tools](../../contracts/agents-api/execution-tools.md) |
 | Use Skill or Plugin directories on your own machine | [Local capability directories](../getting-started/self-hosted.md#local-capability-directories) |
 | Put files in the workspace, or download what the agent wrote | [Files](#files) |
@@ -556,6 +558,28 @@ template = client.beta.agents.environments.templates.create(
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
 A Session freezes the template when it starts. Details: [Environment Templates](../../contracts/agents-api/environments.md#templates).
+
+## Automations
+
+An Automation saves a schedule and a target. A `periodic` Automation fires on a five-field cron `expression` in an IANA `timezone`; a `once` Automation fires at `run_at`. The target either creates a new Session (`new_session`, the body of Session create) or sends `instructions` to an existing one (`existing_session`):
+
+```python
+automation = client.beta.agents.automations.create(
+    type="periodic",
+    name="Weekday report",
+    expression="0 9 * * 1-5",
+    timezone="Asia/Shanghai",
+    target={
+        "type": "new_session",
+        "agent_id": agent.id,
+        "environment": {"type": "none"},
+        "input": [{"role": "user", "content": [{"type": "input_text", "text": "Write the daily report."}]}],
+    },
+)
+invocation = client.beta.agents.automations.invocations.create(automation.id)  # deliver once now
+```
+
+Pause, resume and delete stop or end the schedule without touching Sessions. Each delivery is an invocation record whose `status` moves from `queued` to `completed` or `failed`; `session_id` names the Session it reached. Details and limits: [Automations](../../contracts/agents-api/automations.md).
 
 ## Vaults
 
