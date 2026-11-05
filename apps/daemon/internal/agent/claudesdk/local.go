@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// ConfigureLocal selects the qualified, dedicated Runtime layout. The shared
-// localworkspace binding still authorizes every request against its Session.
+// ConfigureLocal binds the dedicated workspace and keeps only the workspace
+// environment names of the process environment.
 func ConfigureLocal(config Config, workspace string) (Config, error) {
 	if !canonicalWorkspaceDir(workspace) {
 		return Config{}, fmt.Errorf("claudesdk: invalid trusted workspace configuration")

@@ -105,7 +105,7 @@ func saveEnvironmentBinding(root string, want environmentBinding) error {
 		}
 		for _, entry := range profiles {
 			if entry.IsDir() {
-				for _, name := range []string{"auth.json", "sessions.json", "runtime"} {
+				for _, name := range []string{"auth.json", "sessions.json"} {
 					if _, e := os.Lstat(filepath.Join(dir, entry.Name(), name)); !errors.Is(e, os.ErrNotExist) {
 						return errors.New("connect: existing profile has no Environment binding")
 					}

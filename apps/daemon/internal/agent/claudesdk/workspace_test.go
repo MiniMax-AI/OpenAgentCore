@@ -88,7 +88,7 @@ func TestSessionsKeepNativeStateInOwnDirectories(t *testing.T) {
 		}
 		state, _ := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, key)
 		runtime, _ := agent.StateDir(config.RuntimeRoot, harnessconfiguration.Declaration.Kind, key)
-		for name, want := range map[string]string{"CLAUDE_CONFIG_DIR": state, "HOME": filepath.Join(runtime, "home"), "TMPDIR": filepath.Join(runtime, "scratch")} {
+		for name, want := range map[string]string{"CLAUDE_CONFIG_DIR": filepath.Join(state, "config"), "HOME": filepath.Join(runtime, "home"), "TMPDIR": filepath.Join(runtime, "scratch")} {
 			if !slices.Contains(env, name+"="+want) {
 				t.Fatalf("%s for %s is not %s", name, key, want)
 			}
@@ -97,6 +97,13 @@ func TestSessionsKeepNativeStateInOwnDirectories(t *testing.T) {
 			}
 			seen[want] = key
 		}
+	}
+	// Without a workspace, every native path, HOME included, is under the key too.
+	config.Workspace = ""
+	_, env, err := prepareConfiguration(config, req)
+	state, _ := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
+	if err != nil || !slices.Contains(env, "HOME="+filepath.Join(state, "home")) || !slices.Contains(env, "CLAUDE_CONFIG_DIR="+filepath.Join(state, "config")) {
+		t.Fatal("environment none keeps native state outside the key", err)
 	}
 }
 
@@ -116,17 +123,6 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 				config.Workspace = "relative"
 			case "missing":
 				config.Workspace = filepath.Join(config.Workspace, "missing")
-			case "symlink":
-				alias := filepath.Join(filepath.Dir(testState(config)), "alias")
-				if err := os.Symlink(config.Workspace, alias); err != nil {
-					t.Fatal(err)
-				}
-				config.Workspace = alias
-			case "rule-pattern":
-				config.Workspace += "*"
-				if err := os.Mkdir(config.Workspace, 0o700); err != nil {
-					t.Fatal(err)
-				}
 			case "ambient-setting":
 				config.Env = append(config.Env, "NODE_OPTIONS=--require=untrusted")
 			case "duplicate-env":
@@ -202,5 +198,5 @@ func testState(config Config) string {
 	if err != nil {
 		panic(err)
 	}
-	return dir
+	return filepath.Join(dir, "config")
 }

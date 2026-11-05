@@ -24,7 +24,7 @@ type workspaceProfile struct {
 	EnvNames       []string               `json:"env_names"`
 }
 
-func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {
+func prepareWorkspace(config Config, req proto.PromptRequestPayload, state string) (*workspaceProfile, []string, error) {
 	if req.DisableExecutionEnvironment {
 		return nil, nil, fmt.Errorf("claudesdk: workspace profile does not support the requested execution combination")
 	}
@@ -32,21 +32,17 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 		return nil, nil, fmt.Errorf("claudesdk: workspace root conflicts with the trusted workspace binding")
 	}
 	// Retained history lives with the Environment filesystem; HOME and scratch stay on the Runtime's own disk.
-	kind := harnessconfiguration.Declaration.Kind
-	state, err := agent.StateDir(config.StateRoot, kind, req.AgentStateKey)
+	runtime, err := agent.StateDir(config.RuntimeRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
 	if err != nil {
 		return nil, nil, err
 	}
-	runtime, err := agent.StateDir(config.RuntimeRoot, kind, req.AgentStateKey)
+	env, names, err := trustedEnvironment(config)
 	if err != nil {
 		return nil, nil, err
 	}
-	dirs := workspaceDirs{State: state, Home: filepath.Join(runtime, "home"), Scratch: filepath.Join(runtime, "scratch")}
-	profile, env, err := workspaceEnvironment(config, dirs)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, dir := range []string{dirs.State, dirs.Home, dirs.Scratch} {
+	profile := &workspaceProfile{Home: filepath.Join(runtime, "home"), State: filepath.Join(state, "config"), Scratch: filepath.Join(runtime, "scratch"), EnvNames: names}
+	env = append(env, "HOME="+profile.Home, "TMPDIR="+profile.Scratch, "CLAUDE_CONFIG_DIR="+profile.State)
+	for _, dir := range []string{profile.State, profile.Home, profile.Scratch} {
 		if err = os.MkdirAll(dir, 0o700); err != nil {
 			return nil, nil, err
 		}
@@ -68,18 +64,6 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	}
 	profile.MCP = servers
 	return profile, append(env, credentials...), nil
-}
-
-type workspaceDirs struct{ State, Home, Scratch string }
-
-// Harness state paths and selected model credentials overlay the user environment.
-func workspaceEnvironment(config Config, dirs workspaceDirs) (*workspaceProfile, []string, error) {
-	env, names, err := trustedEnvironment(config)
-	if err != nil {
-		return nil, nil, err
-	}
-	env = append(env, "HOME="+dirs.Home, "TMPDIR="+dirs.Scratch, "CLAUDE_CONFIG_DIR="+dirs.State)
-	return &workspaceProfile{Home: dirs.Home, State: dirs.State, Scratch: dirs.Scratch, EnvNames: names}, env, nil
 }
 
 // trustedEnvironment validates the trusted binding and returns the user environment without Harness state paths or credentials.

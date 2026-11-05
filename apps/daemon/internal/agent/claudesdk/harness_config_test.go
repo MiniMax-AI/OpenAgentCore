@@ -2,10 +2,11 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"path/filepath"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 func TestHarnessConfigReachesBridgeAndOwnsSnapshot(t *testing.T) {

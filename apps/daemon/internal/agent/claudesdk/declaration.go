@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
@@ -37,9 +36,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	}
 	if !filepath.IsAbs(entrypoint) {
 		return fail(fmt.Errorf("%s must be absolute", claudeSDKEntrypointEnv))
-	}
-	if err := paths.ValidateProfile(options.Profile); err != nil {
-		return fail(err)
 	}
 	if !filepath.IsAbs(options.RuntimeRoot) || filepath.Clean(options.RuntimeRoot) != options.RuntimeRoot {
 		return fail(fmt.Errorf("Claude SDK requires an explicit Runtime root"))

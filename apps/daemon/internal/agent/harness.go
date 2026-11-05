@@ -78,7 +78,6 @@ func Narrow(capability *proto.CapabilitySupport, provided bool) {
 
 // DiscoveryOptions provides process context without naming an implementation.
 type DiscoveryOptions struct {
-	Profile string
 	// StateRoot holds private history retained with the Environment filesystem.
 	StateRoot string
 	// RuntimeRoot holds instance-private configuration and process files.

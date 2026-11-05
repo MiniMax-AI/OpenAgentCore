@@ -127,8 +127,12 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return fail("SDK entrypoint must be absolute")
 	}
 	config.Env = withProvider(config.Env, provider)
+	state, err := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
+	if err != nil {
+		return fail(err.Error())
+	}
 	if config.Workspace != "" {
-		profile, env, err := prepareWorkspace(config, req)
+		profile, env, err := prepareWorkspace(config, req, state)
 		if err != nil {
 			return startRequest{}, nil, err
 		}
@@ -139,18 +143,15 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
 		return fail("local execution and history recovery require a dedicated workspace")
 	}
-	state, err := agent.StateDir(config.StateRoot, harnessconfiguration.Declaration.Kind, req.AgentStateKey)
-	if err != nil {
-		return fail(err.Error())
-	}
 	start.Cwd = filepath.Join(state, "work")
-	for _, dir := range []string{state, filepath.Join(state, "tmp"), start.Cwd} {
+	configDir, home, tmp := filepath.Join(state, "config"), filepath.Join(state, "home"), filepath.Join(state, "tmp")
+	for _, dir := range []string{start.Cwd, configDir, home, tmp} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return startRequest{}, nil, err
 		}
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+state, "TMPDIR="+filepath.Join(state, "tmp"))
+	env = append(env, "CLAUDE_CONFIG_DIR="+configDir, "HOME="+home, "TMPDIR="+tmp)
 	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err
