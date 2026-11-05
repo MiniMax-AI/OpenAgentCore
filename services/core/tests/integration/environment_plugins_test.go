@@ -51,7 +51,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err = json.Unmarshal(session.Configuration, &cfg); err != nil || len(cfg.Environment.Plugins) != 1 || !reflect.DeepEqual(cfg.Environment.Directories, setup.CapabilityDirectories) {
 		t.Fatal("frozen public metadata", err)
 	}
-	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.Environment.ID)
 	if err != nil || !reflect.DeepEqual(frozen.Plugins, setup.Plugins) || !reflect.DeepEqual(frozen.CapabilityDirectories, setup.CapabilityDirectories) {
 		t.Fatal("frozen snapshot changed", err)
 	}
@@ -59,7 +59,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err != nil || retry.ID != session.ID {
 		t.Fatal("retry", err)
 	}
-	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.Environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign snapshot", err)
 	}
 }

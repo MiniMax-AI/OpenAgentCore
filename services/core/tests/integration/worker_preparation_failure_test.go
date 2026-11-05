@@ -166,3 +166,38 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	}
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete"})
 }
+
+// The Environment is prepared without a Harness; a connected Runtime that
+// lacks the Session's Harness fails the Session's input instead.
+func TestWorkerFailsInputWhenTheRuntimeLacksTheSessionsHarness(t *testing.T) {
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: false, Capabilities: workerEnvironmentCapabilities()}}})
+	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "Harness status", func() bool {
+		peer, err := h.registry.LookupDevice(h.device.ID)
+		if err != nil {
+			return false
+		}
+		_, _, known := peer.AgentKindStatus("codex")
+		return known
+	})
+	frames := workerFrames(t, h)
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{messageInput("first")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
+	defer stop()
+	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "failed reservation settlement", func() bool {
+		current, err := sessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+		return err == nil && current.State == sessions.EnvironmentInputFailed
+	})
+	session, err := sessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
+	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "runtime_preparation_failed" {
+		t.Fatal("the missing Harness did not fail the input", err)
+	}
+	select {
+	case frame := <-frames:
+		t.Fatal("a Runtime without the Harness was asked to prepare", frame.Type)
+	case <-time.After(600 * time.Millisecond):
+	}
+}

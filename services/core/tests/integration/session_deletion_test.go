@@ -373,7 +373,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 		t.Helper()
 		var current state
 		if err := s.pool.QueryRow(ctx, `SELECT s.deleted_at, p.released_at FROM sessions s
-			JOIN environments e ON e.session_id=s.id JOIN runtime_placements p ON p.environment_id=e.id
+			JOIN environments e ON e.id=s.environment_id JOIN runtime_placements p ON p.environment_id=e.id
 			WHERE s.id=$1 AND p.node_id=$2`, session.ID, d.NodeID).Scan(&current.deleted, &current.released); err != nil {
 			t.Fatal("missing placement", err)
 		}

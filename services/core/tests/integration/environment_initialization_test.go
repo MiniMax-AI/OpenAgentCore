@@ -47,6 +47,8 @@ func awaitInitialization(t *testing.T, s *Store, tenant, environment, state stri
 
 func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *testing.T) {
 	for _, outcome := range []string{"completed", "failed", "unknown", "unavailable", "revoked"} {
+		// Initialization needs no Harness: a Runtime that reports it unavailable still completes.
+		completes := outcome == "completed" || outcome == "unavailable"
 		t.Run(outcome, func(t *testing.T) {
 			s, _ := newManagedTestStore(t)
 			principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
@@ -109,7 +111,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 					}
 					return completedInitialization(request, data)
 				}
-				if outcome != "completed" {
+				if !completes {
 					return proto.RuntimePrepareResultPayload{Outcome: outcome, ErrorCode: "runtime_preparation_unconfirmed"}
 				}
 				return completedInitialization(request, data)
@@ -123,14 +125,14 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				t.Fatal(err)
 			}
 			want := "complete"
-			if outcome != "completed" {
+			if !completes {
 				want = "failed"
 			}
 			awaitInitialization(t, s, principal.TenantID, environment.ID, want)
 			if _, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: principal.TenantID, EnvironmentID: environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
-			if outcome == "completed" {
+			if completes {
 				mu.Lock()
 				got := strings.Join(actions, ",")
 				mu.Unlock()
@@ -145,11 +147,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 					t.Fatal("reconnect reinstalled snapshot", peer.writes.Load())
 				}
 			} else {
-				expected := int32(1)
-				if outcome == "unavailable" {
-					expected = 0
-				}
-				if peer.writes.Load() != expected {
+				if peer.writes.Load() != 1 {
 					t.Fatal("failed, unavailable or revoked effect replayed", peer.writes.Load())
 				}
 				value, err := sessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)

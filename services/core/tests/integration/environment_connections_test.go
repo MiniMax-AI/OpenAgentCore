@@ -28,7 +28,7 @@ func connectionSnapshot(t *testing.T, pool *pgxpool.Pool, id string) string {
 	t.Helper()
 	var value string
 	err := pool.QueryRow(t.Context(), `SELECT jsonb_build_object('environment',to_jsonb(e),'observation',to_jsonb(c),'sequence',s.event_sequence)::text
- FROM environments e JOIN sessions s ON s.id=e.session_id LEFT JOIN environment_connections c ON c.environment_id=e.id WHERE e.id=$1`, id).Scan(&value)
+ FROM environments e JOIN sessions s ON s.environment_id=e.id LEFT JOIN environment_connections c ON c.environment_id=e.id WHERE e.id=$1`, id).Scan(&value)
 	if err != nil {
 		t.Fatal(err)
 	}

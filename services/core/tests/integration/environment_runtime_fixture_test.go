@@ -104,7 +104,7 @@ func assertNoRuntimeAllocation(t *testing.T, h *dispatchHarness) {
 	t.Helper()
 	_, pool := testStore(t)
 	var count int
-	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id IN (SELECT id FROM environments WHERE session_id=$1)", h.session.ID).Scan(&count); err != nil || count != 0 {
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id IN (SELECT environment_id FROM sessions WHERE id=$1)", h.session.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("self-hosted fixture allocated managed compute", count, err)
 	}
 }
