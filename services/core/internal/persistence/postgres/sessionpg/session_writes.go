@@ -62,9 +62,11 @@ func (s *Store) UpdateSession(ctx context.Context, tenantID, sessionID string, e
 		if err != nil {
 			return err
 		}
-		configuration, err := configure(current.Engine, current.Configuration)
-		if err != nil {
-			return err
+		configuration := current.Configuration
+		if configure != nil {
+			if configuration, err = configure(current.Engine, configuration); err != nil {
+				return err
+			}
 		}
 		if encoded == nil {
 			encoded = current.Metadata

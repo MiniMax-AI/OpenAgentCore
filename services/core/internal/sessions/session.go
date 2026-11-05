@@ -92,10 +92,10 @@ type SessionStorage interface {
 	// missing Session is ErrNotFound.
 	WithSessionDeletion(ctx context.Context, tenantID, sessionID string, apply func(context.Context, LockedSession, SessionDeletionTx) error) error
 	// UpdateSession locks the visible Session, replaces its configuration with
-	// the result of configure and, unless encoded is nil, its metadata with
-	// the encoded object, records the write audit and reads the Session as
-	// GetSession does, in one transaction. A failure of configure writes
-	// nothing. A missing Session is ErrNotFound.
+	// the result of configure and its metadata with encoded, keeping each that
+	// is nil, records the write audit and reads the Session as GetSession does,
+	// in one transaction. A failure of configure writes nothing. A missing
+	// Session is ErrNotFound.
 	UpdateSession(ctx context.Context, tenantID, sessionID string, encoded []byte, configure ConfigureSession) (Session, error)
 	// AuditSessionOperation records the write audit of action on the visible
 	// Session under its lock, or returns ErrNotFound.
@@ -172,7 +172,8 @@ type UpdateSessionCommand struct {
 	TenantID  string
 	SessionID string
 	// Metadata replaces the Session's metadata; nil keeps it.
-	Metadata  map[string]string
+	Metadata map[string]string
+	// Configure computes the updated configuration; nil keeps it.
 	Configure ConfigureSession
 }
 

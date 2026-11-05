@@ -50,7 +50,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	command.Configure = func(engine string, stored json.RawMessage) (json.RawMessage, error) {
+	configure := func(engine string, stored json.RawMessage) (json.RawMessage, error) {
 		var fields, agent, reasoning map[string]json.RawMessage
 		_ = json.Unmarshal(stored, &fields) // The stored configuration was validated at creation.
 		_ = json.Unmarshal(fields["agent"], &agent)
@@ -91,6 +91,9 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 			return nil, &fieldError{message: err.Error(), code: "unsupported_or_invalid_configuration"}
 		}
 		return updated, nil
+	}
+	if request.Agent != nil || request.Review != nil {
+		command.Configure = configure
 	}
 	session, err := h.Sessions.UpdateSession(r.Context(), command)
 	if err != nil {

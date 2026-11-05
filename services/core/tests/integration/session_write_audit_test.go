@@ -74,7 +74,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := sessionService(t, s).UpdateSession(sessionAuditContext(t, tenant, "b"), sessions.UpdateSessionCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"private": "not in audit"}, Configure: keepConfiguration}); err != nil {
+	if _, err := sessionService(t, s).UpdateSession(sessionAuditContext(t, tenant, "b"), sessions.UpdateSessionCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"private": "not in audit"}}); err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
@@ -138,7 +138,7 @@ func TestSessionWriteAuditRollback(t *testing.T) {
 			}
 			switch operation {
 			case "update":
-				_, err = sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"new": "value"}, Configure: keepConfiguration})
+				_, err = sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"new": "value"}})
 			case "delete":
 				err = sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: created.ID})
 			case "events":
