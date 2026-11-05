@@ -459,17 +459,17 @@ func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 // settings pass.
 func (d Declaration) ValidateSessionUpdate(before, after proto.TurnSettings) error {
 	u := d.SessionUpdates
-	effort := u.ReasoningEffort
+	effort, effortChange := u.ReasoningEffort, "changed"
 	if after.ReasoningEffort == "" {
-		effort = u.ReasoningEffortReset
+		effort, effortChange = u.ReasoningEffortReset, "reset to null"
 	}
 	for _, check := range []struct {
-		field   string
-		changed bool
-		support proto.CapabilitySupport
-	}{{"agent.model", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", before.ServiceTier != after.ServiceTier, u.ServiceTier}, {"review", before.Review != after.Review, proto.CapabilityFromBool(len(d.Execution.Reviews) > 0)}} {
+		field, change string
+		changed       bool
+		support       proto.CapabilitySupport
+	}{{"agent.model", "changed", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", effortChange, before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", "changed", before.ServiceTier != after.ServiceTier, u.ServiceTier}, {"review", "changed", before.Review != after.Review, proto.CapabilityFromBool(len(d.Execution.Reviews) > 0)}} {
 		if check.changed && !check.support.IsSupported() {
-			return fmt.Errorf("%s cannot be changed on this Harness.", check.field)
+			return fmt.Errorf("%s cannot be %s on this Harness.", check.field, check.change)
 		}
 	}
 	return nil

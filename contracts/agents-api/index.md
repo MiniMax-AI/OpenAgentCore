@@ -84,6 +84,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An empty or blank `agent.model` returns 400 at Session create and update; the pinned schema allows it.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - Codex rejects programmatic tool calling together with `multi_agent`.
+- Codex `review: auto_review` reviews only the actions Codex escalates, such as a forced `rm` or an MCP tool call that needs approval; Codex has full filesystem access inside the sandbox, so other commands and file edits run without review. Its native reviewer calls the model `codex-auto-review` through the Session's model provider, and a provider that does not serve it denies every escalated action with its own error.
 - Codex runs without its native goals (`create_goal`, `get_goal` and `update_goal`), because an active goal starts turns of its own after the Turn ends ([Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)).
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
