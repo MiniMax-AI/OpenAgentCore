@@ -25,7 +25,7 @@ func sessionCreationRequest(input sessionRequest, initial []sessions.Input) (jso
 		agentID = *input.AgentID
 	}
 	var environment any = input.Environment
-	if input.templateID != "" || len(input.initialFiles) > 0 || !input.initialization.Empty() || (input.XAgentsCore != nil && len(input.XAgentsCore.Environment) > 0) {
+	if input.environmentID != "" || input.templateID != "" || len(input.initialFiles) > 0 || !input.initialization.Empty() || (input.XAgentsCore != nil && len(input.XAgentsCore.Environment) > 0) {
 		environment = input.originalEnvironment
 		if len(input.originalEnvironment) == 0 {
 			environment = input.templateEnvironment

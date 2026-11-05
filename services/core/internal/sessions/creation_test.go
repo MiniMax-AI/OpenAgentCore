@@ -34,6 +34,7 @@ type fakeCreationTx struct {
 	saveInitialFiles           func() error
 	saveSetup                  func() error
 	createEnvironment          func() (string, error)
+	attachEnvironment          func() error
 	pruneChanges               func() error
 	auditCreation              func() error
 	loadSession                func() (Session, error)
@@ -83,6 +84,11 @@ func (f *fakeCreationTx) SaveSetup(_ context.Context, setup environmentconfig.Se
 	}
 	f.record("SaveSetup", f.saveSetup != nil, frozen...)
 	return f.saveSetup()
+}
+
+func (f *fakeCreationTx) AttachEnvironment(_ context.Context, environment string) error {
+	f.record("AttachEnvironment", f.attachEnvironment != nil, environment)
+	return f.attachEnvironment()
 }
 
 func (f *fakeCreationTx) CreateEnvironment(context.Context, json.RawMessage, bool) (string, error) {

@@ -11,6 +11,8 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
@@ -170,11 +172,51 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 		return sessions.Creation{}, sessions.ErrInvalidInput
 	}
 	input.SupportsRetainedNativeHistory = declaration.Capabilities.RetainedNativeHistory.IsSupported()
+	if input.EnvironmentID != "" {
+		if err := w.validateAttach(ctx, tenant, input); err != nil {
+			return sessions.Creation{}, err
+		}
+	}
 	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
 	if err == nil {
 		w.wakeScheduler()
+		if input.EnvironmentID != "" && creation.Created {
+			// The Environment's compute may be suspended; the Session's first input needs it.
+			w.hintRuntimeWake(ctx, creation.Session)
+		}
 	}
 	return creation, err
+}
+
+// validateAttach checks the Session against what its standalone Environment
+// was created with: the generation it runs on must keep the Harness's native
+// history, and its Egress, which knows no model provider, must reach the
+// Session's model provider.
+func (w *Worker) validateAttach(ctx context.Context, tenant string, input sessions.CreateSession) error {
+	target, err := w.runtimes.deploymentReader.LifecyclePlacement(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: input.EnvironmentID})
+	if err != nil {
+		return err
+	}
+	var spec sandbox.DeploymentSpec
+	var snapshot Snapshot
+	if json.Unmarshal(target.Specification, &spec) != nil || json.Unmarshal(input.Configuration, &snapshot) != nil {
+		return sessions.ErrInvalidInput
+	}
+	if err := sessions.ValidateRetainedHistory(spec.Workspace != nil, input.SupportsRetainedNativeHistory); err != nil {
+		return err
+	}
+	if input.ModelProvider == nil {
+		return nil
+	}
+	created, err := egressFor(spec.Network, snapshot.Environment.Network, "")
+	if err != nil {
+		return err
+	}
+	if !egressCovers(created, input.ModelProvider.BaseURL) {
+		return &sandbox.ConfigurationError{Class: sandbox.ConfigurationInvalid, Code: "model_provider_unreachable", Param: "environment.environment_id",
+			Message: "The environment's network policy does not allow this session's model provider."}
+	}
+	return nil
 }
 
 // CreateEnvironment validates that the deployment can host a standalone

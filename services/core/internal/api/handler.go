@@ -213,7 +213,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		ModelProviderSource:        plan.source,
 		DeploymentProviderRevision: plan.revision,
 		Creator:                    sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
-		Engine: plan.engine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: plan.configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
+		Engine: plan.engine, EnvironmentID: plan.environmentID, IdempotencyKey: key, Metadata: input.Metadata, Configuration: plan.configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
 	}
 	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {

@@ -60,7 +60,8 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 		if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
 			return sessions.ErrInvalidInput
 		}
-		if snapshot.Environment.Type == "openai_hosted" {
+		// An attached Environment passed workspace and network admission when it was created.
+		if snapshot.Environment.Type == "openai_hosted" && input.EnvironmentID == "" {
 			if err := w.runtimes.validateWorkspaceAdmission(ctx); err != nil {
 				return err
 			}

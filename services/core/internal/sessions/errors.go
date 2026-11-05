@@ -18,6 +18,14 @@ var ErrTurnConflict = errors.New("turn state changed or cancellation was request
 // still waits for admission. It remains a Turn conflict for internal callers.
 var ErrInputPending = fmt.Errorf("%w: session input is still pending", ErrTurnConflict)
 
+// ErrEnvironmentAttached rejects attaching a Session to an Environment that
+// another live Session is attached to.
+var ErrEnvironmentAttached = errors.New("environment is attached to another session")
+
+// ErrEnvironmentTerminal rejects attaching a Session to an Environment that
+// failed or expired.
+var ErrEnvironmentTerminal = errors.New("environment has failed or expired")
+
 // ErrHostedEnvironmentFailed rejects new input on a Session whose hosted
 // Environment failed to provision. It remains ErrEnvironmentUnavailable for
 // internal callers; an expired Environment keeps that plain error.

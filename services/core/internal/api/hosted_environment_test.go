@@ -45,20 +45,29 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 
 // A request naming an existing Environment is rejected by param instead of
 // creating a new Environment, with or without a Template.
-func TestSessionCreationRejectsExistingEnvironmentReference(t *testing.T) {
+// An attach names the Environment and nothing that prepares one: the first
+// member of the pinned `not` constraint in schema order is the param.
+func TestSessionCreationRejectsInvalidEnvironmentReference(t *testing.T) {
 	h, s := validationHandler(t)
-	rejected := `{"error":{"message":"Environment environment_id is not supported.","type":"invalid_request_error","code":"invalid_request_error","param":"environment_id"}}` + "\n"
-	for _, environment := range []string{
-		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}`,
-		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `","environment_template_id":"` + uuid.NewString() + `"}`,
+	id := uuid.NewString()
+	for name, test := range map[string]struct{ environment, extension, param string }{
+		"template":        {`{"type":"openai_hosted","environment_id":"` + id + `","environment_template_id":"` + uuid.NewString() + `"}`, "", "environment.environment_template_id"},
+		"explicit null":   {`{"type":"openai_hosted","environment_id":"` + id + `","network":null}`, "", "environment.network"},
+		"schema order":    {`{"type":"openai_hosted","environment_id":"` + id + `","files":[],"packages":{}}`, "", "environment.packages"},
+		"short":           {`{"type":"openai_hosted","environment_id":"short"}`, "", "environment.environment_id"},
+		"not hosted":      {`{"type":"self_hosted","environment_id":"` + id + `"}`, "", ""},
+		"preparation":     {`{"type":"openai_hosted","environment_id":"` + id + `"}`, `"x_agents_core":{"environment":{"env":{"A":"b"}}},`, "x_agents_core.environment"},
+		"not a string id": {`{"type":"openai_hosted","environment_id":7}`, "", "environment.environment_id"},
 	} {
-		body := `{"agent":{"model":"m"},"environment":` + environment + `,"input":"hi"}`
-		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != rejected {
-			t.Errorf("%s: %d %s", environment, w.Code, w.Body)
+		body := `{` + test.extension + `"agent":{"model":"m"},"environment":` + test.environment + `,"input":"hi"}`
+		w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body))
+		var response struct{ Error struct{ Param *string } }
+		if json.Unmarshal(w.Body.Bytes(), &response) != nil || w.Code != http.StatusBadRequest || (test.param != "" && (response.Error.Param == nil || *response.Error.Param != test.param)) {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
 		}
 	}
 	if s.writes != 0 {
-		t.Fatalf("an Environment reference reached storage: %d writes", s.writes)
+		t.Fatalf("an invalid Environment reference reached storage: %d writes", s.writes)
 	}
 }
 

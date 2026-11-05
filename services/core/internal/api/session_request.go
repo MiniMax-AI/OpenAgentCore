@@ -33,7 +33,9 @@ type sessionRequest struct {
 	harnessConfigSource   v1.ExecutionSource
 	resolvedHarnessConfig json.RawMessage
 	v1.CreateSessionRequest
-	Input               json.RawMessage
+	Input json.RawMessage
+	// environmentID names the standalone Environment the Session attaches to.
+	environmentID       string
 	templateID          string
 	templateEnvironment json.RawMessage
 	agentFields         map[string]json.RawMessage
@@ -43,6 +45,18 @@ type sessionRequest struct {
 // preparation input it carries. The Session surface (extension) also accepts
 // self_hosted Templates and x_agents_core.environment.
 func (input *sessionRequest) decodeEnvironment(raw json.RawMessage, extension bool) error {
+	if extension {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) == nil {
+			id, err := attachedEnvironment(fields, input.XAgentsCore)
+			if err != nil || id != "" {
+				// The attached Environment's own configuration replaces this
+				// placeholder when the Session is planned.
+				input.environmentID, input.originalEnvironment, input.Environment = id, raw, &v1.Environment{Type: "openai_hosted"}
+				return err
+			}
+		}
+	}
 	canonicalEnvironment, err := preparationEnvironmentInput(raw, input.XAgentsCore)
 	if err != nil {
 		return err

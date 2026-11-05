@@ -71,6 +71,11 @@ type CreationTx interface {
 	// A deleted or mismatched one is ErrIdempotencyConflict. Cursor is the
 	// Session's event sequence before anything the transaction admits.
 	UpsertSession(ctx context.Context, session NewSession) (Creation, error)
+	// AttachEnvironment locks the tenant's standalone Environment and attaches
+	// the new Session to it. A missing or Session-owned one is ErrNotFound,
+	// one with a live Session ErrEnvironmentAttached and a failed or expired
+	// one ErrEnvironmentTerminal.
+	AttachEnvironment(ctx context.Context, environment string) error
 	// SaveModelExecution seals the Session's model provider bundle.
 	SaveModelExecution(ctx context.Context, provider v1.ModelProviderInput) error
 	// SaveExecutionConfiguration records the frozen execution projection and,
@@ -136,9 +141,13 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 	if err != nil {
 		return nil, err
 	}
-	environment, retained := "", false
+	environment, retained := input.EnvironmentID, false
 	var target sandbox.DeploymentSpec
-	if creates {
+	if environment != "" {
+		if err := tx.AttachEnvironment(ctx, environment); err != nil {
+			return nil, err
+		}
+	} else if creates {
 		var snapshot struct {
 			Environment struct {
 				Type string `json:"type"`
