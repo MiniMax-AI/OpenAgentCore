@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 1bd8a9d1f30c1986d41a2f0dffe0dcd8bdf3570fbc62d777570ef6750c8a4022
+source_hash: e582f32903a107871ee40c88d2a6858505f1eea4978a7ea1380d264ff2bbc058
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -154,7 +154,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `compaction.async: true`、`experimental.time_awareness: true` 以及 `automations` 和 `computer_use` 工具会被保存，但对所有 Harness 都在 Session 准入时被拒绝，因为没有 Harness 原生运行它们（[Session 准入](wire-semantics.md#session-admission)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
-- 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝；Codex 应用除将 `agent.reasoning.effort` 重置为 null 之外的全部更改，Claude Code 和 MiniMax Code 都不应用（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 
 **执行和历史**
 

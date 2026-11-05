@@ -9,6 +9,8 @@ import (
 // raises a native approval request and applies no inner sandbox.
 const (
 	approvalPolicyNever     = "never"
+	approvalPolicyOnRequest = "on-request"
+	approvalsReviewerUser   = "user"
 	sandboxDangerFullAccess = "danger-full-access"
 )
 

@@ -151,7 +151,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools are saved but rejected at Session admission for every Harness, because none runs them natively ([Session admission](./wire-semantics.md#session-admission)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
-- A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns; Codex applies all but a reset of `agent.reasoning.effort` to null, and Claude Code and MiniMax Code apply none ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 
 **Execution and history**
 
