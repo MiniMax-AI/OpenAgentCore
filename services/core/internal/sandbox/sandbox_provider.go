@@ -61,7 +61,7 @@ type Reference struct{ TenantID, EnvironmentID, AllocationID string }
 type Bootstrap struct {
 	Workspace *workspacefs.Binding `json:",omitempty"`
 	Reference
-	SessionID, DeviceID, CoreURL, Credential string
+	DeviceID, CoreURL, Credential string
 	// SuspendControl is true exactly when the Provider declares checkpoint support.
 	SuspendControl bool
 	// Egress is what the allocation may reach besides its Core connection.
@@ -69,8 +69,9 @@ type Bootstrap struct {
 }
 
 // Egress is what one allocation may reach besides its Core connection. Core
-// derives it from the allocation's deployment generation and the Session's
-// frozen configuration, and sends the same value at Create and at every Resume.
+// derives it from the allocation's deployment generation, the Environment's
+// frozen policy and, for a Session-owned Environment, its Session's model
+// provider, and sends the same value at Create and at every Resume.
 // The Provider enforces exactly it and blocks loopback, link-local (cloud
 // metadata) and every private address that Egress does not name, except where
 // it cannot: E2B cannot block the metadata address.

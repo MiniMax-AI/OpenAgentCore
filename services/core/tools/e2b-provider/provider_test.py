@@ -31,7 +31,7 @@ class Fixture(unittest.TestCase):
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
         self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
-                        'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
+                        'Bootstrap': dict(self.reference, DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True,
                                           Egress={'public': True, 'private_domains': [], 'domains': [], 'endpoints': []})}
         self.request['RuntimeBootstrap'] = {
@@ -43,7 +43,7 @@ class Fixture(unittest.TestCase):
         self.cloud.metadata = Provider(self.request).metadata
         self.cloud.template_id = self.config['Template']
         self.identity = dict(self.reference, InstallationID=self.config['InstallationID'],
-                             SessionID=self.request['Bootstrap']['SessionID'], DeviceID=self.request['Bootstrap']['DeviceID'])
+                             DeviceID=self.request['Bootstrap']['DeviceID'])
         self.ready = json.dumps({'identity': self.identity, 'status': 'daemon_started', 'daemon_pid': 123})
         self.cloud.files.read.return_value = self.ready
         self.api = Mock()

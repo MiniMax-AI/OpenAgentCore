@@ -15,7 +15,7 @@ import managed_init
 
 def payload():
     value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
-                                          'AllocationID', 'SessionID', 'DeviceID']}
+                                          'AllocationID', 'DeviceID']}
     return dict(value, RuntimeBootstrap={'version': 4, 'core_url': 'https://core.example/api/v1',
                 'device_id': value['DeviceID'], 'credential': 'private-managed-token',
                 'environment_id': value['EnvironmentID'], 'workspace': '/environment/workspace', 'suspend_control': True})

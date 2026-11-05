@@ -92,5 +92,5 @@ func validManagedExchange(data []byte) bool {
 	delete(fields, "RuntimeBootstrap")
 	data, _ = json.Marshal(fields)
 	var bootstrap sandbox.Bootstrap
-	return json.Unmarshal(data, &bootstrap) == nil && validReference(bootstrap.Reference) && validID(bootstrap.DeviceID) && validID(bootstrap.SessionID)
+	return json.Unmarshal(data, &bootstrap) == nil && validReference(bootstrap.Reference) && validID(bootstrap.DeviceID)
 }

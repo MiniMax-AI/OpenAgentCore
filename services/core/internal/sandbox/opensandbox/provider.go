@@ -242,7 +242,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return rejected(sandbox.ErrInvalid)
 	}
 	connection := b.RuntimeConnection()
-	if !validReference(r) || !validID(b.SessionID) || !validID(b.DeviceID) || connection.Validate() != nil || b.Egress.Validate() != nil || len(b.Egress.PrivateDomains) > 0 {
+	if !validReference(r) || !validID(b.DeviceID) || connection.Validate() != nil || b.Egress.Validate() != nil || len(b.Egress.PrivateDomains) > 0 {
 		return rejected(sandbox.ErrInvalid)
 	}
 	policy, err := networkPolicy(ctx, b, p.resolve)

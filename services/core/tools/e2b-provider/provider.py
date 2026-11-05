@@ -276,7 +276,7 @@ class Provider:
         if any(bootstrap.get(field) != value for field, value in self.reference.items()):
             raise Failure('invalid')
         identity = dict(self.reference, InstallationID=self.config['InstallationID'],
-                        SessionID=bootstrap['SessionID'], DeviceID=bootstrap['DeviceID'])
+                        DeviceID=bootstrap['DeviceID'])
         self.receipt.save(status='create_pending', bootstrap_identity=identity)
         try:
             cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
