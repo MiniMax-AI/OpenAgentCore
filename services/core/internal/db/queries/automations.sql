@@ -69,8 +69,10 @@ ORDER BY a.next_run_at LIMIT sqlc.arg(page_limit)
 FOR UPDATE OF a SKIP LOCKED;
 
 -- name: InsertScheduledInvocation :exec
-INSERT INTO automation_invocations (id, automation_id, scheduled_at, automation_snapshot, status, skip_reason, delivery)
-SELECT sqlc.arg(id), a.id, sqlc.arg(scheduled_at), sqlc.arg(automation_snapshot), sqlc.arg(status)::text, sqlc.narg(skip_reason)::text, CASE WHEN sqlc.arg(status)::text = 'queued' THEN a.target_contents END
+INSERT INTO automation_invocations (id, automation_id, scheduled_at, automation_snapshot, status, skip_reason, session_id, delivery)
+SELECT sqlc.arg(id), a.id, sqlc.arg(scheduled_at), sqlc.arg(automation_snapshot), sqlc.arg(status)::text, sqlc.narg(skip_reason)::text,
+    CASE WHEN sqlc.arg(status)::text = 'skipped' AND a.target->>'type' = 'existing_session' THEN (a.target->>'session_id')::uuid END,
+    CASE WHEN sqlc.arg(status)::text = 'queued' THEN a.target_contents END
 FROM automations a WHERE a.id = sqlc.arg(automation_id)
 ON CONFLICT (automation_id, scheduled_at) DO NOTHING;
 
@@ -78,14 +80,17 @@ ON CONFLICT (automation_id, scheduled_at) DO NOTHING;
 UPDATE automations SET next_run_at = sqlc.narg(next_run_at), status = CASE WHEN sqlc.arg(completed)::boolean THEN 'completed' ELSE status END WHERE id = sqlc.arg(id);
 
 -- name: DeliverableInvocations :many
-SELECT DISTINCT ON (i.automation_id) i.id, i.automation_id, a.tenant_id, (a.target->>'type')::text AS target_type, i.delivery,
-    p.subject_kind, p.subject_id, s.organization_id, s.project_id
-FROM automation_invocations i
-JOIN automations a ON a.id = i.automation_id
-JOIN projects p ON p.tenant_id = a.tenant_id AND p.archived_at IS NULL
-JOIN execution_project_scopes s ON s.tenant_id = a.tenant_id
-WHERE i.status = 'queued' AND (i.scheduled_at IS NULL OR a.status = 'active')
-ORDER BY i.automation_id, i.created_at, i.id
+SELECT * FROM (
+    SELECT DISTINCT ON (i.automation_id) i.id, i.automation_id, a.tenant_id, (a.target->>'type')::text AS target_type, i.delivery, i.created_at,
+        p.subject_kind, p.subject_id, s.organization_id, s.project_id
+    FROM automation_invocations i
+    JOIN automations a ON a.id = i.automation_id
+    JOIN projects p ON p.tenant_id = a.tenant_id AND p.archived_at IS NULL
+    JOIN execution_project_scopes s ON s.tenant_id = a.tenant_id
+    WHERE i.status = 'queued' AND (i.scheduled_at IS NULL OR a.status = 'active')
+    ORDER BY i.automation_id, i.created_at, i.id
+) oldest
+ORDER BY created_at, id
 LIMIT sqlc.arg(page_limit);
 
 -- name: SettleInvocation :one

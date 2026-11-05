@@ -67,4 +67,22 @@ func TestAutomationRecordingAndSettlement(t *testing.T) {
 	if left, err := store.Deliverable(t.Context(), 10); err != nil || len(left) != 0 {
 		t.Fatalf("settled invocation stays deliverable: %+v %v", left, err)
 	}
+
+	// An occurrence that finds a queued invocation is recorded as skipped, with the target Session.
+	session := uuid.NewString()
+	periodic, err := store.Create(t.Context(), automations.Automation{TenantID: tenant, Type: automations.Periodic, Name: "busy", Metadata: map[string]string{}, Status: automations.Active, Expression: "* * * * *", Timezone: "UTC", NextRunAt: &due,
+		TargetType: "existing_session", Target: []byte(`{"type":"existing_session","session_id":"` + session + `"}`), Contents: []byte(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Invoke(t.Context(), tenant, periodic.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := store.Record(t.Context(), time.Now()); err != nil || n != 1 {
+		t.Fatalf("recorded %d: %v", n, err)
+	}
+	page, err = store.ListInvocations(t.Context(), tenant, periodic.ID, automations.ListQuery{Limit: 10, Ascending: true})
+	if err != nil || len(page.Invocations) != 2 || page.Invocations[0].Status != "queued" || page.Invocations[1].Status != "skipped" || page.Invocations[1].SkipReason != "pending_delivery" || page.Invocations[1].SessionID != session {
+		t.Fatalf("skipped occurrence: %+v %v", page, err)
+	}
 }
