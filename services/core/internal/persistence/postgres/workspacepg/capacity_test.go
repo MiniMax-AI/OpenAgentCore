@@ -78,7 +78,7 @@ func (f fixture) bindTenant(t *testing.T, tenant string, capacity uint32) (works
 		VALUES ($1, $2, 'codex', $3, 'hash', '{"environment":{"type":"openai_hosted"}}')`, session, tenant, uuid.NewString()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environments(id, session_id) VALUES ($1, $2)`, environment, session); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `WITH e AS (INSERT INTO environments(id, tenant_id, configuration, session_owned) SELECT $1, tenant_id, configuration->'environment', true FROM sessions WHERE id=$2 RETURNING id) UPDATE sessions SET environment_id=(SELECT id FROM e) WHERE id=$2`, environment, session); err != nil {
 		t.Fatal(err)
 	}
 	record, err := f.execution.Bind(t.Context(), tenant, environment, *f.active, capacity)
@@ -127,11 +127,11 @@ func TestTenantCapacityAdmission(t *testing.T) {
 	}
 	var creating, ready workspaces.Record
 	var session string
-	if err := f.pool.QueryRow(t.Context(), `SELECT e.session_id FROM environment_workspaces w JOIN environments e ON e.id=w.environment_id JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1 LIMIT 1`, tenant).Scan(&session); err != nil {
+	if err := f.pool.QueryRow(t.Context(), `SELECT s.id FROM environment_workspaces w JOIN environments e ON e.id=w.environment_id JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1 LIMIT 1`, tenant).Scan(&session); err != nil {
 		t.Fatal(err)
 	}
 	var environment string
-	if err := f.pool.QueryRow(t.Context(), `SELECT id FROM environments WHERE session_id=$1`, session).Scan(&environment); err != nil {
+	if err := f.pool.QueryRow(t.Context(), `SELECT environment_id FROM sessions WHERE id=$1`, session).Scan(&environment); err != nil {
 		t.Fatal(err)
 	}
 	creating, err := f.store.Get(t.Context(), tenant, environment)

@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -34,7 +33,10 @@ func (e *Execution) withEnvironment(ctx context.Context, tenant, environment str
 	if err != nil {
 		return err
 	}
-	id := pgunit.PathID(environment)
+	id, err := parseID(environment)
+	if err != nil {
+		return err
+	}
 	return WithEnvironment(ctx, e.lease, tenantID, id, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, attached pgtype.UUID) error {
 		return apply(ctx, &environmentTx{SessionTx: BindSession(q, tenantID, attached), environment: id}, locked)
 	})

@@ -255,22 +255,6 @@ func (q *Queries) LockWorkspaceConfigurations(ctx context.Context) error {
 	return err
 }
 
-const lockWorkspaceEnvironment = `-- name: LockWorkspaceEnvironment :one
-SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE
-`
-
-type LockWorkspaceEnvironmentParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) LockWorkspaceEnvironment(ctx context.Context, arg LockWorkspaceEnvironmentParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, lockWorkspaceEnvironment, arg.TenantID, arg.ID)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const lockWorkspaceTenant = `-- name: LockWorkspaceTenant :exec
 SELECT pg_advisory_xact_lock(hashtext('oac.workspace-tenant-capacity'), hashtext($1::uuid::text))
 `
@@ -374,16 +358,4 @@ func (q *Queries) WorkspaceComputeReleased(ctx context.Context, environmentID pg
 	var released bool
 	err := row.Scan(&released)
 	return released, err
-}
-
-const workspaceEnvironmentReclaimed = `-- name: WorkspaceEnvironmentReclaimed :one
-SELECT (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
-FROM environments e WHERE e.id = $1
-`
-
-func (q *Queries) WorkspaceEnvironmentReclaimed(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, workspaceEnvironmentReclaimed, id)
-	var reclaimed bool
-	err := row.Scan(&reclaimed)
-	return reclaimed, err
 }

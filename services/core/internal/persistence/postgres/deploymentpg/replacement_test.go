@@ -290,7 +290,7 @@ func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	if err != nil || started.Reset == nil {
 		t.Fatal(started, err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET created_at=$2 WHERE id=$1`, retained[4].AttachedSessionID, started.Reset.RequestedAt.Add(time.Second)); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET created_at=$2 WHERE id=$1`, retained[4].EnvironmentID, started.Reset.RequestedAt.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	candidates, err := f.adapter.ResetSessions(t.Context(), "", true)

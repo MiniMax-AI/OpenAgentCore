@@ -17,6 +17,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
@@ -189,12 +191,7 @@ func (e *Execution) Bind(ctx context.Context, tenant, environment, configuration
 		return workspaces.Record{}, workspacefs.ErrInvalid
 	}
 	var result workspaces.Record
-	err = e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		deleted, err := lockEnvironment(ctx, q, tenant, environment)
-		if err != nil {
-			return err
-		}
+	err = e.withEnvironment(ctx, tenant, environment, func(ctx context.Context, q *sqlc.Queries, deleted bool) error {
 		if deleted {
 			return workspaces.ErrConflict
 		}
@@ -321,12 +318,7 @@ func (e *Execution) change(ctx context.Context, ref workspacefs.Reference, apply
 	if err := ref.Validate(); err != nil {
 		return err
 	}
-	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		deleted, err := lockEnvironment(ctx, q, ref.TenantID, ref.EnvironmentID)
-		if err != nil {
-			return err
-		}
+	return e.withEnvironment(ctx, ref.TenantID, ref.EnvironmentID, func(ctx context.Context, q *sqlc.Queries, deleted bool) error {
 		current, err := get(ctx, q, e.credentials, ref.TenantID, ref.EnvironmentID)
 		if err != nil {
 			return err
@@ -338,16 +330,16 @@ func (e *Execution) change(ctx context.Context, ref workspacefs.Reference, apply
 	})
 }
 
-func lockEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment string) (bool, error) {
-	id, err := q.LockWorkspaceEnvironment(ctx, sqlc.LockWorkspaceEnvironmentParams{TenantID: pgunit.PathID(tenant), ID: pgunit.PathID(environment)})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, workspaces.ErrNotFound
+// withEnvironment runs apply under the Environment lock, after the attached
+// Session's, and reports whether a Session-owned Environment lost its Session.
+func (e *Execution) withEnvironment(ctx context.Context, tenant, environment string, apply func(context.Context, *sqlc.Queries, bool) error) error {
+	err := sessionpg.WithEnvironment(ctx, e.lease, pgunit.PathID(tenant), pgunit.PathID(environment), func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, _ pgtype.UUID) error {
+		return apply(ctx, q, locked.Deleted)
+	})
+	if errors.Is(err, sessions.ErrNotFound) {
+		return workspaces.ErrNotFound
 	}
-	if err != nil {
-		return false, err
-	}
-	// Read after acquiring the Environment lock with a fresh statement snapshot.
-	return q.WorkspaceEnvironmentReclaimed(ctx, id)
+	return err
 }
 
 func get(ctx context.Context, q *sqlc.Queries, c credentials, tenant, environment string) (workspaces.Record, error) {

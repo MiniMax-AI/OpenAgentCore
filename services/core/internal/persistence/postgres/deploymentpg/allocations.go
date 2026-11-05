@@ -223,7 +223,7 @@ func (t *reservationTx) ReservePlacement(p placement.Placement) error {
 		return err
 	}
 	if reserved.NodeID == "" {
-		return placementpg.ReservePlacement(t.ctx, t.q, t.session, p)
+		return placementpg.ReservePlacement(t.ctx, t.q, t.environment, p)
 	}
 	node, err := parseID(p.NodeID)
 	if err != nil {

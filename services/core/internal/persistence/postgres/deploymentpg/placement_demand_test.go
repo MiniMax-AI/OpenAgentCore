@@ -69,7 +69,7 @@ func TestPlacementDemandPagesByOriginalDemandTime(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		key := pendingHostedEnvironment(t, f)
 		// UUIDs are random; demand order must follow durable acceptance time.
-		if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET created_at=$2 WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID, at.Add(time.Duration(i)*time.Second)); err != nil {
+		if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET created_at=$2 WHERE id=$1`, key.EnvironmentID, at.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,7 +101,7 @@ func TestFirstPlacementChecksActualGenerationHistorySupport(t *testing.T) {
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	f.connect(t, node.NodeID)
 	key := pendingHostedEnvironment(t, f)
-	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT id FROM sessions WHERE environment_id=$1 AND deleted_at IS NULL)`, key.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := changes.EnsurePlacement(t.Context(), key, installation); !errors.Is(err, placement.ErrNodeUnavailable) {
@@ -111,7 +111,7 @@ func TestFirstPlacementChecksActualGenerationHistorySupport(t *testing.T) {
 	if err != nil || len(pending) != 1 {
 		t.Fatal(pending, err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='codex' WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='codex' WHERE id=(SELECT id FROM sessions WHERE environment_id=$1 AND deleted_at IS NULL)`, key.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {

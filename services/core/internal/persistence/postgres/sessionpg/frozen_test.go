@@ -25,8 +25,8 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 	pool := pgtest.Open(t)
 	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
-	tenantID, sessionID, _ := newEnvironment(t, pool, "self_hosted", "pending")
-	tenant, session := uuidText(tenantID), uuidText(sessionID)
+	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
+	tenant, session, environment := uuidText(tenantID), uuidText(sessionID), uuidText(environmentID)
 	binding := credentialcrypto.EnvironmentSetupBinding{TenantID: tenant, Resource: "session", OwnerID: session, Field: "initialization"}
 	freeze := func(plaintext string, binding credentialcrypto.EnvironmentSetupBinding) []byte {
 		t.Helper()
@@ -37,7 +37,7 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 		return sealed
 	}
 
-	if setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, session); err != nil || !reflect.DeepEqual(setup, environmentconfig.Setup{}) {
+	if setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, environment); err != nil || !reflect.DeepEqual(setup, environmentconfig.Setup{}) {
 		t.Fatalf("Session without a frozen setup: %+v, %v", setup, err)
 	}
 	for name, ids := range map[string][2]string{"unknown Session": {tenant, uuid.NewString()}, "other tenant": {uuid.NewString(), session}, "malformed Session": {tenant, "session"}} {
@@ -46,8 +46,8 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 		}
 	}
 
-	exec(t, pool, `INSERT INTO environment_setups(session_id, contents) VALUES ($1, $2)`, sessionID, freeze(`{"env":{"GREETING":"hello"},"packages":{"npm":["left-pad"],"python":[]}}`, binding))
-	setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, session)
+	exec(t, pool, `INSERT INTO environment_setups(environment_id, contents) VALUES ($1, $2)`, environmentID, freeze(`{"env":{"GREETING":"hello"},"packages":{"npm":["left-pad"],"python":[]}}`, binding))
+	setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, environment)
 	if err != nil || setup.Env["GREETING"] != "hello" || !reflect.DeepEqual(setup.Packages.NPM, []string{"left-pad"}) {
 		t.Fatalf("frozen setup %+v, %v", setup, err)
 	}
@@ -64,14 +64,14 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 		"empty system packages":      freeze(`{"packages":{"npm":[],"python":[],"system":[]}}`, binding),
 		"system packages":            freeze(`{"packages":{"npm":[],"python":[],"system":["jq"]}}`, binding),
 	} {
-		exec(t, pool, `UPDATE environment_setups SET contents = $2 WHERE session_id = $1`, sessionID, contents)
-		if _, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, session); !corruptFrozenData(err) {
+		exec(t, pool, `UPDATE environment_setups SET contents = $2 WHERE environment_id = $1`, environmentID, contents)
+		if _, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, environment); !corruptFrozenData(err) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
 
 	exec(t, pool, `UPDATE sessions SET deleted_at = clock_timestamp() WHERE id = $1`, sessionID)
-	if _, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, session); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted Session: %v", err)
 	}
 }
@@ -80,8 +80,8 @@ func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 	pool := pgtest.Open(t)
 	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
-	tenantID, sessionID, _ := newEnvironment(t, pool, "self_hosted", "pending")
-	tenant, session := uuidText(tenantID), uuidText(sessionID)
+	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
+	tenant, session, environment := uuidText(tenantID), uuidText(sessionID), uuidText(environmentID)
 	file := uuid.NewString()
 	binding := credentialcrypto.EnvironmentFileBinding{TenantID: tenant, Resource: "session", OwnerID: session, FileID: file}
 	freeze := func(body string, binding credentialcrypto.EnvironmentFileBinding) []byte {
@@ -92,16 +92,16 @@ func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 		}
 		return sealed
 	}
-	exec(t, pool, `INSERT INTO initial_environment_files(id, session_id, position, path, size_bytes, contents) VALUES ($1, $2, 0, 'notes.txt', 5, $3)`, file, sessionID, freeze("hello", binding))
+	exec(t, pool, `INSERT INTO initial_environment_files(id, environment_id, position, path, size_bytes, contents) VALUES ($1, $2, 0, 'notes.txt', 5, $3)`, file, environmentID, freeze("hello", binding))
 
-	metadata, body, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, session, 0)
+	metadata, body, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, environment, 0)
 	if err != nil || metadata.ID != file || metadata.Path != "notes.txt" || metadata.SizeBytes == nil || *metadata.SizeBytes != 5 || string(body) != "hello" {
 		t.Fatalf("frozen file %+v %q, %v", metadata, body, err)
 	}
-	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, session, 1); !errors.Is(err, sessions.ErrNotFound) {
+	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, environment, 1); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("missing position: %v", err)
 	}
-	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), uuid.NewString(), session, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), uuid.NewString(), environment, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("other tenant: %v", err)
 	}
 
@@ -113,13 +113,13 @@ func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 		"size mismatch":           freeze("hello!", binding),
 	} {
 		exec(t, pool, `UPDATE initial_environment_files SET contents = $2 WHERE id = $1`, file, contents)
-		if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, session, 0); !corruptFrozenData(err) {
+		if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, environment, 0); !corruptFrozenData(err) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
 
 	exec(t, pool, `UPDATE sessions SET deleted_at = clock_timestamp() WHERE id = $1`, sessionID)
-	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, session, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), tenant, environment, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted Session: %v", err)
 	}
 }

@@ -26,8 +26,8 @@ func (q *Queries) AttachSessionEnvironment(ctx context.Context, arg AttachSessio
 }
 
 const createEnvironment = `-- name: CreateEnvironment :exec
-INSERT INTO environments (id, tenant_id, configuration, initialization)
-VALUES ($1, $2, $3, CASE WHEN $4::boolean THEN 'pending' ELSE 'complete' END)
+INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization)
+VALUES ($1, $2, $3, true, CASE WHEN $4::boolean THEN 'pending' ELSE 'complete' END)
 `
 
 type CreateEnvironmentParams struct {

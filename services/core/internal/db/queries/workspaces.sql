@@ -41,13 +41,6 @@ UPDATE workspace_fs_configurations SET active = true WHERE id = $1;
 -- name: GetActiveWorkspaceConfiguration :one
 SELECT * FROM workspace_fs_configurations WHERE active;
 
--- name: LockWorkspaceEnvironment :one
-SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
-
--- name: WorkspaceEnvironmentReclaimed :one
-SELECT (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
-FROM environments e WHERE e.id = $1;
-
 -- name: GetEnvironmentWorkspace :one
 SELECT sqlc.embed(w), sqlc.embed(c), e.tenant_id
 FROM environment_workspaces w

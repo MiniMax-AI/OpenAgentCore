@@ -395,8 +395,8 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 		t.Fatal("Session configuration", string(created.Session.Configuration))
 	}
 	sealed := `FROM (SELECT encrypted_config AS b FROM session_model_execution WHERE session_id=$1
- UNION ALL SELECT contents FROM environment_setups WHERE session_id=$1
- UNION ALL SELECT contents FROM initial_environment_files WHERE session_id=$1) frozen`
+ UNION ALL SELECT contents FROM environment_setups WHERE environment_id=(SELECT environment_id FROM sessions WHERE id=$1)
+ UNION ALL SELECT contents FROM initial_environment_files WHERE environment_id=(SELECT environment_id FROM sessions WHERE id=$1)) frozen`
 	if countRows(t, pool, "SELECT count(*) "+sealed, id) != 4 || countRows(t, pool, "SELECT count(*) "+sealed+" WHERE position($2::bytea IN b) > 0", id, []byte(canary)) != 0 {
 		t.Fatal("frozen data is missing or not sealed")
 	}
@@ -406,12 +406,12 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 		if err != nil || provider.APIKey != canary {
 			t.Fatal("frozen provider", err)
 		}
-		setup, err := store.ReadEnvironmentSetup(ctx, tenant, id)
+		setup, err := store.ReadEnvironmentSetup(ctx, tenant, created.Session.Environment.ID)
 		if err != nil || len(setup.Skills) != 2 || !reflect.DeepEqual(setup.Skills[0], inline) || setup.Skills[1].Metadata.Version != "2" || !bytes.Equal(setup.Skills[1].Archive, latest) {
 			t.Fatal("frozen Skills", err)
 		}
 		for position := range input.InitialFiles {
-			if _, body, err := store.ReadInitialEnvironmentFile(ctx, tenant, id, position); err != nil || string(body) != canary {
+			if _, body, err := store.ReadInitialEnvironmentFile(ctx, tenant, created.Session.Environment.ID, position); err != nil || string(body) != canary {
 				t.Fatal("frozen initial file", position, err)
 			}
 		}
@@ -520,7 +520,7 @@ func TestHostedCreationAdmitsUnderDeploymentLockAndLeavesComputeUnreserved(t *te
 	if err != nil || !queued.Created {
 		t.Fatal("creation without available compute was not accepted", queued, err)
 	}
-	if count := countRows(t, pool, "SELECT count(*) FROM sessions s JOIN environments e ON e.session_id=s.id WHERE s.tenant_id=$1", tenant); count != 2 {
+	if count := countRows(t, pool, "SELECT count(*) FROM sessions s JOIN environments e ON s.environment_id=e.id WHERE s.tenant_id=$1", tenant); count != 2 {
 		t.Fatal("accepted hosted creation did not preserve both Sessions", count)
 	}
 	if count := countRows(t, pool, "SELECT count(*) FROM runtime_placements WHERE environment_id=$1", queued.Session.Environment.ID); count != 0 {
@@ -596,7 +596,7 @@ func TestSkillFreezeSerializesWithVersionDeletion(t *testing.T) {
 		if creation.err != nil {
 			t.Fatal(creation.err)
 		}
-		setup, err := store.ReadEnvironmentSetup(ctx, tenant, creation.creation.Session.ID)
+		setup, err := store.ReadEnvironmentSetup(ctx, tenant, creation.creation.Session.Environment.ID)
 		if err != nil || setup.Skills[0].Metadata.Version != "2" || !bytes.Equal(setup.Skills[0].Archive, second) {
 			t.Fatal("frozen version after its deletion", err)
 		}
