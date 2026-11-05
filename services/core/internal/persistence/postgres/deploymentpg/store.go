@@ -291,7 +291,7 @@ func (s *Store) ResetSessions(ctx context.Context, after string, force bool) ([]
 		result = append(result, deployment.ResetSession{SessionID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
 	}
 	if len(result) < 32 {
-		environments, err := s.pool.Queries().ListSandboxResetEnvironments(ctx)
+		environments, err := s.pool.Queries().ListSandboxResetEnvironments(ctx, sqlc.ListSandboxResetEnvironmentsParams{AfterID: cursor, Force: force})
 		if err != nil {
 			return nil, err
 		}

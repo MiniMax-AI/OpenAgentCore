@@ -28,8 +28,8 @@ func (s *Store) WithEnvironmentCreation(ctx context.Context, tenantID string, id
 	})
 }
 
-func findEnvironmentCreation(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, key string) (sessions.EnvironmentCreationRecord, error) {
-	row, err := q.FindEnvironmentCreation(ctx, sqlc.FindEnvironmentCreationParams{TenantID: tenant, IdempotencyKey: pgtype.Text{String: key, Valid: true}})
+func findEnvironmentCreation(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, creator identity.Subject, key string) (sessions.EnvironmentCreationRecord, error) {
+	row, err := q.FindEnvironmentCreation(ctx, sqlc.FindEnvironmentCreationParams{TenantID: tenant, CreatorKind: pgtype.Text{String: creator.Kind, Valid: true}, CreatorID: pgtype.Text{String: creator.ID, Valid: true}, IdempotencyKey: pgtype.Text{String: key, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessions.EnvironmentCreationRecord{}, sessions.ErrNotFound
 	}
@@ -49,10 +49,10 @@ type standaloneCreationTx struct {
 }
 
 func (t *standaloneCreationTx) FindCreation(ctx context.Context) (sessions.EnvironmentCreationRecord, error) {
-	if err := t.q.LockEnvironmentCreation(ctx, sqlc.LockEnvironmentCreationParams{TenantID: t.tenantID, IdempotencyKey: t.identity.Key}); err != nil {
+	if err := t.q.LockEnvironmentCreation(ctx, sqlc.LockEnvironmentCreationParams{TenantID: t.tenantID, CreatorKind: t.identity.Creator.Kind, CreatorID: t.identity.Creator.ID, IdempotencyKey: t.identity.Key}); err != nil {
 		return sessions.EnvironmentCreationRecord{}, err
 	}
-	return findEnvironmentCreation(ctx, t.q, t.tenant, t.identity.Key)
+	return findEnvironmentCreation(ctx, t.q, t.tenant, t.identity.Creator, t.identity.Key)
 }
 
 func (t *standaloneCreationTx) CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error) {

@@ -171,8 +171,9 @@ func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allo
 
 // ExpireIdleUnattached ends a standalone Environment's compute at the
 // deployment idle timeout when its Provider cannot checkpoint: no Session is
-// attached, nothing is pending and its initialization is complete. It revokes
-// the device and expires the Environment in one commit; the allocation then
+// attached, nothing is pending and its initialization is complete, or the
+// Environment already failed or expired and its compute is released at once.
+// It revokes the device and expires the Environment in one commit; the allocation then
 // awaits ordinary cleanup. Any other state is ErrNotIdle.
 func (e *ExecutionOperations) ExpireIdleUnattached(ctx context.Context, owner Allocation) (Allocation, error) {
 	return e.cleanup(ctx, owner, idleExpiry)
@@ -272,7 +273,12 @@ func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Al
 	if err != nil {
 		return err
 	}
-	if environment.Initialization != "complete" || environment.Status == "failed" || environment.Status == "expired" {
+	if environment.Status == "failed" || environment.Status == "expired" {
+		// Nothing can use this compute again: release it without waiting.
+		return nil
+	}
+	if environment.Initialization != "complete" {
+		// The initialization budget fails it, which ends its compute here.
 		return ErrNotIdle
 	}
 	activity, err := tx.LoadActivity(current)

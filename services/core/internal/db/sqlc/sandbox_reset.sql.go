@@ -170,20 +170,27 @@ SELECT e.tenant_id, e.id
 FROM environments e
 WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
     AND e.status NOT IN ('failed', 'expired')
+    AND e.id > $1::uuid
     AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+    AND ($2::boolean OR NOT EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
         OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
         OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
 ORDER BY e.id LIMIT 32
 `
 
+type ListSandboxResetEnvironmentsParams struct {
+	AfterID pgtype.UUID `json:"after_id"`
+	Force   bool        `json:"force"`
+}
+
 type ListSandboxResetEnvironmentsRow struct {
 	TenantID pgtype.UUID `json:"tenant_id"`
 	ID       pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) ListSandboxResetEnvironments(ctx context.Context) ([]ListSandboxResetEnvironmentsRow, error) {
-	rows, err := q.db.Query(ctx, listSandboxResetEnvironments)
+func (q *Queries) ListSandboxResetEnvironments(ctx context.Context, arg ListSandboxResetEnvironmentsParams) ([]ListSandboxResetEnvironmentsRow, error) {
+	rows, err := q.db.Query(ctx, listSandboxResetEnvironments, arg.AfterID, arg.Force)
 	if err != nil {
 		return nil, err
 	}

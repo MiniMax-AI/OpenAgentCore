@@ -58,7 +58,9 @@ SELECT e.tenant_id, e.id
 FROM environments e
 WHERE NOT e.session_owned AND e.configuration->>'type' = 'openai_hosted'
     AND e.status NOT IN ('failed', 'expired')
+    AND e.id > sqlc.arg(after_id)::uuid
     AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+    AND (sqlc.arg(force)::boolean OR NOT EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
         OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
         OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))

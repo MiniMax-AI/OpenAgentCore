@@ -138,6 +138,17 @@ func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, id pgtype.U
 	return err
 }
 
+const recordStandaloneDetach = `-- name: RecordStandaloneDetach :exec
+UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
+FROM sessions s JOIN environments e ON e.id = s.environment_id
+WHERE s.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released'
+`
+
+func (q *Queries) RecordStandaloneDetach(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, recordStandaloneDetach, id)
+	return err
+}
+
 const runtimeComputeBlocksAdmission = `-- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN sessions s ON s.environment_id = a.environment_id

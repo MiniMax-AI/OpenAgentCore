@@ -115,7 +115,7 @@ func egressCovers(created sandbox.Egress, modelBaseURL string) bool {
 		return true
 	}
 	ip, err := netip.ParseAddr(host)
-	return created.Public && (err != nil || !ip.IsPrivate() && !ip.IsLinkLocalUnicast())
+	return created.Public && (err != nil || sandbox.PublicAddress(ip.Unmap()))
 }
 
 // inCap reports whether the cap lists name exactly or as a subdomain through a

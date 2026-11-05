@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
@@ -101,5 +103,47 @@ func TestUnattachedEnvironmentExpiresWhenRetentionEnds(t *testing.T) {
 	cleaned, err := changes.RequestCleanup(t.Context(), owner)
 	if err != nil || cleaned.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "expired" {
 		t.Fatal("retention end did not expire the Environment", cleaned, err)
+	}
+}
+
+// Deleting the attached Session starts the idle clock of an Environment that
+// outlives it, so it does not expire the moment it detaches.
+func TestDetachStartsTheIdleClock(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, _ := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "disabled")
+	session := uuid.New()
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash, configuration, environment_id)
+		VALUES ($1, $2, 'codex', 'key', 'hash', '{}', $3)`, session, owner.Key().TenantID, owner.Key().EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlc.New(f.pool).RecordStandaloneDetach(t.Context(), pgtype.UUID{Bytes: session, Valid: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET deleted_at=now() WHERE id=$1`, session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.ExpireIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
+		t.Fatal("expired right after the detach", err)
+	}
+}
+
+// A failed unattached Environment releases its compute without waiting for the
+// idle timeout.
+func TestFailedUnattachedEnvironmentReleasesItsCompute(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, _ := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "disabled")
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp(), compute_phase_changed_at=clock_timestamp(), created_at=clock_timestamp() WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET status='failed' WHERE id=$1`, owner.Key().EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	released, err := changes.ExpireIdleUnattached(t.Context(), owner)
+	if err != nil || released.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "failed" {
+		t.Fatal("failed Environment kept its compute", released, err)
 	}
 }

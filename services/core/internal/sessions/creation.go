@@ -144,6 +144,11 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 	environment, retained := input.EnvironmentID, false
 	var target sandbox.DeploymentSpec
 	if environment != "" {
+		// Attaching starts hosted work, so it meets the same deployment state
+		// as a new Environment; the Environment's own admission already ran.
+		if _, err := s.admitHosted(ctx, tx); err != nil {
+			return nil, err
+		}
 		if err := tx.AttachEnvironment(ctx, environment); err != nil {
 			return nil, err
 		}

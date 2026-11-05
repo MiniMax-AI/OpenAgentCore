@@ -6,11 +6,11 @@ VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(configuration), sqlc.narg(id
         sqlc.narg(idempotency_key), sqlc.narg(request_hash), sqlc.narg(creator_kind), sqlc.narg(creator_id));
 
 -- name: LockEnvironmentCreation :exec
-SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(tenant_id)::text || ':' || sqlc.arg(idempotency_key)::text, 0));
+SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(tenant_id)::text || ':' || sqlc.arg(creator_kind)::text || ':' || sqlc.arg(creator_id)::text || ':' || sqlc.arg(idempotency_key)::text, 0));
 
 -- name: FindEnvironmentCreation :one
 SELECT id, idempotency_key, request_hash, creator_kind, creator_id
-FROM environments WHERE tenant_id = $1 AND idempotency_key = $2;
+FROM environments WHERE tenant_id = $1 AND creator_kind = $2 AND creator_id = $3 AND idempotency_key = $4;
 
 -- name: AttachSessionEnvironment :exec
 UPDATE sessions SET environment_id = $2 WHERE id = $1;
@@ -33,8 +33,7 @@ FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.delete
 WHERE e.tenant_id = $1 AND e.id = $2;
 
 -- name: LockEnvironment :one
-SELECT e.session_owned, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS attached_session_id
-FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
+SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE;
 
 -- name: GetStandaloneEnvironmentCursor :one
 SELECT created_at, id FROM environments WHERE tenant_id = $1 AND id = $2 AND NOT session_owned;

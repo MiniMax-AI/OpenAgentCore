@@ -52,20 +52,27 @@ type environmentPreparation struct {
 	InitialFiles   []environmentconfig.InitialFile
 }
 
+// admitHosted locks the sandbox deployment and checks that it admits new
+// hosted work, which a pending reset or a closed deployment refuses.
+func (s *Service) admitHosted(ctx context.Context, tx EnvironmentCreationTx) (placement.Deployment, error) {
+	if s.rules == nil {
+		return placement.Deployment{}, errors.New("hosted Environment admission requires placement rules")
+	}
+	deployment, err := tx.LockDeployment(ctx)
+	if err != nil {
+		return deployment, err
+	}
+	return deployment, s.rules.CheckAdmission(deployment, "")
+}
+
 // createEnvironment is the one path that creates and prepares an Environment,
 // in lock order: the hosted deployment, then the Skills. It returns the
 // Environment ID and the locked deployment, empty unless hosted.
 func (s *Service) createEnvironment(ctx context.Context, tx EnvironmentCreationTx, in environmentPreparation) (string, placement.Deployment, error) {
 	var deployment placement.Deployment
 	if in.Hosted {
-		if s.rules == nil {
-			return "", deployment, errors.New("hosted Environment creation requires placement rules")
-		}
 		var err error
-		if deployment, err = tx.LockDeployment(ctx); err != nil {
-			return "", deployment, err
-		}
-		if err := s.rules.CheckAdmission(deployment, ""); err != nil {
+		if deployment, err = s.admitHosted(ctx, tx); err != nil {
 			return "", deployment, err
 		}
 	}
@@ -169,7 +176,7 @@ func (i EnvironmentIdentity) decide(record EnvironmentCreationRecord) error {
 }
 
 // ReplayEnvironment returns the Environment already stored under the key, if
-// any, for the same request and creator. It runs before the request's
+// any, under the creator's key for the same request. It runs before the request's
 // references resolve, so a retry compares the request as sent.
 func (s *Service) ReplayEnvironment(ctx context.Context, tenant string, creator identity.Subject, key string, request json.RawMessage) (string, bool, error) {
 	ident, err := s.environmentIdentity(key, creator, request)
@@ -194,9 +201,9 @@ func (s *Service) ReplayEnvironment(ctx context.Context, tenant string, creator 
 	return environment, environment != "", err
 }
 
-// CreateEnvironment creates a standalone Environment under a tenant-scoped
-// key, so retries, including concurrent ones, return the stored Environment.
-// The same key with another request or creator is ErrIdempotencyConflict.
+// CreateEnvironment creates a standalone Environment under a key scoped to the
+// Project and creator, so retries, including concurrent ones, return the stored
+// Environment. The same key with another request is ErrIdempotencyConflict.
 func (s *Service) CreateEnvironment(ctx context.Context, tenant string, input CreateEnvironment) (string, error) {
 	ident, err := s.environmentIdentity(input.IdempotencyKey, input.Creator, input.CreationRequest)
 	if err != nil {

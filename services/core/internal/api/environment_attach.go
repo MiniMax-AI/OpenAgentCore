@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -26,6 +27,21 @@ func attachedEnvironment(fields map[string]json.RawMessage, extension *v1.Sessio
 		if _, present := fields[name]; present {
 			return "", &fieldError{param: "environment." + name, message: fmt.Sprintf("environment.%s cannot be combined with environment.environment_id.", name)}
 		}
+	}
+	// Any other member is unknown beside environment_id; report the first in
+	// name order so the answer is deterministic.
+	var unknown []string
+	for name := range fields {
+		if name != "type" && name != "environment_id" && !slices.Contains(attachExclusive, name) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		name := slices.Min(unknown)
+		if !echoableField(name) {
+			return "", errUnknownParameter
+		}
+		return "", &fieldError{param: "environment." + name, message: "Unknown parameter: 'environment." + name + "'."}
 	}
 	if extension != nil && !isNull(extension.Environment) {
 		return "", &fieldError{param: "x_agents_core.environment", message: "x_agents_core.environment cannot be combined with environment.environment_id."}

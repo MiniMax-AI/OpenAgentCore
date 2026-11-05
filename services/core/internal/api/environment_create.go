@@ -37,6 +37,11 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, &fieldError{param: "vault_ids", message: "Vault credentials attach to Sessions, not to standalone Environments."})
 		return
 	}
+	var members map[string]json.RawMessage
+	if _ = json.Unmarshal(body.Environment, &members); members["environment_id"] != nil {
+		writeFieldError(w, &fieldError{param: "environment.environment_id", message: "Unknown parameter: 'environment.environment_id'."})
+		return
+	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
 		key = uuid.NewString()

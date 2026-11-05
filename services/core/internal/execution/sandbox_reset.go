@@ -105,6 +105,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		var err error
 		if candidate.SessionID == "" {
 			err = m.deployment.ExpireResetEnvironment(ctx, deployment.AllocationKey{TenantID: candidate.TenantID, EnvironmentID: candidate.EnvironmentID}, current.Generation, current.Reset.RequestedAt)
+			m.resetCursor = candidate.EnvironmentID
 		} else {
 			_, err = m.deployment.ArchiveResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
 			m.resetCursor = candidate.SessionID

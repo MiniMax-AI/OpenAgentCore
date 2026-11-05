@@ -42,6 +42,10 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	if err := t.q.ReleaseUnallocatedRuntimePlacement(ctx, t.session); err != nil {
 		return err
 	}
+	// Detaching starts the idle clock of a standalone Environment's compute.
+	if err := t.q.RecordStandaloneDetach(ctx, t.session); err != nil {
+		return err
+	}
 	return t.q.MarkSessionDeleted(ctx, t.session)
 }
 

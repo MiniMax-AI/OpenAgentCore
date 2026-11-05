@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -89,18 +88,14 @@ func writeSessionConfigurationError(w http.ResponseWriter, r *http.Request, err 
 }
 
 // attachableEnvironment loads the standalone Environment the request names and
-// takes its stored configuration as the Session's environment.
+// takes its stored configuration as the Session's environment. It checks the
+// Project and existence only.
 func (h *Handler) attachableEnvironment(ctx context.Context, tenant string, input *sessionRequest) error {
 	environment, err := h.EnvironmentsReader.GetEnvironment(ctx, tenant, input.environmentID)
 	if err != nil {
 		return err
 	}
-	switch {
-	case environment.AttachedSessionID != "":
-		return sessions.ErrEnvironmentAttached
-	case environment.Status == "failed" || environment.Status == "expired":
-		return sessions.ErrEnvironmentTerminal
-	}
+	// Whether it is attached or ended is decided when the Session is created.
 	input.Environment, err = storedEnvironment(environment.Configuration)
 	return err
 }

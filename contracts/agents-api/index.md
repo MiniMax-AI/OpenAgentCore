@@ -68,6 +68,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Core has no prewarming-beta gate; the official create and list require access to it.
 - `vault_ids` must be null or `[]`; a nonempty list returns 400. Credentials reach an Environment only through its Session.
 - A standalone Environment is created with its own network policy and is not widened for a later Session. An attach whose model provider the policy cannot reach returns 400 `model_provider_unreachable`; the official service has no such error.
+- The `Idempotency-Key` of `POST /agents/environments` never expires, where the official service deduplicates for 24 hours within the organization, project and creator. Core scopes it to the Project and creator. The response to a reused key with a different body is unverified against the official service; Core returns 409 `idempotency_conflict`.
 - Without checkpoint support an idle Environment expires at the idle timeout, and an Environment whose compute is confirmed lost expires. Neither is replaced on new compute.
 
 **Lists** ([lists](./wire-semantics.md#lists))
@@ -206,7 +207,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 ### Unverified against the official service
 
-- Standalone Environments: the `not` constraint of `environment.environment_id` reports the first offending member in schema order, and its message text is not sampled. Core reports `ready` for an unattached, prepared Environment, and creation `pending` before preparation. How the official service handles an attach to an Environment that is still `pending`, whether it lists `failed` and `expired` Environments, and the file routes before attach (Core returns 409) have no official sample.
+- Standalone Environments: the `not` constraint of `environment.environment_id` reports the first offending member in schema order, and its message text is not sampled; a member the schema does not list returns the unknown-parameter error. Core reports `ready` for an unattached, prepared Environment, and creation `pending` before preparation. How the official service handles an attach to an Environment that is still `pending`, whether it lists `failed` and `expired` Environments, and the file routes before attach (Core returns 409) have no official sample.
 - When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
 - The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
 - Automations, where the pinned sources are silent ([Automations](./automations.md)):

@@ -14,14 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// privatePrefixes are the addresses no sandbox may reach.
-// Loopback is not among them: inside the sandbox's network namespace it is the
-// sandbox itself (execd and the sidecar's DNS proxy), never the host.
-var privatePrefixes = []netip.Prefix{
-	netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"), netip.MustParsePrefix("192.168.0.0/16"),
-	netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("169.254.0.0/16"), netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10"),
-}
-
 type resolver func(ctx context.Context, host string) ([]netip.Addr, error)
 
 // networkPolicy maps Egress to the OpenSandbox egress policy. The sidecar lets a
@@ -48,11 +40,11 @@ func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (
 	if err != nil {
 		return nil, err
 	}
-	if slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !isGlobal(a) }) {
+	if slices.ContainsFunc(addrs, func(a netip.Addr) bool { return !sandbox.PublicAddress(a) }) {
 		return nil, fmt.Errorf("%w: OpenSandbox sandboxes reach Core only at global addresses", sandbox.ErrInvalid)
 	}
 	var rules []osdk.NetworkRule
-	for _, prefix := range privatePrefixes {
+	for _, prefix := range sandbox.PrivatePrefixes {
 		rules = append(rules, osdk.NetworkRule{Action: "deny", Target: prefix.String()})
 	}
 	if b.Egress.Public {
@@ -62,7 +54,7 @@ func networkPolicy(ctx context.Context, b sandbox.Bootstrap, resolve resolver) (
 	allow := func(host string, port int) {
 		rule := osdk.NetworkRule{Action: "allow", Target: host}
 		if addr, err := netip.ParseAddr(host); err == nil {
-			if !isGlobal(addr) {
+			if !sandbox.PublicAddress(addr) {
 				return
 			}
 			rule.Ports = []int{port}
@@ -97,8 +89,4 @@ func hostAddrs(ctx context.Context, host string, resolve resolver) ([]netip.Addr
 		addrs[i] = addrs[i].Unmap()
 	}
 	return addrs, nil
-}
-
-func isGlobal(addr netip.Addr) bool {
-	return addr.IsGlobalUnicast() && !slices.ContainsFunc(privatePrefixes, func(p netip.Prefix) bool { return p.Contains(addr) })
 }

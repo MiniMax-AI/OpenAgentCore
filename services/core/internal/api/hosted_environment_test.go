@@ -54,6 +54,8 @@ func TestSessionCreationRejectsInvalidEnvironmentReference(t *testing.T) {
 		"template":        {`{"type":"openai_hosted","environment_id":"` + id + `","environment_template_id":"` + uuid.NewString() + `"}`, "", "environment.environment_template_id"},
 		"explicit null":   {`{"type":"openai_hosted","environment_id":"` + id + `","network":null}`, "", "environment.network"},
 		"schema order":    {`{"type":"openai_hosted","environment_id":"` + id + `","files":[],"packages":{}}`, "", "environment.packages"},
+		"unknown member":  {`{"type":"openai_hosted","environment_id":"` + id + `","foo":1}`, "", "environment.foo"},
+		"workspace dir":   {`{"type":"openai_hosted","environment_id":"` + id + `","workspace_directory":"/w"}`, "", "environment.workspace_directory"},
 		"short":           {`{"type":"openai_hosted","environment_id":"short"}`, "", "environment.environment_id"},
 		"not hosted":      {`{"type":"self_hosted","environment_id":"` + id + `"}`, "", ""},
 		"preparation":     {`{"type":"openai_hosted","environment_id":"` + id + `"}`, `"x_agents_core":{"environment":{"env":{"A":"b"}}},`, "x_agents_core.environment"},
@@ -78,7 +80,7 @@ func TestStandaloneEnvironmentRequestValidation(t *testing.T) {
 		"no environment":   {"/v1/agents/environments", `{}`, "environment"},
 		"vault ids":        {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"vault_ids":["v"]}`, "vault_ids"},
 		"self hosted":      {"/v1/agents/environments", `{"environment":{"type":"self_hosted","workspace_directory":"/w"}}`, ""},
-		"attach on create": {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}}`, ""},
+		"attach on create": {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}}`, "environment.environment_id"},
 		"unknown member":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"extra":1}`, ""},
 	} {
 		w := bodyGateRequest(h, test.path, "application/json", []byte(test.body))
