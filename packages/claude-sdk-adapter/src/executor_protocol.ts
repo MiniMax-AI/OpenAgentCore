@@ -48,13 +48,6 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
     const input = parseMessageInput(value.input);
     const next = value.settings as TurnSettings;
     if (!next || typeof next.model !== "string" || !next.model || !(next.effort === null || typeof next.effort === "string") || !["", "auto_review"].includes(next.review)) throw new Error("invalid turn start");
-    // Settings reach the native Query before the Turn's input does.
-    if (next.model !== this.applied.model) await this.stream.setModel(next.model);
-    this.applied.model = next.model;
-    if (next.effort !== this.applied.effort) await this.stream.applyFlagSettings({ effortLevel: next.effort as EffortLevel | null });
-    this.applied.effort = next.effort;
-    if (next.review !== this.applied.review) await this.stream.setPermissionMode(next.review ? "auto" : "default");
-    this.applied.review = next.review;
     const output = async (event: WireEvent) => {
       if (this.active?.id !== id) throw new Error("late turn event");
       await this.output({ ...event, turn_id: id });
@@ -63,6 +56,13 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
     this.active = { id, inputs, cancelled: false, callbacks: new Set() };
     this.used.add(id);
     await this.output({ type: "turn_started", turn_id: id });
+    // Native answers to these requests are Turn events, so the Turn is active first; the input is not queued yet.
+    if (next.model !== this.applied.model) await this.stream.setModel(next.model);
+    this.applied.model = next.model;
+    if (next.effort !== this.applied.effort) await this.stream.applyFlagSettings({ effortLevel: next.effort as EffortLevel | null });
+    this.applied.effort = next.effort;
+    if (next.review !== this.applied.review) await this.stream.setPermissionMode(next.review ? "auto" : "default");
+    this.applied.review = next.review;
     if (this.nativeID) for (const event of inputs.start(this.nativeID)) await output(event);
     this.queue.push(inputs);
     this.wake?.();

@@ -4,7 +4,7 @@ import test from "node:test";
 import { ExecutorTurns } from "../dist/executor_protocol.js";
 import { Inputs } from "../dist/inputs.js";
 
-test("a Turn applies only the settings that changed, before its input", async () => {
+test("a Turn applies only the settings that changed", async () => {
   const calls = [];
   const stream = { setModel: async model => calls.push(["model", model]), setPermissionMode: async mode => calls.push(["mode", mode]),
     applyFlagSettings: async settings => calls.push(["flags", settings]) };
@@ -16,10 +16,10 @@ test("a Turn applies only the settings that changed, before its input", async ()
   assert.deepEqual(calls, [["input"]]);
   calls.length = 0;
   await run("two", { model: "b", effort: null, review: "auto_review" });
-  assert.deepEqual(calls, [["model", "b"], ["flags", { effortLevel: null }], ["mode", "auto"], ["input"]]);
+  assert.deepEqual(calls, [["input"], ["model", "b"], ["flags", { effortLevel: null }], ["mode", "auto"]]);
   calls.length = 0;
   await run("three", { model: "b", effort: "max", review: "" });
-  assert.deepEqual(calls, [["flags", { effortLevel: "max" }], ["mode", "default"], ["input"]]);
+  assert.deepEqual(calls, [["input"], ["flags", { effortLevel: "max" }], ["mode", "default"]]);
 });
 
 const fixture = `
