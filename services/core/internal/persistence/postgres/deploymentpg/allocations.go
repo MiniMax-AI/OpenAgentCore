@@ -488,8 +488,7 @@ func (s *Store) NodeAllocations(ctx context.Context, nodeID string) ([]deploymen
 	for _, a := range rows {
 		var session *string
 		if a.AttachedSessionID.Valid {
-			id := uuidString(a.AttachedSessionID)
-			session = &id
+			session = new(uuidString(a.AttachedSessionID))
 		}
 		result = append(result, deployment.NodeAllocation{
 			DeploymentGeneration: uint64(a.DeploymentGeneration.Int64), Diagnostic: a.ObservationError, ID: uuidString(a.ID), NodeID: uuidString(a.NodeID),

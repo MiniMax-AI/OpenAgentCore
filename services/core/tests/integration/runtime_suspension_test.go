@@ -397,7 +397,7 @@ func TestRuntimeComputePhaseChangedAt(t *testing.T) {
 	}
 }
 
-// The node allocation list reports the phase time, and null when it is unknown.
+// The node allocation list reports the attached Session and the phase time, each null when absent.
 func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
@@ -426,6 +426,13 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_phase_changed_at=NULL WHERE id=$1", allocation.ID)
 	if encoded, _ := json.Marshal(listed()); !strings.Contains(string(encoded), `"compute_phase_changed_at":null`) {
 		t.Fatal("an unknown phase time was not null", string(encoded))
+	}
+	if got := listed().SessionID; got == nil || *got != session.ID {
+		t.Fatal("the attached Session was not reported", got)
+	}
+	runtimeSuspensionSQL(t, s.pool, "UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1", session.ID)
+	if encoded, _ := json.Marshal(listed()); !strings.Contains(string(encoded), `"session_id":null`) {
+		t.Fatal("a deleted Session was reported", string(encoded))
 	}
 }
 

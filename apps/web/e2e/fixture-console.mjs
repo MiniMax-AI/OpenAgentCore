@@ -253,6 +253,7 @@ async function adminWrite(request, response, path) {
     const index = collection.findIndex((entry) => entry.id === resourceId && a.owner.get(`${kind.slice(0, -1)}:${entry.id}`) === project.id);
     if (index < 0) return error(response, 404, "No such resource.");
     collection.splice(index, 1);
+    if (kind === "sessions") for (const allocation of state.allocations) if (allocation.session_id === resourceId) allocation.session_id = null;
     return send(response, 200, { id: resourceId, object: kind === "agents" ? "agent.deleted" : "agent.session.deleted", deleted: true });
   }
   return error(response, 404, "Not found.");
