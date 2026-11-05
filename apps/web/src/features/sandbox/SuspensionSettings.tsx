@@ -24,7 +24,7 @@ export function SuspensionSettings({ deployment, disabled }: { deployment: Sandb
   async function save(seconds: number) {
     if (disabled) return false;
     try {
-      return await writeSandboxDeployment(queryClient, (signal) => sandboxAdmin.updateSuspension({ idle_seconds: seconds }, { signal })) !== null;
+      return await writeSandboxDeployment(queryClient, (signal) => sandboxAdmin.updateIdleSeconds({ idle_seconds: seconds }, { signal })) !== null;
     } catch (error) {
       toast.show(t(sandboxWriteUncertain(error) ? "Couldn't confirm the sandbox change" : "Core rejected the sandbox change"), { tone: "error", detail: sandboxRequestError(error, locale), key: "sandbox-write" });
       return false;

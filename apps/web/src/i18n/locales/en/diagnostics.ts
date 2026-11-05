@@ -63,7 +63,7 @@ export const diagnostics = {
   exitCode: "Exit code {{code}}.",
   httpStatus: "HTTP {{status}}.",
   unreachableHost: "Then check that the URL's host resolves and is reachable from the Session's sandbox, or from the host of a self-hosted Session.",
-  step: { setup: "setup", python: "Python dependencies", npm: "npm dependencies", file: "file preparation", skill: "Skill preparation", harness: "Harness preparation", plugin: "Plugin preparation", configure: "environment configuration", finalize: "finalization" },
+  step: { setup: "setup", python: "Python dependencies", npm: "npm dependencies", file: "file preparation", skill: "Skill preparation", plugin: "Plugin preparation", configure: "environment configuration", finalize: "finalization" },
   category: {
     timeout: "The preparation timed out.",
     runtime_disconnected: "The Runtime disconnected.",

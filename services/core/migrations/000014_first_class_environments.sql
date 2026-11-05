@@ -68,12 +68,6 @@ WHERE d.revoked_at IS NULL
        AND e.configuration->>'type' = 'self_hosted' AND e.status NOT IN ('failed', 'expired')
        AND EXISTS (SELECT 1 FROM execution_project_scopes p WHERE p.tenant_id = c.tenant_id)));
 
--- An Environment whose external workspace may be deleted: no live Session holds it, and it is either Session-owned or ended.
-CREATE VIEW deletable_environments AS
-SELECT e.id FROM environments e
-WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
-  AND (e.session_owned OR e.status IN ('failed', 'expired'));
-
 -- session_id is the attached live Session, null when none is attached.
 CREATE VIEW runtime_reset_retained_environments AS
 SELECT e.id AS environment_id, s.id AS session_id, e.tenant_id, a.deployment_generation

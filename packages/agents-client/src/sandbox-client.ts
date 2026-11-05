@@ -247,7 +247,7 @@ export class SandboxAdminClient {
   updateDeployment(input: UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
     return this.#writeDeployment("PUT", input, options);
   }
-  async updateSuspension(input: SandboxIdlePolicyInput, options?: ReadOptions): Promise<SandboxDeployment> {
+  async updateIdleSeconds(input: SandboxIdlePolicyInput, options?: ReadOptions): Promise<SandboxDeployment> {
     return projectDeployment(await this.#core.json("/deployment", options, "PATCH", input));
   }
   async startReset(input: StartSandboxReset, options?: ReadOptions): Promise<SandboxDeployment> {

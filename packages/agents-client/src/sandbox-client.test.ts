@@ -179,14 +179,14 @@ describe("Core sandbox credential boundaries", () => {
   it("patches idle policy once through the existing deployment resource", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...microsandbox, idle_seconds: 60, suspension: { retention_seconds: 86400 } }));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
-    expect((await admin.updateSuspension({ idle_seconds: 60 })).idle_seconds).toBe(60);
+    expect((await admin.updateIdleSeconds({ idle_seconds: 60 })).idle_seconds).toBe(60);
     const [url, init] = fetch.mock.calls[0]!;
     expect(url).toBe("/core/v1/sandbox/deployment");
     expect(init?.method).toBe("PATCH");
     expect(JSON.parse(String(init?.body))).toEqual({ idle_seconds: 60 });
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
     fetch.mockRejectedValue(new TypeError("Network failed"));
-    await expect(admin.updateSuspension({ idle_seconds: 60 })).rejects.toThrow("Network failed");
+    await expect(admin.updateIdleSeconds({ idle_seconds: 60 })).rejects.toThrow("Network failed");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
