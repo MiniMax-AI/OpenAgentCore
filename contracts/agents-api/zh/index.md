@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 82331da66db2d0caf6f64c861a065948c1a1332a8306e99133dfc9af9a165e3d
+source_hash: 9b3a9fc6f679b7ec35ca8a37978010c76d26d42e3822b4fb0ee42c3ccfdd5f79
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -212,6 +212,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
   - [冲突与拒绝的情形](automations.md#state-changes)。
   - [目标校验与保存的引用](automations.md#targets)。
   - [分页](automations.md)：`limit` 截断与无法解析的 `after`。
+- Claude Code 中，由 `SendMessage` 恢复的早先 Turn 的 Subagent 是否按当前 Turn 的权限模式运行，而不是按其启动时的模式：原生模式作用于整个 Session，适配器假定其为当前模式。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。
