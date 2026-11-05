@@ -517,6 +517,7 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var calls []string
 			stored := owner
+			stored.AttachedSessionID = "session"
 			stored.Reclaimed, stored.Expired = test.deleted, !test.deleted
 			change := func(name string, apply func(*Allocation)) func(Allocation) (Allocation, error) {
 				return func(current Allocation) (Allocation, error) {
@@ -542,7 +543,7 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 			if !test.deleted {
 				tx.loadEnvironment = func() (sessions.Environment, error) {
 					calls = append(calls, "LoadEnvironment")
-					return sessions.Environment{ID: owner.EnvironmentID, Status: "ready"}, nil
+					return sessions.Environment{ID: owner.EnvironmentID, Status: "ready", AttachedSessionID: "session"}, nil
 				}
 				tx.loadEnvironmentInput = func() (*sessions.EnvironmentInputState, error) {
 					calls = append(calls, "LoadEnvironmentInput")
@@ -623,6 +624,7 @@ func TestReleaseLostComputeRetainsOrChangesNothing(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var calls []string
 			stored := owner
+			stored.AttachedSessionID = "session"
 			test.stored(&stored)
 			change := func(name string, apply func(*Allocation)) func(Allocation) (Allocation, error) {
 				return func(current Allocation) (Allocation, error) {

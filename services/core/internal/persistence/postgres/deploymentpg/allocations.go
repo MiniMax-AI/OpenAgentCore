@@ -394,6 +394,12 @@ func (t *allocationTx) CanRetainEnvironment(current deployment.Allocation) (bool
 	return t.q.CanRetainRuntimeEnvironment(t.ctx, id)
 }
 
+// LoadEnvironment reads the allocation's Environment, which has no attached
+// Session while it is standalone and idle.
+func (t *cleanupTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
+	return sessionpg.LoadEnvironment(ctx, t.q, uuidString(t.tenant), uuidString(t.environment))
+}
+
 func (t *cleanupTx) RevokeDevice(current deployment.Allocation) error {
 	device, err := parseID(current.DeviceID)
 	if err != nil {

@@ -24,16 +24,18 @@ type runtimeConnection struct {
 }
 
 func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner deployment.Allocation) error {
-	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.AttachedSessionID)
-	if errors.Is(err, sessions.ErrNotFound) {
-		r.forgetAwaitingConnection(owner.DeviceID)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
-		return sessions.ErrDeviceBindingConflict
+	if owner.AttachedSessionID != "" {
+		bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.AttachedSessionID)
+		if errors.Is(err, sessions.ErrNotFound) {
+			r.forgetAwaitingConnection(owner.DeviceID)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
+			return sessions.ErrDeviceBindingConflict
+		}
 	}
 	if !owner.CreateSettled || owner.State != "running" {
 		r.forgetAwaitingConnection(owner.DeviceID)

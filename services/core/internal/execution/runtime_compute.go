@@ -227,12 +227,15 @@ func (r *runtimeLifecycle) releaseLostCompute(ctx context.Context, p sandbox.San
 	if current.ID != owner.ID || current.State != owner.State || current.ComputePhase != owner.ComputePhase || current.ComputeRevision != owner.ComputeRevision {
 		return deployment.ErrAllocationConflict
 	}
-	retained, err := r.reader.RetainedNativeHistory(ctx, owner.Key())
-	if err != nil {
-		return err
-	}
-	if !retained {
-		return observed
+	// A standalone Environment is never replaced: its confirmed loss expires it.
+	if owner.AttachedSessionID != "" {
+		retained, err := r.reader.RetainedNativeHistory(ctx, owner.Key())
+		if err != nil {
+			return err
+		}
+		if !retained {
+			return observed
+		}
 	}
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err

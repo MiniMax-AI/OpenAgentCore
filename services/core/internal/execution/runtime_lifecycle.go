@@ -410,6 +410,16 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if owner.ComputePhase != "disabled" {
 		return r.observeCompute(ctx, owner)
 	}
+	if owner.AttachedSessionID == "" && owner.State == "running" && owner.CreateSettled && r.config.Suspension == nil && !owner.Reclaimed && !owner.Expired {
+		// Without checkpoints an idle standalone Environment ends at the idle timeout.
+		expired, err := r.deployment.ExpireIdleUnattached(ctx, owner)
+		if err == nil {
+			return r.observe(ctx, expired)
+		}
+		if !errors.Is(err, deployment.ErrNotIdle) && !errors.Is(err, deployment.ErrAllocationConflict) {
+			return err
+		}
+	}
 	provider := r.config.Provider
 	if owner.ProviderKey != r.config.InstallationID {
 		return sandbox.ErrInvalid

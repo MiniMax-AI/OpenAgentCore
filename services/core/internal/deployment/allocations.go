@@ -169,6 +169,15 @@ func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allo
 	return e.cleanup(ctx, owner, computeLost)
 }
 
+// ExpireIdleUnattached ends a standalone Environment's compute at the
+// deployment idle timeout when its Provider cannot checkpoint: no Session is
+// attached, nothing is pending and its initialization is complete. It revokes
+// the device and expires the Environment in one commit; the allocation then
+// awaits ordinary cleanup. Any other state is ErrNotIdle.
+func (e *ExecutionOperations) ExpireIdleUnattached(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.cleanup(ctx, owner, idleExpiry)
+}
+
 // cleanupEvidence is the provider proof a cleanup commit consumes.
 type cleanupEvidence int
 
@@ -176,6 +185,7 @@ const (
 	cleanupRequested cleanupEvidence = iota
 	creationAbsent
 	computeLost
+	idleExpiry
 )
 
 func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
@@ -189,6 +199,11 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		current, err := checkAllocation(tx, owner, lost)
 		if err != nil {
 			return err
+		}
+		if evidence == idleExpiry {
+			if err := checkIdleUnattached(ctx, tx, current); err != nil {
+				return err
+			}
 		}
 		if lost && (current.State != "running" || current.ComputePhase != "running" || current.ComputeRevision != owner.ComputeRevision || !current.CreateSettled) {
 			return ErrAllocationConflict
@@ -219,11 +234,13 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			// Compute retention ends independently of the Session only when its
 			// initialized filesystem and native history can continue on new compute.
 			// Explicit archive/reset makes this locked eligibility check false.
-			if !retain && lost {
+			// A standalone Environment is never replaced on new compute: its end
+			// expires it.
+			if !retain && lost && revoked.AttachedSessionID != "" {
 				return ErrAllocationConflict
 			}
 			if !retain {
-				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost || evidence == idleExpiry, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
 		if err != nil {
@@ -245,6 +262,31 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		return Allocation{}, err
 	}
 	return result, nil
+}
+
+func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation) error {
+	if current.State != "running" || current.ComputePhase != "disabled" || current.AttachedSessionID != "" || current.Reclaimed {
+		return ErrNotIdle
+	}
+	environment, err := tx.LoadEnvironment(ctx)
+	if err != nil {
+		return err
+	}
+	if environment.Initialization != "complete" || environment.Status == "failed" || environment.Status == "expired" {
+		return ErrNotIdle
+	}
+	activity, err := tx.LoadActivity(current)
+	if err != nil {
+		return err
+	}
+	seconds, err := tx.LoadIdleSeconds()
+	if err != nil {
+		return err
+	}
+	if !activity.ReadyToSuspend(time.Duration(seconds) * time.Second) {
+		return ErrNotIdle
+	}
+	return nil
 }
 
 // SetCompute commits a compute phase before its external effects. The owner's
