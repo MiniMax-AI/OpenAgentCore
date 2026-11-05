@@ -56,7 +56,7 @@ func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, 
 
 func newEnvironmentFilesFixture() *environmentFilesFixture {
 	return &environmentFilesFixture{
-		environment: sessions.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
+		environment: sessions.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), AttachedSessionID: uuid.NewString(), Status: "connected",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
 		result: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}},
 	}

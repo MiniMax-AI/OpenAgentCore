@@ -125,7 +125,7 @@ func (f fixture) environment(t *testing.T) (string, string, string) {
 		VALUES ($1, $2, 'codex', 'key', 'hash', '{"environment":{"type":"openai_hosted"}}')`, session, tenant); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environments(id, session_id) VALUES ($1, $2)`, environment, session); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `WITH e AS (INSERT INTO environments(id, tenant_id, configuration, session_owned) SELECT $1, tenant_id, configuration->'environment', true FROM sessions WHERE id=$2 RETURNING id) UPDATE sessions SET environment_id=(SELECT id FROM e) WHERE id=$2`, environment, session); err != nil {
 		t.Fatal(err)
 	}
 	return tenant, session, environment

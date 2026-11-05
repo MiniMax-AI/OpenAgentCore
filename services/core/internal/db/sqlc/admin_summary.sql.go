@@ -115,7 +115,7 @@ func (q *Queries) AdminRuntimeTargets(ctx context.Context, arg AdminRuntimeTarge
 }
 
 const adminSummarySessions = `-- name: AdminSummarySessions :many
-SELECT s.id, s.tenant_id, s.engine, s.metadata, s.idempotency_key, s.request_hash, s.created_at, s.configuration, s.event_sequence, s.creation_request_hash, s.deleted_at, s.creator_kind, s.creator_id, a.key_id AS creation_key_id FROM sessions s
+SELECT s.id, s.tenant_id, s.engine, s.metadata, s.idempotency_key, s.request_hash, s.created_at, s.configuration, s.event_sequence, s.creation_request_hash, s.deleted_at, s.creator_kind, s.creator_id, s.environment_id, a.key_id AS creation_key_id FROM sessions s
 LEFT JOIN write_audit_owners o ON o.tenant_id=s.tenant_id AND o.resource_type='session' AND o.resource_id=s.id::text
 LEFT JOIN write_audit_operations a ON a.tenant_id=o.tenant_id AND a.id=o.operation_id
 WHERE s.tenant_id=$1 AND s.deleted_at IS NULL
@@ -165,6 +165,7 @@ func (q *Queries) AdminSummarySessions(ctx context.Context, arg AdminSummarySess
 			&i.Session.DeletedAt,
 			&i.Session.CreatorKind,
 			&i.Session.CreatorID,
+			&i.Session.EnvironmentID,
 			&i.CreationKeyID,
 		); err != nil {
 			return nil, err

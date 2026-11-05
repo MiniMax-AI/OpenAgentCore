@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: a9d64e2e8a51a00f11071e1f5255814f6340c355554e6a0a3c9262ca9415e5df
+source_hash: 34671da036d80359e11db48fb32d1613b8b1a290fb9dd16108fcfd6e2681eeaa
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -56,7 +56,7 @@ stateDiagram-v2
 
 Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 记录自己持有项目、不可变配置和准备输入，由 Session 引用它；一个 Environment 至多挂载一个存活的 Session。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
 
@@ -137,7 +137,7 @@ stateDiagram-v2
 - 截止时间在取得 Session 锁后检查。过期和定向取消会保留其终止身份；终止预留的重试不能影响后续预留或 Turn。
 - 初始预留过期时会使 Session 失败；后续预留则会让 Session 回到空闲状态。失败事件会原子地捕获已结算的活动和 Usage。迟到的连接或创建重试不能重置或重播已过期的输入。
 
-当 Runtime 返回 `failed` 结果、带有 `preparation_failed` 且没有 Run 时，会立即以 `runtime_preparation_failed` 结算待处理输入。当当前 `execution_prepare` 在没有 Run 且代码为 `invalid_configuration`、`unsupported_configuration` 或 `unsupported_preparation` 时被拒绝，也同样如此。在任何 Turn 存在之前，Core 会记录安全的 Session 失败并释放输入门控；修复本地原因后即可接受新输入。传输丢失、容量拒绝和未确认的清理在原始期限内保持可重试。Core 使用这些通用控制状态，绝不使用 Harness 特定的错误文本。
+当 Runtime 返回 `failed` 结果、带有 `preparation_failed` 且没有 Run 时，会立即以 `runtime_preparation_failed` 结算待处理输入。当当前 `execution_prepare` 在没有 Run 且代码为 `invalid_configuration`、`unsupported_configuration` 或 `unsupported_preparation` 时被拒绝，也同样如此。在任何 Turn 存在之前，Core 会记录安全的 Session 失败并释放输入门控；修复本地原因后即可接受新输入。传输丢失、容量拒绝和未确认的清理在原始期限内保持可重试。Runtime 缺少所挂载 Session 的 Harness 时，会在其 executor 准备阶段以同样方式使该输入失败；初始化不检查 Harness。Core 使用这些通用控制状态，绝不使用 Harness 特定的错误文本。
 
 ### 活动与必需操作 {#activity-and-required-actions}
 
@@ -232,7 +232,7 @@ stateDiagram-v2
 ```
 
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于提供商维护。
-- 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
+- 缺少套接字不会消耗一次 pending 尝试。初始化不需要 Harness。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
 - 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
@@ -247,7 +247,6 @@ stateDiagram-v2
 | npm 软件包，已确认退出 1–255 | `Failed to provision environment: script "npm package installation" failed with exit code N` |
 | 初始文件安装，确认失败 | `Failed to provision environment: initial file installation failed` |
 | Skill 准备，确认失败 | `Failed to provision environment: Skill installation failed` |
-| Runtime 上未安装 Harness | `Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session.` |
 | 其他情况：超时、未知效果、回执缺失或格式错误、Plugin 安装、快照最终确定、bootstrap 拒绝、Core 重启 | `Failed to provision environment: initialization did not complete` |
 
 每个初始化操作都会返回有类型的 `rejected`、`failed` 或 `unknown` 结果，并且 daemon 会先确认进程退出和 I/O 结算完成。Core 使用固定标签和整数组成原因，因此命令、env 值、软件包名称、路径和进程输出绝不会进入原因、事件、日志或响应。失败步骤不会重试，后续步骤也不会运行。机密 env 和设置快照会与普通元数据分开加密。初始文件在所有平台上都使用原子替换写入器和工作区锚定路径；Files API 创建则保留其自己的不覆盖规则。

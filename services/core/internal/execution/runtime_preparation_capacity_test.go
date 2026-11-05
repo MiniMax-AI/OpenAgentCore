@@ -65,7 +65,7 @@ func TestWorkspaceQuotaRefusalYieldsComputeToAnotherTenant(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `INSERT INTO sessions(id,tenant_id,engine,idempotency_key,request_hash,configuration) VALUES($1,$2,'codex',$3,'fixture','{"environment":{"type":"openai_hosted"}}')`, storageSession, a.TenantID, uuid.NewString()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environments(id,session_id) VALUES($1,$2)`, storageEnvironment, storageSession); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `WITH e AS (INSERT INTO environments(id, tenant_id, configuration, session_owned) SELECT $1, tenant_id, configuration->'environment', true FROM sessions WHERE id=$2 RETURNING id) UPDATE sessions SET environment_id=(SELECT id FROM e) WHERE id=$2`, storageEnvironment, storageSession); err != nil {
 		t.Fatal(err)
 	}
 	occupied, err := writer.Bind(t.Context(), a.TenantID, storageEnvironment, f.control.configuration.ID, capacity)

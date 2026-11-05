@@ -99,7 +99,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		}
 		// A reader built after the requests reads the frozen setup and files.
 		current := sessionAdapter(s)
-		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, environmentOf(t, s, tenant, id))
 		if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
 			t.Fatalf("%s durable setup differs: %v", label, err)
 		}
@@ -108,15 +108,15 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 				t.Fatalf("%s command order differs", label)
 			}
 		}
-		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, environmentOf(t, s, tenant, id)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("%s foreign setup read: %v", label, err)
 		}
 		for position, want := range contents {
-			metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, environmentOf(t, s, tenant, id), position)
 			if err != nil || string(body) != want || metadata.Path != paths[position] || metadata.SizeBytes == nil || *metadata.SizeBytes != int64(len(want)) {
 				t.Fatalf("%s frozen file %d differs: %v", label, position, err)
 			}
-			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, position); err == nil {
+			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, environmentOf(t, s, tenant, id), position); err == nil {
 				t.Fatalf("%s foreign file read succeeded", label)
 			}
 			var encrypted []byte
@@ -125,7 +125,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 			}
 		}
 		var encrypted, configuration []byte
-		if err := pool.QueryRow(t.Context(), "SELECT e.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id WHERE s.id=$1", id).Scan(&encrypted, &configuration); err != nil || bytes.Contains(encrypted, []byte(marker)) || bytes.Contains(configuration, []byte(marker)) {
+		if err := pool.QueryRow(t.Context(), "SELECT e.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.id=$1", id).Scan(&encrypted, &configuration); err != nil || bytes.Contains(encrypted, []byte(marker)) || bytes.Contains(configuration, []byte(marker)) {
 			t.Fatalf("%s plaintext setup storage: %v", label, err)
 		}
 	}
@@ -136,8 +136,8 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		want  int
 	}{
 		{"SELECT count(*) FROM sessions WHERE tenant_id=$1", 6},
-		{"SELECT count(*) FROM environments e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 6},
-		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 6},
+		{"SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1", 6},
+		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.tenant_id=$1", 6},
 		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.id=f.session_id WHERE s.tenant_id=$1", 8},
 		{"SELECT count(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.tenant_id=$1", 0},
 		{"SELECT count(*) FROM environment_input_reservations e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 0},

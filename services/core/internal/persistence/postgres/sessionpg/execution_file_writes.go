@@ -10,83 +10,50 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// WithFileWriteReservation reads the Environment in the transaction before it
-// locks the Environment's Session.
+// WithFileWriteReservation runs apply in the transaction of the tenant's
+// Environment, with the Environment it reads under the locks.
 func (e *Execution) WithFileWriteReservation(ctx context.Context, tenant, environment string, apply func(context.Context, sessions.FileWriteReservationTx, sessions.Environment, sessions.LockedSession) error) error {
-	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		owner, err := LoadEnvironment(ctx, q, tenant, environment)
+	return e.withFileWrite(ctx, tenant, environment, func(ctx context.Context, tx *fileWriteTx, locked sessions.LockedSession) error {
+		owner, err := tx.LoadEnvironment(ctx)
 		if err != nil {
 			return err
 		}
-		tenantID, err := parseID(tenant)
-		if err != nil {
-			return err
-		}
-		environmentID, err := parseID(owner.ID)
-		if err != nil {
-			return err
-		}
-		sessionID, err := parseID(owner.SessionID)
-		if err != nil {
-			return err
-		}
-		return inSession(ctx, q, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
-			return apply(ctx, newFileWriteTx(q, tenantID, sessionID, environmentID), owner, locked)
-		})
+		return apply(ctx, tx, owner, locked)
 	})
 }
 
-// WithFileWriteSettlement reads the write in the transaction before it locks
-// the Session of the write's Environment, whether or not that Session was
-// publicly deleted. A malformed ID is sessions.ErrInvalidInput and an unknown
-// write sessions.ErrNotFound.
+// WithFileWriteSettlement runs apply in the transaction of the write's
+// Environment, whether or not its Session was publicly deleted. A malformed ID
+// is sessions.ErrInvalidInput and an unknown write sessions.ErrNotFound.
 func (e *Execution) WithFileWriteSettlement(ctx context.Context, tenant, environment, write string, apply func(context.Context, sessions.FileWriteSettlementTx) error) error {
-	tenantID, err := parseID(tenant)
-	if err != nil {
+	if _, err := parseID(write); err != nil {
 		return err
 	}
-	environmentID, err := parseID(environment)
-	if err != nil {
-		return err
-	}
-	writeID, err := parseID(write)
-	if err != nil {
-		return err
-	}
-	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		row, err := q.GetEnvironmentFileWrite(ctx, sqlc.GetEnvironmentFileWriteParams{TenantID: tenantID, EnvironmentID: environmentID, ID: writeID})
-		if errors.Is(err, pgx.ErrNoRows) {
+	return e.withFileWrite(ctx, tenant, environment, func(ctx context.Context, tx *fileWriteTx, _ sessions.LockedSession) error {
+		if _, err := tx.loadFileWrite(ctx, write); errors.Is(err, pgx.ErrNoRows) {
 			return sessions.ErrNotFound
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
-		return inSession(ctx, q, tenantID, row.SessionID, func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession) error {
-			return apply(ctx, newFileWriteTx(q, tenantID, row.SessionID, environmentID))
-		})
+		return apply(ctx, tx)
 	})
 }
 
-// fileWriteTx is the file writes to the Session's Environment inside the
-// Session transaction.
-type fileWriteTx struct {
-	environmentTx
-	environment pgtype.UUID
+func (e *Execution) withFileWrite(ctx context.Context, tenant, environment string, apply func(context.Context, *fileWriteTx, sessions.LockedSession) error) error {
+	return e.withEnvironment(ctx, tenant, environment, func(ctx context.Context, tx *environmentTx, locked sessions.LockedSession) error {
+		return apply(ctx, &fileWriteTx{environmentTx: *tx}, locked)
+	})
 }
+
+// fileWriteTx is the file writes to the Environment inside its transaction.
+type fileWriteTx struct{ environmentTx }
 
 var (
 	_ sessions.FileWriteReservationTx = (*fileWriteTx)(nil)
 	_ sessions.FileWriteSettlementTx  = (*fileWriteTx)(nil)
 )
-
-func newFileWriteTx(q *sqlc.Queries, tenant, session, environment pgtype.UUID) *fileWriteTx {
-	return &fileWriteTx{environmentTx: environmentTx{SessionTx: BindSession(q, tenant, session)}, environment: environment}
-}
 
 func (t *fileWriteTx) LoadFileWrite(ctx context.Context, write string) (sessions.EnvironmentFileWrite, bool, error) {
 	row, err := t.loadFileWrite(ctx, write)

@@ -39,7 +39,7 @@ func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant str
 		return sessions.Creation{}, err
 	}
 	f.session.Environment = &sessions.Environment{
-		ID: uuid.NewString(), SessionID: f.session.ID, TenantID: tenant, Status: "pending", Configuration: snapshot.Environment,
+		ID: uuid.NewString(), AttachedSessionID: f.session.ID, TenantID: tenant, Status: "pending", Configuration: snapshot.Environment,
 	}
 	return sessions.Creation{Session: f.session, Created: true}, nil
 }

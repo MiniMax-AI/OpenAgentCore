@@ -25,15 +25,15 @@ type EnvironmentReader interface {
 	// given Environment, a page of the live Environments whose preparation is
 	// pending or running.
 	ListEnvironmentInitializations(ctx context.Context, after string) ([]EnvironmentInitialization, error)
-	// ReadEnvironmentSetup opens the setup frozen for the Session's
-	// Environment. A missing Session is ErrNotFound; frozen data that does not
+	// ReadEnvironmentSetup opens the setup frozen for the Environment. A
+	// missing Environment or one whose Session was deleted is ErrNotFound; frozen data that does not
 	// open or validate is an internal error.
-	ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error)
+	ReadEnvironmentSetup(ctx context.Context, tenant, environment string) (environmentconfig.Setup, error)
 	// ReadInitialEnvironmentFile opens the initial file frozen at position for
-	// the Session's Environment, so an installation holds one file at a time.
+	// the Environment, so an installation holds one file at a time.
 	// A missing file is ErrNotFound; a file that does not open or match its
 	// recorded size is an internal error.
-	ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error)
+	ReadInitialEnvironmentFile(ctx context.Context, tenant, environment string, position int) (environmentconfig.InitialFileMetadata, []byte, error)
 }
 
 // createsEnvironment reports whether a Session created with the configuration
@@ -59,14 +59,67 @@ func createsEnvironment(configuration json.RawMessage) (bool, error) {
 	}
 }
 
+// SplitEnvironment separates a Session configuration snapshot into the part
+// the Session stores and the configuration of its Environment, which is nil
+// when the snapshot names none or the type none.
+func SplitEnvironment(configuration json.RawMessage) (session, environment json.RawMessage, err error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(configuration, &fields); err != nil {
+		return nil, nil, fmt.Errorf("%w: invalid environment configuration", ErrInvalidInput)
+	}
+	environment = fields["environment"]
+	delete(fields, "environment")
+	if session, err = json.Marshal(fields); err != nil {
+		return nil, nil, err
+	}
+	if environment, err = normalizeEnvironment(environment); err != nil {
+		return nil, nil, err
+	}
+	return session, environment, nil
+}
+
+// ComposeEnvironment is the Session configuration snapshot of its stored part
+// and its Environment's configuration; none is the type none.
+func ComposeEnvironment(session, environment json.RawMessage) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(session, &fields); err != nil {
+		return nil, fmt.Errorf("decode session configuration: %w", err)
+	}
+	if len(environment) == 0 {
+		environment = json.RawMessage(`{"type":"none"}`)
+	}
+	fields["environment"] = environment
+	return json.Marshal(fields)
+}
+
+// normalizeEnvironment returns nil for an absent or none Environment.
+func normalizeEnvironment(environment json.RawMessage) (json.RawMessage, error) {
+	if len(environment) == 0 {
+		return nil, nil
+	}
+	var typed struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(environment, &typed); err != nil {
+		return nil, fmt.Errorf("%w: invalid environment configuration", ErrInvalidInput)
+	}
+	if typed.Type == "none" || string(environment) == "null" {
+		return nil, nil
+	}
+	return environment, nil
+}
+
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
 type Environment struct {
 	// ExternalWorkspace is a read projection of the immutable filesystem binding, not a setting.
 	ExternalWorkspace bool
 	Initialization    string
 	ID                string
-	SessionID         string
 	TenantID          string
+	// SessionOwned reports that the Environment is reclaimed with its Session.
+	SessionOwned bool
+	// AttachedSessionID is the live Session using the Environment, or empty.
+	AttachedSessionID string
 	Status            string
 	CreatedAt         time.Time
 	Configuration     json.RawMessage
@@ -75,7 +128,7 @@ type Environment struct {
 // EnvironmentInitialization owns preparation independently of compute ownership.
 // A running record without its process-local owner is unknown, never replayable.
 type EnvironmentInitialization struct {
-	EnvironmentID, SessionID, TenantID, DeviceID, State, Engine string
+	EnvironmentID, TenantID, DeviceID, State string
 }
 
 // EnvironmentInputActivity is the reservation-owned override before a newer Turn exists.

@@ -51,7 +51,7 @@ var testWriteKey = FileWriteIdentity{ID: testFileWrite, DeviceID: testDevice, Re
 
 func TestReserveEnvironmentFileWrite(t *testing.T) {
 	reserve := "WithFileWriteReservation " + testTenant + " " + testEnvironment
-	admission := []string{reserve, "LoadFileWrite " + testFileWrite, "LoadEnvironment", "LoadSessionDevice", "LoadComputeSuspension", "LoadPendingFileWrite", "LoadActiveTurn", "LoadPendingInput"}
+	admission := []string{reserve, "LoadFileWrite " + testFileWrite, "LoadEnvironment", "LoadEnvironmentDevice", "LoadComputeSuspension", "LoadPendingFileWrite", "LoadActiveTurn", "LoadPendingInput"}
 	pending := EnvironmentFileWrite{Identity: testWriteKey, State: "pending"}
 	bound := loads(ExecutionDevice{ID: testDevice, EnvironmentID: testEnvironment}, true)
 	admitted := func(tx fakeTx) fakeTx {
@@ -59,8 +59,8 @@ func TestReserveEnvironmentFileWrite(t *testing.T) {
 		if tx.loadEnvironment == nil {
 			tx.loadEnvironment = returns(selfHosted)
 		}
-		if tx.loadSessionDevice == nil {
-			tx.loadSessionDevice = bound
+		if tx.loadEnvironmentDevice == nil {
+			tx.loadEnvironmentDevice = bound
 		}
 		return tx
 	}
@@ -87,8 +87,8 @@ func TestReserveEnvironmentFileWrite(t *testing.T) {
 		{"a deleted Session", fakeTx{}, LockedSession{Deleted: true}, ErrNotFound, false, admission[:1]},
 		{"a replaced Environment", admitted(fakeTx{loadEnvironment: returns(Environment{ID: testKey, Status: "ready"})}), LockedSession{}, ErrInvalidInput, false, admission[:3]},
 		{"a failed Environment", admitted(fakeTx{loadEnvironment: returns(Environment{ID: testEnvironment, Status: "failed"})}), LockedSession{}, ErrInvalidInput, false, admission[:3]},
-		{"no device", admitted(fakeTx{loadSessionDevice: loads(ExecutionDevice{}, false)}), LockedSession{}, ErrNotFound, false, admission[:4]},
-		{"another device", admitted(fakeTx{loadSessionDevice: loads(ExecutionDevice{ID: testKey, EnvironmentID: testEnvironment}, true)}), LockedSession{}, ErrDeviceBindingConflict, false, admission[:4]},
+		{"no device", admitted(fakeTx{loadEnvironmentDevice: loads(ExecutionDevice{}, false)}), LockedSession{}, ErrNotFound, false, admission[:4]},
+		{"another device", admitted(fakeTx{loadEnvironmentDevice: loads(ExecutionDevice{ID: testKey, EnvironmentID: testEnvironment}, true)}), LockedSession{}, ErrDeviceBindingConflict, false, admission[:4]},
 		{"suspended compute", func() fakeTx { tx := admitted(fakeTx{}); tx.loadComputeSuspension = returns(true); return tx }(), LockedSession{}, ErrTurnConflict, false, admission[:5]},
 		{"pending input", idle(fakeTx{loadPendingInput: returns(true)}), LockedSession{}, ErrTurnConflict, false, admission},
 	} {

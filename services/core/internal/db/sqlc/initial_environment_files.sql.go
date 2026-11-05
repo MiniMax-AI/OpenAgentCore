@@ -12,23 +12,23 @@ import (
 )
 
 const createInitialEnvironmentFile = `-- name: CreateInitialEnvironmentFile :exec
-INSERT INTO initial_environment_files (id, session_id, position, path, size_bytes, contents)
+INSERT INTO initial_environment_files (id, environment_id, position, path, size_bytes, contents)
 VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateInitialEnvironmentFileParams struct {
-	ID        pgtype.UUID `json:"id"`
-	SessionID pgtype.UUID `json:"session_id"`
-	Position  int32       `json:"position"`
-	Path      string      `json:"path"`
-	SizeBytes int64       `json:"size_bytes"`
-	Contents  []byte      `json:"contents"`
+	ID            pgtype.UUID `json:"id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Position      int32       `json:"position"`
+	Path          string      `json:"path"`
+	SizeBytes     int64       `json:"size_bytes"`
+	Contents      []byte      `json:"contents"`
 }
 
 func (q *Queries) CreateInitialEnvironmentFile(ctx context.Context, arg CreateInitialEnvironmentFileParams) error {
 	_, err := q.db.Exec(ctx, createInitialEnvironmentFile,
 		arg.ID,
-		arg.SessionID,
+		arg.EnvironmentID,
 		arg.Position,
 		arg.Path,
 		arg.SizeBytes,
@@ -38,32 +38,44 @@ func (q *Queries) CreateInitialEnvironmentFile(ctx context.Context, arg CreateIn
 }
 
 const getInitialEnvironmentFile = `-- name: GetInitialEnvironmentFile :one
-SELECT f.id, f.session_id, f.position, f.path, f.size_bytes, f.contents FROM initial_environment_files f JOIN sessions s ON s.id = f.session_id
-WHERE s.tenant_id = $1 AND f.session_id = $2 AND f.position = $3 AND s.deleted_at IS NULL
+SELECT f.id, f.environment_id, f.position, f.path, f.size_bytes, f.contents, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS owner_session_id
+FROM initial_environment_files f JOIN environments e ON e.id = f.environment_id
+WHERE e.tenant_id = $1 AND f.environment_id = $2 AND f.position = $3
 `
 
 type GetInitialEnvironmentFileParams struct {
-	TenantID  pgtype.UUID `json:"tenant_id"`
-	SessionID pgtype.UUID `json:"session_id"`
-	Position  int32       `json:"position"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Position      int32       `json:"position"`
 }
 
-func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialEnvironmentFileParams) (InitialEnvironmentFile, error) {
-	row := q.db.QueryRow(ctx, getInitialEnvironmentFile, arg.TenantID, arg.SessionID, arg.Position)
-	var i InitialEnvironmentFile
+type GetInitialEnvironmentFileRow struct {
+	ID             pgtype.UUID `json:"id"`
+	EnvironmentID  pgtype.UUID `json:"environment_id"`
+	Position       int32       `json:"position"`
+	Path           string      `json:"path"`
+	SizeBytes      int64       `json:"size_bytes"`
+	Contents       []byte      `json:"contents"`
+	OwnerSessionID pgtype.UUID `json:"owner_session_id"`
+}
+
+func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialEnvironmentFileParams) (GetInitialEnvironmentFileRow, error) {
+	row := q.db.QueryRow(ctx, getInitialEnvironmentFile, arg.TenantID, arg.EnvironmentID, arg.Position)
+	var i GetInitialEnvironmentFileRow
 	err := row.Scan(
 		&i.ID,
-		&i.SessionID,
+		&i.EnvironmentID,
 		&i.Position,
 		&i.Path,
 		&i.SizeBytes,
 		&i.Contents,
+		&i.OwnerSessionID,
 	)
 	return i, err
 }
 
 const getSessionInitializationReady = `-- name: GetSessionInitializationReady :one
-SELECT NOT EXISTS (SELECT 1 FROM environments e WHERE e.session_id = s.id AND e.initialization <> 'complete') AS ready
+SELECT NOT EXISTS (SELECT 1 FROM environments e WHERE e.id = s.environment_id AND e.initialization <> 'complete') AS ready
 FROM sessions s WHERE s.tenant_id = $1 AND s.id = $2
 `
 
@@ -79,17 +91,17 @@ func (q *Queries) GetSessionInitializationReady(ctx context.Context, arg GetSess
 	return ready, err
 }
 
-const setSessionInitialFileMetadata = `-- name: SetSessionInitialFileMetadata :exec
-UPDATE sessions SET configuration = jsonb_set(configuration, '{environment,files}', $2::jsonb)
+const setEnvironmentInitialFileMetadata = `-- name: SetEnvironmentInitialFileMetadata :exec
+UPDATE environments SET configuration = jsonb_set(configuration, '{files}', $2::jsonb)
 WHERE id = $1
 `
 
-type SetSessionInitialFileMetadataParams struct {
+type SetEnvironmentInitialFileMetadataParams struct {
 	ID      pgtype.UUID `json:"id"`
 	Column2 []byte      `json:"column_2"`
 }
 
-func (q *Queries) SetSessionInitialFileMetadata(ctx context.Context, arg SetSessionInitialFileMetadataParams) error {
-	_, err := q.db.Exec(ctx, setSessionInitialFileMetadata, arg.ID, arg.Column2)
+func (q *Queries) SetEnvironmentInitialFileMetadata(ctx context.Context, arg SetEnvironmentInitialFileMetadataParams) error {
+	_, err := q.db.Exec(ctx, setEnvironmentInitialFileMetadata, arg.ID, arg.Column2)
 	return err
 }

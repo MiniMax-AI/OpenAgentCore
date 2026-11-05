@@ -57,11 +57,11 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			s, w, pool, owner := runtimeSuspensionFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.SessionID)
-			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
+			runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.AttachedSessionID)
+			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.AttachedSessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := transitionTurn(ctx, w, owner.TenantID, owner.SessionID, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+				_, err := transitionTurn(ctx, w, owner.TenantID, owner.AttachedSessionID, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -77,12 +77,12 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			if blocked && !errors.Is(err, sessions.ErrTurnConflict) || !blocked && err != nil {
 				t.Fatal("incorrect claim outcome", phase, err)
 			}
-			got, err := sessionAdapter(s).GetTurn(ctx, owner.TenantID, owner.SessionID, turn)
+			got, err := sessionAdapter(s).GetTurn(ctx, owner.TenantID, owner.AttachedSessionID, turn)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var startedEvents int
-			if err := pool.QueryRow(ctx, `SELECT count(*) FROM session_events WHERE session_id=$1 AND payload->'event'->>'type'='agent.session.turn.in_progress'`, owner.SessionID).Scan(&startedEvents); err != nil {
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM session_events WHERE session_id=$1 AND payload->'event'->>'type'='agent.session.turn.in_progress'`, owner.AttachedSessionID).Scan(&startedEvents); err != nil {
 				t.Fatal(err)
 			}
 			if blocked && (got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() || startedEvents != 0) {
@@ -98,17 +98,17 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 func TestRuntimeSuspensionPromotionRetainsPendingInput(t *testing.T) {
 	s, w, pool, owner := runtimeSuspensionFixture(t)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='waking',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID)
-	pending := reserveEnvironmentInput(t, s, owner.TenantID, owner.SessionID, "during-wake")
-	if _, err := sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID); !errors.Is(err, sessions.ErrTurnConflict) {
+	pending := reserveEnvironmentInput(t, s, owner.TenantID, owner.AttachedSessionID, "during-wake")
+	if _, err := sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.AttachedSessionID, pending.ID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waking allocation promoted model input", err)
 	}
-	got, err := sessionAdapter(s).GetEnvironmentInputReservation(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
+	got, err := sessionAdapter(s).GetEnvironmentInputReservation(t.Context(), owner.TenantID, owner.AttachedSessionID, pending.ID)
 	if err != nil || got.State != sessions.EnvironmentInputPending || got.SettledAt != nil || len(got.Receipts) != 0 {
 		t.Fatal("blocked promotion partially committed", got, err)
 	}
-	environmentInputHistory(t, pool, owner.SessionID, 0, 0)
+	environmentInputHistory(t, pool, owner.AttachedSessionID, 0, 0)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID)
-	got, err = sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
+	got, err = sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.AttachedSessionID, pending.ID)
 	if err != nil || got.State != sessions.EnvironmentInputAdmitted || len(got.Receipts) != 2 {
 		t.Fatal("pending request could not resume once running", got, err)
 	}
@@ -121,7 +121,7 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			runtimeSuspensionCompleted(t, pool, owner)
 			until := time.Now().Add(time.Hour)
 			owner = runtimeSuspensionStep(t, w, owner, "quiescing", &until)
-			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
+			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.AttachedSessionID)
 			done := make(chan error, 1)
 			go func() {
 				_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "suspending", json.RawMessage(`{}`), &until)
@@ -131,9 +131,9 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			var err error
 			switch kind {
 			case "queued":
-				_, err = tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, uuid.NewString(), owner.SessionID)
+				_, err = tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, uuid.NewString(), owner.AttachedSessionID)
 			case "input":
-				_, err = tx.Exec(ctx, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline,settings) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute','{}')`, uuid.NewString(), owner.SessionID)
+				_, err = tx.Exec(ctx, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline,settings) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute','{}')`, uuid.NewString(), owner.AttachedSessionID)
 			case "file_write":
 				_, err = tx.Exec(ctx, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64))
 			case "wake":
@@ -160,12 +160,12 @@ func TestRuntimeSuspensionWakeUsesSessionLock(t *testing.T) {
 	for _, deleted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "phase_commit", true: "deletion"}[deleted], func(t *testing.T) {
 			s, _, pool, owner := runtimeSuspensionFixture(t)
-			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
+			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.AttachedSessionID)
 			done := make(chan error, 1)
 			go func() { done <- deploymentService(t, s).TouchActivity(ctx, owner.TenantID, owner.EnvironmentID) }()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
 			if deleted {
-				if _, err := tx.Exec(ctx, `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1`, owner.SessionID); err != nil {
+				if _, err := tx.Exec(ctx, `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1`, owner.AttachedSessionID); err != nil {
 					t.Fatal(err)
 				}
 			} else if _, err := tx.Exec(ctx, `UPDATE runtime_allocations SET compute_phase='suspending',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID); err != nil {
@@ -190,7 +190,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	s, w, pool, owner := runtimeSuspensionFixture(t)
 	runtimeSuspensionCompleted(t, pool, owner)
 	until := time.Now().Add(time.Hour)
-	ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
+	ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.AttachedSessionID)
 	done := make(chan error, 1)
 	go func() {
 		_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until)
@@ -198,10 +198,10 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
 	turn := uuid.NewString()
-	if _, err := tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.SessionID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.AttachedSessionID); err != nil {
 		t.Fatal(err)
 	}
-	params, err := sessionpg.TurnLookup(owner.TenantID, owner.SessionID, turn)
+	params, err := sessionpg.TurnLookup(owner.TenantID, owner.AttachedSessionID, turn)
 	if err != nil {
 		t.Fatal(err)
 	}

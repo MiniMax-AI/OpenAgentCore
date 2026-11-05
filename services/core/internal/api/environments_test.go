@@ -31,7 +31,7 @@ func (f *environmentResourceFixture) GetEnvironment(_ context.Context, tenant, i
 func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourceFixture) {
 	t.Helper()
 	f := &environmentResourceFixture{environment: sessions.Environment{
-		ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "pending",
+		ID: uuid.NewString(), TenantID: uuid.NewString(), AttachedSessionID: uuid.NewString(), Status: "pending",
 		Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/private/workspace"}`),
 	}}
 	deps, fakes := testDependencies(t)

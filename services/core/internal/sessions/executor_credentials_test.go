@@ -119,7 +119,7 @@ const (
 
 var (
 	testPrincipal = identity.Principal{ProjectScope: identity.ProjectScope{TenantID: testTenant, OrganizationID: "organization", ProjectID: "project"}, SubjectKind: "user", SubjectID: "creator"}
-	selfHosted    = Environment{ID: testEnvironment, SessionID: testSession, Status: "ready", Configuration: []byte(`{"type":"self_hosted"}`)}
+	selfHosted    = Environment{ID: testEnvironment, AttachedSessionID: testSession, Status: "ready", Configuration: []byte(`{"type":"self_hosted"}`)}
 	// theCreator is a fake LoadSessionCreator: testPrincipal created the
 	// Session.
 	theCreator = loads(testPrincipal.Subject(), true)

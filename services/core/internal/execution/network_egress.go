@@ -18,28 +18,30 @@ import (
 )
 
 // allocationEgress derives what the allocation may reach from its immutable
-// inputs only: the deployment generation's network cap, the Session's frozen
-// Environment network policy and the model provider the Session froze at
-// creation. Create and Resume send the same value. A policy that the cap no
+// inputs only: the deployment generation's network cap, the Environment's
+// frozen network policy and, for a Session-owned Environment, the model
+// provider its Session froze at creation. Create and Resume send the same value. A policy that the cap no
 // longer covers fails the attempt with the admission error.
 func (r *runtimeLifecycle) allocationEgress(ctx context.Context, owner deployment.Allocation, network sandbox.Network) (sandbox.Egress, error) {
-	session, err := r.sessions.GetSession(ctx, owner.TenantID, owner.SessionID)
+	environment, err := r.sessions.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return sandbox.Egress{}, err
 	}
-	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil {
+	var configuration v1.Environment
+	if json.Unmarshal(environment.Configuration, &configuration) != nil {
 		return sandbox.Egress{}, sandbox.ErrInvalid
 	}
-	provider, err := r.sessions.SessionModelExecution(ctx, owner.TenantID, owner.SessionID)
 	baseURL := ""
-	switch {
-	case err == nil:
-		baseURL = provider.BaseURL
-	case !errors.Is(err, sessions.ErrNotFound):
-		return sandbox.Egress{}, err
+	if environment.SessionOwned {
+		provider, err := r.sessions.SessionModelExecution(ctx, owner.TenantID, environment.AttachedSessionID)
+		switch {
+		case err == nil:
+			baseURL = provider.BaseURL
+		case !errors.Is(err, sessions.ErrNotFound):
+			return sandbox.Egress{}, err
+		}
 	}
-	return egressFor(network, snapshot.Environment.Network, baseURL)
+	return egressFor(network, configuration.Network, baseURL)
 }
 
 // admitNetwork checks an Environment network policy at Session creation:

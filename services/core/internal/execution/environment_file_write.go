@@ -82,14 +82,14 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
-	if environment.SessionID != request.environment.SessionID {
+	if environment.AttachedSessionID != request.environment.AttachedSessionID {
 		return fileWriteResult{err: sessions.ErrNotFound}
 	}
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
 	if err != nil || (placement.Type != "openai_hosted" && placement.Type != "self_hosted") {
 		return unavailable
 	}
-	session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.SessionID)
+	session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.AttachedSessionID)
 	if err != nil {
 		return fileWriteResult{err: err}
 	}

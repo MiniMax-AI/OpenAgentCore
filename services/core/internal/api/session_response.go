@@ -120,7 +120,7 @@ func sessionEnvironment(session sessions.Session, kind, executorURL string) (v1.
 		return v1.SessionEnvironment{Type: "none"}, nil
 	}
 	environment := session.Environment
-	if (kind != "self_hosted" && kind != "openai_hosted") || environment == nil || environment.ID == "" || environment.SessionID != session.ID || environment.TenantID != session.TenantID {
+	if (kind != "self_hosted" && kind != "openai_hosted") || environment == nil || environment.ID == "" || environment.AttachedSessionID != session.ID || environment.TenantID != session.TenantID {
 		return v1.SessionEnvironment{}, errors.New("unsupported stored session environment")
 	}
 	if kind == "openai_hosted" {

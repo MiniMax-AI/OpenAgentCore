@@ -214,8 +214,8 @@ func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credential
 }
 
 // WithEnrollment authenticates the credential and reads the Environment on
-// the pool before it knows which Session to lock; the enrollment transaction
-// rechecks that authority under the Session lock.
+// the pool; the enrollment transaction rechecks that authority under the
+// Environment locks.
 func (s *Store) WithEnrollment(ctx context.Context, environment, credentialHash string, apply func(context.Context, sessions.EnrollmentTx, sessions.Environment, sessions.LockedSession) error) error {
 	tenant, err := s.AuthenticateEnvironmentExecutor(ctx, environment, credentialHash)
 	if err != nil {
@@ -229,14 +229,13 @@ func (s *Store) WithEnrollment(ctx context.Context, environment, credentialHash 
 	if err != nil {
 		return err
 	}
-	return WithSession(ctx, s.units, lookup.TenantID, pgunit.PathID(current.SessionID), func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
-		tx := &enrollmentTx{SessionTx: BindSession(q, lookup.TenantID, pgunit.PathID(current.SessionID)), environment: lookup.ID, credentialHash: credentialHash}
+	return WithEnvironment(ctx, s.units, lookup.TenantID, lookup.ID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, attached pgtype.UUID) error {
+		tx := &enrollmentTx{SessionTx: BindSession(q, lookup.TenantID, attached), environment: lookup.ID, credentialHash: credentialHash}
 		return apply(ctx, tx, current, locked)
 	})
 }
 
-// enrollmentTx is one enrollment inside the transaction of the Environment's
-// Session.
+// enrollmentTx is one enrollment inside the Environment's transaction.
 type enrollmentTx struct {
 	*SessionTx
 	environment    pgtype.UUID

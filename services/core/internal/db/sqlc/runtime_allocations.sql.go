@@ -33,11 +33,11 @@ SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a
     JOIN devices d ON d.id = a.device_id AND d.environment_id = a.environment_id
     JOIN environments e ON e.id = a.environment_id
-    JOIN sessions s ON s.id = e.session_id
+    JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
     JOIN environment_workspaces w ON w.environment_id = e.id AND w.state = 'ready'
-    WHERE a.id = $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+    WHERE a.id = $1 AND e.status NOT IN ('failed','expired')
       AND e.initialization = 'complete'
-      AND s.configuration->'environment'->>'type' = 'openai_hosted'
+      AND e.configuration->>'type' = 'openai_hosted'
       AND d.supported_agent_kinds @> jsonb_build_array(jsonb_build_object(
         'kind', s.engine, 'available', true, 'capabilities', jsonb_build_object('retained_native_history', true)))
 )::boolean
@@ -98,11 +98,11 @@ func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntime
 }
 
 const getLatestRuntimeAllocation = `-- name: GetLatestRuntimeAllocation :one
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND a.environment_id = $2
+LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = $1 AND a.environment_id = $2
 ORDER BY a.created_at DESC, a.id DESC LIMIT 1
 `
 
@@ -112,11 +112,11 @@ type GetLatestRuntimeAllocationParams struct {
 }
 
 type GetLatestRuntimeAllocationRow struct {
-	RuntimeAllocation RuntimeAllocation  `json:"runtime_allocation"`
-	SessionID         pgtype.UUID        `json:"session_id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	Expired           bool               `json:"expired"`
+	RuntimeAllocation RuntimeAllocation `json:"runtime_allocation"`
+	AttachedSessionID pgtype.UUID       `json:"attached_session_id"`
+	TenantID          pgtype.UUID       `json:"tenant_id"`
+	Reclaimed         bool              `json:"reclaimed"`
+	Expired           bool              `json:"expired"`
 }
 
 func (q *Queries) GetLatestRuntimeAllocation(ctx context.Context, arg GetLatestRuntimeAllocationParams) (GetLatestRuntimeAllocationRow, error) {
@@ -141,29 +141,29 @@ func (q *Queries) GetLatestRuntimeAllocation(ctx context.Context, arg GetLatestR
 		&i.RuntimeAllocation.ObservationError,
 		&i.RuntimeAllocation.ComputePhaseChangedAt,
 		&i.RuntimeAllocation.DeploymentGeneration,
-		&i.SessionID,
+		&i.AttachedSessionID,
 		&i.TenantID,
-		&i.DeletedAt,
+		&i.Reclaimed,
 		&i.Expired,
 	)
 	return i, err
 }
 
 const listRuntimeAllocations = `-- name: ListRuntimeAllocations :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
-JOIN sessions s ON s.id = e.session_id
+LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE a.id > $1 AND a.state <> 'released'
 ORDER BY a.id LIMIT 32
 `
 
 type ListRuntimeAllocationsRow struct {
-	RuntimeAllocation RuntimeAllocation  `json:"runtime_allocation"`
-	SessionID         pgtype.UUID        `json:"session_id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	Expired           bool               `json:"expired"`
+	RuntimeAllocation RuntimeAllocation `json:"runtime_allocation"`
+	AttachedSessionID pgtype.UUID       `json:"attached_session_id"`
+	TenantID          pgtype.UUID       `json:"tenant_id"`
+	Reclaimed         bool              `json:"reclaimed"`
+	Expired           bool              `json:"expired"`
 }
 
 func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([]ListRuntimeAllocationsRow, error) {
@@ -194,9 +194,9 @@ func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([
 			&i.RuntimeAllocation.ObservationError,
 			&i.RuntimeAllocation.ComputePhaseChangedAt,
 			&i.RuntimeAllocation.DeploymentGeneration,
-			&i.SessionID,
+			&i.AttachedSessionID,
 			&i.TenantID,
-			&i.DeletedAt,
+			&i.Reclaimed,
 			&i.Expired,
 		); err != nil {
 			return nil, err
@@ -212,11 +212,11 @@ func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([
 const listRuntimeObservationSessions = `-- name: ListRuntimeObservationSessions :many
 SELECT s.id, s.tenant_id
 FROM sessions s
-LEFT JOIN environments e ON e.session_id = s.id
+JOIN environments e ON e.id = s.environment_id
 LEFT JOIN runtime_allocations a ON a.environment_id = e.id AND a.state <> 'released'
 WHERE s.id > $1
   AND s.deleted_at IS NULL
-  AND s.configuration->'environment'->>'type' = 'openai_hosted'
+  AND e.configuration->>'type' = 'openai_hosted'
   AND (a.id IS NULL OR a.state <> 'released')
 ORDER BY s.id
 LIMIT $2

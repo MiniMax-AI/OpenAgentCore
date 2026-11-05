@@ -17,15 +17,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// allocation converts a stored allocation with the facts of its Session.
-func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted pgtype.Timestamptz, expired bool) deployment.Allocation {
+// allocation converts a stored allocation with the facts of its Environment:
+// its tenant, attached Session, if any, and whether it was reclaimed.
+func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, reclaimed, expired bool) deployment.Allocation {
 	return deployment.Allocation{
 		DeploymentGeneration: uint64(row.DeploymentGeneration.Int64), NodeID: uuidString(row.NodeID), ObservationError: row.ObservationError,
 		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
 		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: timestamp(row.ComputeRetainedUntil),
-		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), SessionID: uuidString(session), TenantID: uuidString(tenant),
+		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), AttachedSessionID: uuidString(session), TenantID: uuidString(tenant),
 		DeviceID: uuidString(row.DeviceID), ProviderKey: uuidString(row.ProviderKey), State: row.State, CreateSettled: row.CreateSettled,
-		SessionDeleted: deleted.Valid, Expired: expired, CreatedAt: row.CreatedAt.Time,
+		Reclaimed: reclaimed, Expired: expired, CreatedAt: row.CreatedAt.Time,
 	}
 }
 
@@ -40,7 +41,7 @@ func findAllocation(ctx context.Context, q *sqlc.Queries, tenant, environment pg
 	if err != nil {
 		return deployment.Allocation{}, false, err
 	}
-	return allocation(row.RuntimeAllocation, row.SessionID, row.TenantID, row.DeletedAt, row.Expired), true, nil
+	return allocation(row.RuntimeAllocation, row.AttachedSessionID, row.TenantID, row.Reclaimed, row.Expired), true, nil
 }
 
 func allocationKey(key deployment.AllocationKey) (pgtype.UUID, pgtype.UUID, error) {
@@ -75,25 +76,9 @@ func (e *Execution) WithReservation(ctx context.Context, key deployment.Allocati
 	if err != nil {
 		return err
 	}
-	return translate(e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		owned, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: environment})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return sessions.ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		session := owned.Environment.SessionID
-		locked, err := sessionpg.LockSession(ctx, q, tenant, session)
-		if err != nil {
-			return err
-		}
+	return translate(sessionpg.WithEnvironment(ctx, e.lease, tenant, environment, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, session pgtype.UUID) error {
 		t := &reservationTx{SessionTx: sessionpg.BindSession(q, tenant, session), ctx: ctx, q: q, tenant: tenant, environment: environment, session: session}
-		if err := apply(locked, t); err != nil {
-			return err
-		}
-		return sessionpg.PruneChanges(ctx, q, session)
+		return apply(locked, t)
 	}))
 }
 
@@ -107,29 +92,20 @@ func (e *Execution) WithAllocationCleanup(ctx context.Context, key deployment.Al
 	})
 }
 
-// withAllocation locks the Session that owns the Environment's allocation,
-// deleted or not, runs apply and prunes the Session's journal.
+// withAllocation locks the Environment of the allocation and its attached
+// Session, reclaimed or not, runs apply and prunes the Session's journal.
 func (e *Execution) withAllocation(ctx context.Context, key deployment.AllocationKey, apply func(*allocationTx) error) error {
 	tenant, environment, err := allocationKey(key)
 	if err != nil {
 		return err
 	}
-	return translate(e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		row, err := q.GetLatestRuntimeAllocation(ctx, sqlc.GetLatestRuntimeAllocationParams{TenantID: tenant, EnvironmentID: environment})
-		if errors.Is(err, pgx.ErrNoRows) {
+	return translate(sessionpg.WithEnvironment(ctx, e.lease, tenant, environment, func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession, session pgtype.UUID) error {
+		if _, found, err := findAllocation(ctx, q, tenant, environment); err != nil {
+			return err
+		} else if !found {
 			return deployment.ErrNotFound
 		}
-		if err != nil {
-			return err
-		}
-		if _, err := sessionpg.LockSession(ctx, q, row.TenantID, row.SessionID); err != nil {
-			return err
-		}
-		if err := apply(&allocationTx{ctx: ctx, q: q, tenant: tenant, environment: environment, session: row.SessionID}); err != nil {
-			return err
-		}
-		return sessionpg.PruneChanges(ctx, q, row.SessionID)
+		return apply(&allocationTx{ctx: ctx, q: q, tenant: tenant, environment: environment, session: session})
 	}))
 }
 
@@ -148,19 +124,9 @@ func (s *Store) WithActivity(ctx context.Context, key deployment.AllocationKey, 
 	if err != nil {
 		return err
 	}
-	return translate(s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		owned, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: environment})
-		if errors.Is(err, pgx.ErrNoRows) {
+	return translate(sessionpg.WithEnvironment(ctx, s.pool, tenant, environment, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, _ pgtype.UUID) error {
+		if locked.Deleted {
 			return sessions.ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		session := owned.Environment.SessionID
-		locked, err := sessionpg.LockSession(ctx, q, tenant, session)
-		if err != nil {
-			return err
 		}
 		touch := activityTx(func() error {
 			retained := pgtype.UUID{}
@@ -195,10 +161,7 @@ func (s *Store) WithActivity(ctx context.Context, key deployment.AllocationKey, 
 			}
 			return q.TouchRuntimeActivity(ctx, sqlc.TouchRuntimeActivityParams{TenantID: tenant, EnvironmentID: environment, RetainedID: retained})
 		})
-		if err := apply(locked, touch); err != nil {
-			return err
-		}
-		return sessionpg.PruneChanges(ctx, q, session)
+		return apply(locked, touch)
 	}))
 }
 
@@ -257,7 +220,7 @@ func (t *reservationTx) ReservePlacement(p placement.Placement) error {
 		return err
 	}
 	if reserved.NodeID == "" {
-		return placementpg.ReservePlacement(t.ctx, t.q, t.session, p)
+		return placementpg.ReservePlacement(t.ctx, t.q, t.environment, p)
 	}
 	node, err := parseID(p.NodeID)
 	if err != nil {
@@ -296,7 +259,7 @@ func (t *reservationTx) InsertAllocation(a deployment.NewAllocation) (deployment
 	if err != nil {
 		return deployment.Allocation{}, err
 	}
-	return allocation(row, t.session, t.tenant, pgtype.Timestamptz{}, false), nil
+	return allocation(row, t.session, t.tenant, false, false), nil
 }
 
 // allocationTx is one allocation change in the transaction that locked the
@@ -315,15 +278,15 @@ func (t *allocationTx) LoadAllocation() (deployment.Allocation, error) {
 	return current, err
 }
 
-func (t *allocationTx) LoadSessionDevice() (deployment.SessionDevice, bool, error) {
-	row, err := t.q.GetSessionDevice(t.ctx, sqlc.GetSessionDeviceParams{TenantID: t.tenant, ID: t.session})
+func (t *allocationTx) LoadEnvironmentDevice() (deployment.EnvironmentDevice, bool, error) {
+	row, err := t.q.GetEnvironmentDevice(t.ctx, sqlc.GetEnvironmentDeviceParams{TenantID: t.tenant, EnvironmentID: t.environment})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return deployment.SessionDevice{}, false, nil
+		return deployment.EnvironmentDevice{}, false, nil
 	}
 	if err != nil {
-		return deployment.SessionDevice{}, false, err
+		return deployment.EnvironmentDevice{}, false, err
 	}
-	return deployment.SessionDevice{ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID)}, true, nil
+	return deployment.EnvironmentDevice{ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID)}, true, nil
 }
 
 func (t *allocationTx) LoadActivity(current deployment.Allocation) (deployment.Activity, error) {
@@ -413,9 +376,7 @@ func (t *allocationTx) change(current deployment.Allocation, write func(context.
 	if err != nil {
 		return deployment.Allocation{}, err
 	}
-	changed := allocation(row, t.session, t.tenant, pgtype.Timestamptz{}, current.Expired)
-	changed.SessionDeleted = current.SessionDeleted
-	return changed, nil
+	return allocation(row, t.session, t.tenant, current.Reclaimed, current.Expired), nil
 }
 
 // cleanupTx is one allocation cleanup, with the owning Session's cancellation
@@ -480,7 +441,7 @@ func (s *Store) CredentialAllocations(ctx context.Context, after string) ([]depl
 	}
 	result := make([]deployment.Allocation, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, allocation(row.RuntimeAllocation, row.SessionID, row.TenantID, row.DeletedAt, row.Expired))
+		result = append(result, allocation(row.RuntimeAllocation, row.AttachedSessionID, row.TenantID, row.Reclaimed, row.Expired))
 	}
 	return result, nil
 }
@@ -527,7 +488,7 @@ func (s *Store) NodeAllocations(ctx context.Context, nodeID string) ([]deploymen
 	for _, a := range rows {
 		result = append(result, deployment.NodeAllocation{
 			DeploymentGeneration: uint64(a.DeploymentGeneration.Int64), Diagnostic: a.ObservationError, ID: uuidString(a.ID), NodeID: uuidString(a.NodeID),
-			TenantID: uuidString(a.TenantID), SessionID: uuidString(a.SessionID), EnvironmentID: uuidString(a.EnvironmentID), State: a.State,
+			TenantID: uuidString(a.TenantID), SessionID: uuidString(a.AttachedSessionID), EnvironmentID: uuidString(a.EnvironmentID), State: a.State,
 			ComputePhase: a.ComputePhase, ComputePhaseChangedAt: timestamp(a.ComputePhaseChangedAt), Initialization: a.Initialization, CreatedAt: a.CreatedAt.Time,
 		})
 	}
@@ -586,7 +547,7 @@ func (s *Store) LifecycleAllocations(ctx context.Context, nodeID, after string) 
 	}
 	result := make([]deployment.Allocation, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, allocation(row.RuntimeAllocation, row.SessionID, row.TenantID, row.DeletedAt, row.Expired))
+		result = append(result, allocation(row.RuntimeAllocation, row.AttachedSessionID, row.TenantID, row.Reclaimed, row.Expired))
 	}
 	return result, nil
 }

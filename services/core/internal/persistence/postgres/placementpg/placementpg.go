@@ -44,13 +44,13 @@ func LoadNodes(ctx context.Context, q *sqlc.Queries) ([]placement.Node, error) {
 	return nodes, nil
 }
 
-// ReservePlacement reserves the placement for the Session's Environment.
-func ReservePlacement(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, p placement.Placement) error {
+// ReservePlacement reserves the placement for the Environment.
+func ReservePlacement(ctx context.Context, q *sqlc.Queries, environment pgtype.UUID, p placement.Placement) error {
 	id, err := pgunit.ParseID(p.NodeID)
 	if err != nil {
 		return err
 	}
-	return q.CreateSessionRuntimePlacement(ctx, sqlc.CreateSessionRuntimePlacementParams{SessionID: session, NodeID: id, Generation: int64(p.Generation)})
+	return q.CreateRuntimePlacement(ctx, sqlc.CreateRuntimePlacementParams{EnvironmentID: environment, NodeID: id, Generation: int64(p.Generation)})
 }
 
 // LoadReserved returns the node placement reserved for the Environment.

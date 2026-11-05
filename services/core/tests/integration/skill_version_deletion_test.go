@@ -30,7 +30,7 @@ func TestSoleSkillVersionDeletionKeepsFrozenSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.Environment.ID)
 	if err != nil || len(frozen.Skills) != 1 || frozen.Skills[0].Metadata.Version != "1" || !bytes.Equal(frozen.Skills[0].Archive, archive) {
 		t.Fatal("fixture Session did not freeze the sole version", err)
 	}
@@ -38,7 +38,7 @@ func TestSoleSkillVersionDeletionKeepsFrozenSetup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	after, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.Environment.ID)
 	if err != nil || !reflect.DeepEqual(after.Skills, frozen.Skills) {
 		t.Fatal("frozen Session installation changed", err)
 	}

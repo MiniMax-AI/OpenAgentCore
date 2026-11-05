@@ -58,7 +58,7 @@ func sessionEnvironment(t testing.TB, environment sessions.Environment, err erro
 
 // hosted reads the hosted Environment of the Session the tests query.
 func hosted(t testing.TB) *fakeEnvironmentReader {
-	return sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)}, nil)
+	return sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, AttachedSessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)}, nil)
 }
 
 type fakeReader struct {
@@ -191,18 +191,18 @@ func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 		t.Fatalf("invalid range reached reader: %+v", reader.queries)
 	}
 	for _, environment := range []sessions.Environment{
-		{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)},
-		{ID: environmentID, TenantID: "55555555-5555-4555-8555-555555555555", SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
-		{ID: environmentID, TenantID: tenantID, SessionID: "66666666-6666-4666-8666-666666666666", Configuration: []byte(`{"type":"openai_hosted"}`)},
-		{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":`)},
-		{ID: "environment", TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
+		{ID: environmentID, TenantID: tenantID, AttachedSessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)},
+		{ID: environmentID, TenantID: "55555555-5555-4555-8555-555555555555", AttachedSessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
+		{ID: environmentID, TenantID: tenantID, AttachedSessionID: "66666666-6666-4666-8666-666666666666", Configuration: []byte(`{"type":"openai_hosted"}`)},
+		{ID: environmentID, TenantID: tenantID, AttachedSessionID: sessionID, Configuration: []byte(`{"type":`)},
+		{ID: "environment", TenantID: tenantID, AttachedSessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
 	} {
 		service.environments = sessionEnvironment(t, environment, nil)
 		if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); err == nil || len(reader.queries) != 0 {
 			t.Fatalf("unsafe Runtime history Environment reached reader: %+v", environment)
 		}
 	}
-	service.environments = sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)}, nil)
+	service.environments = sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, AttachedSessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)}, nil)
 	if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("self-hosted history was not unsupported: %v", err)
 	}

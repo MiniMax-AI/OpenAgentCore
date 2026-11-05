@@ -116,11 +116,11 @@ func (t *SessionTx) LoadEnvironmentInput(ctx context.Context) (*sessions.Environ
 
 func (t *SessionTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
-	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
+	return environmentFromRow(row.Environment, row.AttachedSessionID, row.ExternalWorkspace, err)
 }
 
-// RecordEnvironmentFailure fails the Environment only while it is the
-// Session's and still live; otherwise it changes nothing and returns
+// RecordEnvironmentFailure fails the tenant's Environment only while it is
+// still live; otherwise it changes nothing and returns
 // pgx.ErrNoRows.
 func (t *SessionTx) RecordEnvironmentFailure(ctx context.Context, environment, reason string, detail *sessions.ProvisioningFailureDetail) (time.Time, error) {
 	id, err := parseID(environment)
@@ -134,20 +134,20 @@ func (t *SessionTx) RecordEnvironmentFailure(ctx context.Context, environment, r
 		}
 	}
 	failedAt, err := t.q.RecordEnvironmentFailure(ctx, sqlc.RecordEnvironmentFailureParams{
-		ID: id, SessionID: t.session, TenantID: t.tenant,
+		ID: id, TenantID: t.tenant,
 		FailureReason: pgtype.Text{String: reason, Valid: true}, FailureDetail: rawDetail,
 	})
 	return failedAt.Time, err
 }
 
-// ExpireEnvironment expires the Environment only while it is the Session's;
-// another Environment is sessions.ErrNotFound and changes nothing.
+// ExpireEnvironment expires the tenant's Environment; another one is
+// sessions.ErrNotFound and changes nothing.
 func (t *SessionTx) ExpireEnvironment(ctx context.Context, environment string) error {
 	id, err := parseID(environment)
 	if err != nil {
 		return err
 	}
-	count, err := t.q.ExpireSessionEnvironment(ctx, sqlc.ExpireSessionEnvironmentParams{ID: id, SessionID: t.session, TenantID: t.tenant})
+	count, err := t.q.ExpireEnvironment(ctx, sqlc.ExpireEnvironmentParams{ID: id, TenantID: t.tenant})
 	if err == nil && count != 1 {
 		return sessions.ErrNotFound
 	}
@@ -176,7 +176,7 @@ func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions
 		return err
 	}
 	inserted, err := t.q.CreateEnvironmentDevice(ctx, sqlc.CreateEnvironmentDeviceParams{
-		ID: id, TenantID: t.tenant, SessionID: t.session, EnvironmentID: environment,
+		ID: id, TenantID: t.tenant, EnvironmentID: environment,
 		Name: device.Name, CredentialHash: pgtype.Text{String: credentialHash, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

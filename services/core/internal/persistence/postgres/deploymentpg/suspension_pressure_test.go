@@ -204,7 +204,7 @@ func TestPressureDemandScansPastIncompatiblePage(t *testing.T) {
 	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
 	for range 32 {
 		key := pendingPressureDemand(t, f)
-		if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID); err != nil {
+		if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT id FROM sessions WHERE environment_id=$1 AND deleted_at IS NULL)`, key.EnvironmentID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -295,7 +295,7 @@ func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
 			f.connect(t, node.NodeID)
 			waiting := pendingPressureDemand(t, f)
 			// A real pending reservation supplies demand and retains its original deadline.
-			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,settings,created_at,deadline) SELECT $1,session_id,'pressure','[{}]','{}',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
+			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,settings,created_at,deadline) SELECT $1,id,'pressure','[{}]','{}',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM sessions WHERE environment_id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
 				t.Fatal(err)
 			}
 			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)

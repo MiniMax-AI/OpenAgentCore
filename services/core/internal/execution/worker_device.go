@@ -121,6 +121,32 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 	return false, nil
 }
 
+// harnessUnavailable reports whether the Runtime bound to the Session is
+// connected and reports the Session's Harness missing or unavailable.
+func (w *Worker) harnessUnavailable(ctx context.Context, tenantID, sessionID string) (bool, error) {
+	session, err := w.dispatcher.SessionsReader.GetSession(ctx, tenantID, sessionID)
+	if err != nil {
+		return false, nilIfNotFound(err)
+	}
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, tenantID, sessionID)
+	if err != nil {
+		return false, nilIfNotFound(err)
+	}
+	peer, err := w.dispatcher.authorizedPeer(ctx, bound.ID)
+	if err != nil {
+		return false, nil
+	}
+	info, found, known := peer.AgentKindStatus(session.Engine)
+	return known && (!found || !info.Available), nil
+}
+
+func nilIfNotFound(err error) error {
+	if errors.Is(err, sessions.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 func (w *Worker) ready(ctx context.Context, deviceID string, session sessions.Session, snapshot Snapshot) bool {
 	peer, err := w.dispatcher.authorizedPeer(ctx, deviceID)
 	if err != nil {

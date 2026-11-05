@@ -39,7 +39,7 @@ type fakeTx struct {
 	loadPendingFileWrite     func() (bool, error)
 	loadBoundDevice          func() (bool, error)
 	insertEnvironmentDevice  func() error
-	loadSessionDevice        func() (ExecutionDevice, bool, error)
+	loadEnvironmentDevice    func() (ExecutionDevice, bool, error)
 	claimInitialization      func() (bool, error)
 	completeInitialization   func() (bool, error)
 	failInitialization       func() error

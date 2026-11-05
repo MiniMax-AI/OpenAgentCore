@@ -76,6 +76,9 @@ func FailEnvironment(ctx context.Context, tx EnvironmentFailureTx, environment E
 	if err != nil {
 		return err
 	}
+	if environment.AttachedSessionID == "" {
+		return nil
+	}
 	if err := tx.AppendChanges(ctx, EnvironmentStateChange(environment.ID, kind, "failed")); err != nil {
 		return err
 	}

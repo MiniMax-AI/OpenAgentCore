@@ -67,7 +67,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 }
 
 func environmentDeviceMatches(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice) bool {
-	if environment.SessionID != session.ID || environment.TenantID != session.TenantID {
+	if environment.AttachedSessionID != session.ID || environment.TenantID != session.TenantID {
 		return false
 	}
 	return bound.EnvironmentID == environment.ID

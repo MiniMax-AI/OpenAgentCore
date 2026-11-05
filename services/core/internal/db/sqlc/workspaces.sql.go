@@ -60,12 +60,11 @@ func (q *Queries) GetActiveWorkspaceConfiguration(ctx context.Context) (Workspac
 }
 
 const getEnvironmentWorkspace = `-- name: GetEnvironmentWorkspace :one
-SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, s.tenant_id
+SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, e.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND e.id = $2
+WHERE e.tenant_id = $1 AND e.id = $2
 `
 
 type GetEnvironmentWorkspaceParams struct {
@@ -185,13 +184,12 @@ func (q *Queries) InsertWorkspaceConfiguration(ctx context.Context, arg InsertWo
 }
 
 const listWorkspaceDeletionCandidates = `-- name: ListWorkspaceDeletionCandidates :many
-SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, s.tenant_id
+SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, e.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
 WHERE w.object_id > $1 AND w.state <> 'deleted'
-  AND (s.deleted_at IS NOT NULL OR w.state = 'deleting')
+  AND ((e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)) OR w.state = 'deleting')
   AND NOT EXISTS (
       SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released'
   )
@@ -255,23 +253,6 @@ LOCK TABLE workspace_fs_configurations IN SHARE ROW EXCLUSIVE MODE
 func (q *Queries) LockWorkspaceConfigurations(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockWorkspaceConfigurations)
 	return err
-}
-
-const lockWorkspaceSession = `-- name: LockWorkspaceSession :one
-SELECT s.id FROM sessions s JOIN environments e ON e.session_id = s.id
-WHERE s.tenant_id = $1 AND e.id = $2 FOR UPDATE OF s
-`
-
-type LockWorkspaceSessionParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) LockWorkspaceSession(ctx context.Context, arg LockWorkspaceSessionParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, lockWorkspaceSession, arg.TenantID, arg.ID)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
 }
 
 const lockWorkspaceTenant = `-- name: LockWorkspaceTenant :exec
@@ -351,8 +332,7 @@ SELECT COALESCE(SUM(w.capacity_mib), 0)::bigint AS committed_mib,
        COALESCE(bool_or(w.capacity_mib = 0), false)::boolean AS unbounded
 FROM environment_workspaces w
 JOIN environments e ON e.id = w.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $1 AND w.state <> 'deleted'
+WHERE e.tenant_id = $1 AND w.state <> 'deleted'
 `
 
 type TenantWorkspaceCapacityRow struct {
@@ -378,15 +358,4 @@ func (q *Queries) WorkspaceComputeReleased(ctx context.Context, environmentID pg
 	var released bool
 	err := row.Scan(&released)
 	return released, err
-}
-
-const workspaceSessionDeleted = `-- name: WorkspaceSessionDeleted :one
-SELECT (deleted_at IS NOT NULL)::boolean AS deleted FROM sessions WHERE id = $1
-`
-
-func (q *Queries) WorkspaceSessionDeleted(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, workspaceSessionDeleted, id)
-	var deleted bool
-	err := row.Scan(&deleted)
-	return deleted, err
 }

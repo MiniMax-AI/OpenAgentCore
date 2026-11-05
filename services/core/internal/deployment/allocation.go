@@ -20,7 +20,8 @@ type Allocation struct {
 	ComputeWakeRequested bool
 	ComputeRetainedUntil *time.Time
 	ID, EnvironmentID    string
-	SessionID, TenantID  string
+	AttachedSessionID    string
+	TenantID             string
 	DeviceID             string
 	// ProviderKey is the installation the allocation was provisioned for.
 	ProviderKey string
@@ -28,8 +29,10 @@ type Allocation struct {
 	// CreateSettled records evidence that the original Create can no longer
 	// change resources.
 	CreateSettled bool
-	// SessionDeleted reports that the owning Session was publicly deleted.
-	SessionDeleted bool
+	// Reclaimed reports that the Environment is Session-owned and its Session
+	// was publicly deleted. AttachedSessionID is the live Session using the
+	// Environment, empty when none is attached.
+	Reclaimed bool
 	// Replayed reports that ReserveAllocation returned an existing allocation,
 	// which never authorizes another Create.
 	Replayed bool
@@ -70,8 +73,8 @@ type NewAllocation struct {
 	Generation uint64
 }
 
-// SessionDevice is the Runtime device a Session is bound to.
-type SessionDevice struct{ ID, EnvironmentID string }
+// EnvironmentDevice is the Runtime device of an Environment.
+type EnvironmentDevice struct{ ID, EnvironmentID string }
 
 // Activity separates real work from the connection keepalive. ObservedAt is
 // the database clock when it was read.

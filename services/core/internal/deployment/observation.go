@@ -61,7 +61,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 		if session.Environment == nil {
 			return runtimeobs.Target{}, errors.New("self-hosted Session is missing its Environment")
 		}
-		if session.Environment.TenantID != session.TenantID || session.Environment.SessionID != session.ID {
+		if session.Environment.TenantID != session.TenantID || session.Environment.AttachedSessionID != session.ID {
 			return runtimeobs.Target{}, errors.New("self-hosted Environment does not match resolved ownership")
 		}
 		target.EnvironmentID = session.Environment.ID
@@ -70,7 +70,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 		if session.Environment == nil {
 			return runtimeobs.Target{}, errors.New("managed Session is missing its Environment")
 		}
-		if session.Environment.TenantID != session.TenantID || session.Environment.SessionID != session.ID {
+		if session.Environment.TenantID != session.TenantID || session.Environment.AttachedSessionID != session.ID {
 			return runtimeobs.Target{}, errors.New("managed Environment does not match resolved ownership")
 		}
 		target.EnvironmentID = session.Environment.ID
@@ -81,7 +81,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return runtimeobs.Target{}, fmt.Errorf("resolve Runtime allocation: %w", err)
 		}
-		if allocation.TenantID != tenantID || allocation.SessionID != session.ID || allocation.EnvironmentID != target.EnvironmentID {
+		if allocation.TenantID != tenantID || allocation.AttachedSessionID != session.ID || allocation.EnvironmentID != target.EnvironmentID {
 			return runtimeobs.Target{}, errors.New("Runtime allocation does not match resolved ownership")
 		}
 		target.Instance = runtimeobs.Instance{

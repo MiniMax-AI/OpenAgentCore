@@ -25,11 +25,11 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if bytes.Contains(session.Configuration, []byte("canary")) {
 		t.Fatal("plaintext Session metadata")
 	}
-	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.Environment.ID)
 	if err != nil || !reflect.DeepEqual(frozen, setup) {
 		t.Fatal("Session did not freeze setup", err)
 	}
-	if _, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.Environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Session initialization", err)
 	}
 	retry, err := s.CreateSession(t.Context(), tenant, input)
@@ -43,4 +43,14 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if _, err := sessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("uninitialized execution admitted", err)
 	}
+}
+
+// environmentOf returns the ID of the Environment the Session names.
+func environmentOf(t *testing.T, s *Store, tenant, session string) string {
+	t.Helper()
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session)
+	if err != nil || current.Environment == nil {
+		t.Fatal("Session without an Environment", err)
+	}
+	return current.Environment.ID
 }

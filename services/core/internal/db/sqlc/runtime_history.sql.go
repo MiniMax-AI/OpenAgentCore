@@ -17,10 +17,10 @@ INSERT INTO runtime_history_samples (
     status, observed_at_ns, started_at_ns, cpu_usage_seconds, cpu_capacity_cores,
     memory_usage_bytes, memory_limit_bytes, input_tokens, output_tokens, cpu_utilization_ratio
 )
-SELECT s.tenant_id, s.id, e.id, $1, $2, $3,
+SELECT e.tenant_id, s.id, e.id, $1, $2, $3,
     $4, $5, $6, $7, $8,
     $9, $10, $11, $12, $13
-FROM sessions s JOIN environments e ON e.session_id = s.id
+FROM sessions s JOIN environments e ON e.id = s.environment_id
 WHERE s.tenant_id = $14 AND s.id = $15 AND e.id = $16
 ON CONFLICT (tenant_id, session_id, environment_id, resolved_at_ns) DO NOTHING
 `

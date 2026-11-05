@@ -136,7 +136,7 @@ func TestCheckpointTransferRequiresCompatibleGenerationAndCapacity(t *testing.T)
 				arg = owner.ID
 				want = deployment.ErrAllocationConflict
 			case "deleted":
-				statement = `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=(SELECT session_id FROM environments WHERE id=$1)`
+				statement = `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=(SELECT id FROM sessions WHERE environment_id=$1 AND deleted_at IS NULL)`
 				arg = owner.EnvironmentID
 				want = sessions.ErrNotFound
 			case "epoch":

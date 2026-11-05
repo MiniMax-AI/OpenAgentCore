@@ -39,7 +39,7 @@ func newEnvironment(t *testing.T, pool *pgxpool.Pool, kind, status string) (pgty
 	tenant, session, environment := uuid.New(), uuid.New(), uuid.New()
 	exec(t, pool, `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash, configuration)
 		VALUES ($1, $2, 'codex', 'key', 'hash', jsonb_build_object('environment', jsonb_build_object('type', $3::text)))`, session, tenant, kind)
-	exec(t, pool, `INSERT INTO environments(id, session_id, status) VALUES ($1, $2, $3)`, environment, session, status)
+	exec(t, pool, `WITH e AS (INSERT INTO environments(id, tenant_id, configuration, session_owned, status) SELECT $1, tenant_id, configuration->'environment', true, $3 FROM sessions WHERE id=$2 RETURNING id) UPDATE sessions SET environment_id=(SELECT id FROM e) WHERE id=$2`, environment, session, status)
 	return pgID(tenant), pgID(session), pgID(environment)
 }
 
@@ -177,10 +177,10 @@ type environmentState struct {
 func readEnvironmentState(t *testing.T, pool *pgxpool.Pool, session pgtype.UUID) environmentState {
 	t.Helper()
 	var state environmentState
-	if err := pool.QueryRow(t.Context(), `SELECT e.status, COALESCE((SELECT status FROM turns WHERE session_id = e.session_id), ''),
-		(SELECT state FROM environment_input_reservations WHERE session_id = e.session_id),
-		(SELECT count(*) FROM session_events WHERE session_id = e.session_id)
-		FROM environments e WHERE e.session_id = $1`, session).Scan(&state.environment, &state.turn, &state.input, &state.events); err != nil {
+	if err := pool.QueryRow(t.Context(), `SELECT e.status, COALESCE((SELECT status FROM turns WHERE session_id = s.id), ''),
+		(SELECT state FROM environment_input_reservations WHERE session_id = s.id),
+		(SELECT count(*) FROM session_events WHERE session_id = s.id)
+		FROM sessions s JOIN environments e ON e.id = s.environment_id WHERE s.id = $1`, session).Scan(&state.environment, &state.turn, &state.input, &state.events); err != nil {
 		t.Fatal(err)
 	}
 	return state
@@ -221,7 +221,7 @@ func TestFailEnvironmentThroughTheBindingCommitsWithItsTransaction(t *testing.T)
 		t.Fatalf("committed %+v", got)
 	}
 	var failedAt time.Time
-	if err := pool.QueryRow(t.Context(), `SELECT failed_at FROM environments WHERE session_id = $1`, session).Scan(&failedAt); err != nil {
+	if err := pool.QueryRow(t.Context(), `SELECT e.failed_at FROM environments e JOIN sessions s ON s.environment_id = e.id WHERE s.id = $1`, session).Scan(&failedAt); err != nil {
 		t.Fatal(err)
 	}
 	_, changes := journal(t, pool, session)

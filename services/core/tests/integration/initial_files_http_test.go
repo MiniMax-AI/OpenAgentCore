@@ -52,7 +52,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 			id = response.ID
 		}
 		for position := range files {
-			_, actual, err := sessionAdapter(s).ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			_, actual, err := sessionAdapter(s).ReadInitialEnvironmentFile(t.Context(), tenant, environmentOf(t, s, tenant, id), position)
 			if err != nil || !bytes.Equal(actual, data) {
 				t.Fatal("large HTTP snapshot differs", err)
 			}

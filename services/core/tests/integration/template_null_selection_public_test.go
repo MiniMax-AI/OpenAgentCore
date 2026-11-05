@@ -90,7 +90,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		}
 		// A reader built after the requests reads the frozen setup and files.
 		current := sessionAdapter(s)
-		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, environmentOf(t, s, tenant, id))
 		if err != nil {
 			t.Fatalf("%s frozen setup: %v", label, err)
 		}
@@ -114,18 +114,18 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 				t.Fatalf("%s frozen Plugin bytes changed", label)
 			}
 		}
-		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, environmentOf(t, s, tenant, id)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("%s foreign setup read: %v", label, err)
 		}
-		file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, 0)
+		file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, environmentOf(t, s, tenant, id), 0)
 		if err != nil || string(body) != marker+"-source" || file.Path != "/workspace/source.txt" {
 			t.Fatalf("%s frozen source file changed: %v", label, err)
 		}
-		if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, 0); err == nil {
+		if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, environmentOf(t, s, tenant, id), 0); err == nil {
 			t.Fatalf("%s foreign initial file read: %v", label, err)
 		}
 		var encryptedSetup, encryptedFile, configuration []byte
-		err = pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id JOIN initial_environment_files f ON f.session_id=s.id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
+		err = pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id JOIN initial_environment_files f ON f.environment_id=s.environment_id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
 		if err != nil || len(encryptedSetup) == 0 || len(encryptedFile) == 0 ||
 			bytes.Contains(encryptedSetup, []byte(marker)) || bytes.Contains(encryptedFile, []byte(marker)) || bytes.Contains(configuration, []byte(marker)) {
 			t.Fatalf("%s confidential initialization storage: %v", label, err)
@@ -137,8 +137,8 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		want  int
 	}{
 		{"SELECT count(*) FROM sessions WHERE tenant_id=$1", 9},
-		{"SELECT count(*) FROM environments e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 9},
-		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 9},
+		{"SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1", 9},
+		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.tenant_id=$1", 9},
 		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.id=f.session_id WHERE s.tenant_id=$1", 9},
 		{"SELECT count(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.tenant_id=$1", 0},
 		{"SELECT count(*) FROM environment_input_reservations e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 0},

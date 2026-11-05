@@ -235,11 +235,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:
-			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == w.executionConcurrency() {
+			if request.ctx.Err() != nil || active[request.environment.AttachedSessionID] || len(active) == w.executionConcurrency() {
 				request.result <- fileWriteResult{err: ErrExecutionUnavailable}
 				continue
 			}
-			active[request.environment.SessionID] = true
+			active[request.environment.AttachedSessionID] = true
 			w.observeSlots(len(active))
 			running.Add(1)
 			go func() {
@@ -248,7 +248,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			}()
 			continue
 		case write := <-writesCompleted:
-			delete(active, write.request.environment.SessionID)
+			delete(active, write.request.environment.AttachedSessionID)
 			w.observeSlots(len(active))
 			write.request.result <- write.result
 			if !rescanOnCompletion {
@@ -256,13 +256,13 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			}
 			rescanOnCompletion = false
 		case request := <-w.directoryReads:
-			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.SessionID] && len(active) == w.executionConcurrency()) {
+			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.AttachedSessionID] && len(active) == w.executionConcurrency()) {
 				request.reply(directoryReadResult{err: ErrExecutionUnavailable})
 				continue
 			}
-			reserved := !active[request.environment.SessionID]
+			reserved := !active[request.environment.AttachedSessionID]
 			if reserved {
-				active[request.environment.SessionID] = true
+				active[request.environment.AttachedSessionID] = true
 				w.observeSlots(len(active))
 			}
 			reads++
@@ -272,7 +272,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 				result := w.runDirectoryRead(ctx, request, reserved)
 				id := ""
 				if reserved {
-					id = request.environment.SessionID
+					id = request.environment.AttachedSessionID
 				}
 				readsCompleted <- readCompletion{id: id, request: request, result: result}
 			}()

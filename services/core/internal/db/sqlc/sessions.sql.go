@@ -21,7 +21,7 @@ WHERE sessions.deleted_at IS NULL
   AND CASE WHEN sessions.creation_request_hash IS NULL
     THEN sessions.request_hash = EXCLUDED.request_hash
     ELSE sessions.creation_request_hash = EXCLUDED.creation_request_hash END
-RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
+RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id
 `
 
 type CreateSessionParams struct {
@@ -65,12 +65,13 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.DeletedAt,
 		&i.CreatorKind,
 		&i.CreatorID,
+		&i.EnvironmentID,
 	)
 	return i, err
 }
 
 const findSessionCreation = `-- name: FindSessionCreation :one
-SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions
+SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id FROM sessions
 WHERE tenant_id = $1 AND idempotency_key = $2
 `
 
@@ -96,12 +97,13 @@ func (q *Queries) FindSessionCreation(ctx context.Context, arg FindSessionCreati
 		&i.DeletedAt,
 		&i.CreatorKind,
 		&i.CreatorID,
+		&i.EnvironmentID,
 	)
 	return i, err
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
 `
 
 type GetSessionParams struct {
@@ -126,6 +128,7 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 		&i.DeletedAt,
 		&i.CreatorKind,
 		&i.CreatorID,
+		&i.EnvironmentID,
 	)
 	return i, err
 }
@@ -163,7 +166,7 @@ func (q *Queries) GetSessionCursor(ctx context.Context, arg GetSessionCursorPara
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions
+SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id FROM sessions
 WHERE tenant_id = $1 AND deleted_at IS NULL
   AND ($2::text IS NULL OR configuration #>> '{agent,id}' = $2::text)
   AND ($3::jsonb IS NULL OR metadata @> $3::jsonb)
@@ -219,6 +222,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 			&i.DeletedAt,
 			&i.CreatorKind,
 			&i.CreatorID,
+			&i.EnvironmentID,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +235,7 @@ func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]S
 }
 
 const lockVisibleSession = `-- name: LockVisibleSession :one
-SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE
+SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE
 `
 
 type LockVisibleSessionParams struct {
@@ -256,6 +260,7 @@ func (q *Queries) LockVisibleSession(ctx context.Context, arg LockVisibleSession
 		&i.DeletedAt,
 		&i.CreatorKind,
 		&i.CreatorID,
+		&i.EnvironmentID,
 	)
 	return i, err
 }
@@ -270,7 +275,7 @@ func (q *Queries) MarkSessionDeleted(ctx context.Context, id pgtype.UUID) error 
 }
 
 const updateSession = `-- name: UpdateSession :one
-UPDATE sessions SET configuration = $3, metadata = $4 WHERE tenant_id = $1 AND id = $2 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
+UPDATE sessions SET configuration = $3, metadata = $4 WHERE tenant_id = $1 AND id = $2 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id, environment_id
 `
 
 type UpdateSessionParams struct {
@@ -302,6 +307,7 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		&i.DeletedAt,
 		&i.CreatorKind,
 		&i.CreatorID,
+		&i.EnvironmentID,
 	)
 	return i, err
 }

@@ -21,7 +21,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			wakeTenant, _, wakeEnv := f.session(f.nodeB, false)
 			wakeOwner := f.provision(wakeTenant, wakeEnv)
 			f.phase(wakeTenant, wakeEnv.ID, "running")
-			if _, err := f.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes','{}')", uuid.NewString(), wakeOwner.SessionID); err != nil {
+			if _, err := f.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes','{}')", uuid.NewString(), wakeOwner.AttachedSessionID); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := f.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", wakeOwner.ID); err != nil {

@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-func (f *fakeTx) LoadSessionDevice(context.Context) (ExecutionDevice, bool, error) {
-	f.record("LoadSessionDevice", f.loadSessionDevice != nil)
-	return f.loadSessionDevice()
+func (f *fakeTx) LoadEnvironmentDevice(context.Context) (ExecutionDevice, bool, error) {
+	f.record("LoadEnvironmentDevice", f.loadEnvironmentDevice != nil)
+	return f.loadEnvironmentDevice()
 }
 
 func (f *fakeTx) ClaimInitialization(_ context.Context, environment string) (bool, error) {
@@ -130,7 +130,7 @@ func executionOperations(t *testing.T, storage *fakeExecutionStorage) *Execution
 	return operations
 }
 
-var hostedEnvironment = Environment{ID: "environment", SessionID: "session", Status: "pending", Configuration: []byte(`{"type":"openai_hosted"}`)}
+var hostedEnvironment = Environment{ID: "environment", AttachedSessionID: "session", Status: "pending", Configuration: []byte(`{"type":"openai_hosted"}`)}
 
 func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 	owner := EnvironmentInitialization{EnvironmentID: "environment", DeviceID: "device"}
@@ -141,7 +141,7 @@ func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 	}{
 		{"live", Environment{ID: "environment", Status: "pending"}, nil},
 		{"another Environment", Environment{ID: "other", Status: "pending"}, ErrDeviceBindingConflict},
-		{"failed", Environment{ID: "environment", Status: "failed"}, ErrNotFound},
+		{"failed", Environment{ID: "environment", AttachedSessionID: "session", Status: "failed"}, ErrNotFound},
 		{"expired", Environment{ID: "environment", Status: "expired"}, ErrNotFound},
 	} {
 		if err := checkInitializationOwner(owner, test.environment); !errors.Is(err, test.want) {
@@ -168,11 +168,11 @@ func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 
 func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 	var journaled []SessionChange
-	owner := EnvironmentInitialization{TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", DeviceID: "device"}
+	owner := EnvironmentInitialization{TenantID: "tenant", EnvironmentID: "environment", DeviceID: "device"}
 	listed := func() (ExecutionDevice, bool, error) {
 		return ExecutionDevice{ID: "device", EnvironmentID: "environment"}, true, nil
 	}
-	checked := []string{"WithInitialization tenant session", "LoadEnvironment", "LoadSessionDevice"}
+	checked := []string{"WithInitialization tenant environment", "LoadEnvironment", "LoadEnvironmentDevice"}
 	for _, test := range []struct {
 		name    string
 		tx      fakeTx
@@ -181,25 +181,25 @@ func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 		want    error
 		calls   []string
 	}{
-		{"claim", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, claimInitialization: returns(true), appendChanges: collect(&journaled)},
+		{"claim", fakeTx{loadEnvironment: returns(hostedEnvironment), loadEnvironmentDevice: listed, claimInitialization: returns(true), appendChanges: collect(&journaled)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			nil, append(checked, "ClaimInitialization environment", "AppendChanges agent.session.environment.pending")},
-		{"claim of a self-hosted Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "pending", Configuration: []byte(`{"type":"self_hosted"}`)}), loadSessionDevice: listed, claimInitialization: returns(true)},
+		{"claim of a self-hosted Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "pending", Configuration: []byte(`{"type":"self_hosted"}`)}), loadEnvironmentDevice: listed, claimInitialization: returns(true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			nil, append(checked, "ClaimInitialization environment")},
-		{"claim that did not apply", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, claimInitialization: returns(false)},
+		{"claim that did not apply", fakeTx{loadEnvironment: returns(hostedEnvironment), loadEnvironmentDevice: listed, claimInitialization: returns(false)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			ErrTurnConflict, append(checked, "ClaimInitialization environment")},
-		{"complete", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, completeInitialization: returns(true), appendChanges: collect(&journaled)},
+		{"complete", fakeTx{loadEnvironment: returns(hostedEnvironment), loadEnvironmentDevice: listed, completeInitialization: returns(true), appendChanges: collect(&journaled)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
 			nil, append(checked, "CompleteInitialization environment", "AppendChanges agent.session.environment.ready")},
-		{"device moved", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: loads(ExecutionDevice{ID: "other", EnvironmentID: "environment"}, true)},
+		{"device moved", fakeTx{loadEnvironment: returns(hostedEnvironment), loadEnvironmentDevice: loads(ExecutionDevice{ID: "other", EnvironmentID: "environment"}, true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
 			ErrTurnConflict, checked},
 		{"deleted Session", fakeTx{},
 			LockedSession{Deleted: true}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			ErrNotFound, checked[:1]},
-		{"failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "failed"})},
+		{"failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", AttachedSessionID: "session", Status: "failed"})},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			ErrNotFound, checked[:2]},
 	} {
@@ -216,8 +216,8 @@ func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 }
 
 func TestFailEnvironmentInitializationKeepsACompletedPreparation(t *testing.T) {
-	owner := EnvironmentInitialization{TenantID: "tenant", SessionID: "session", EnvironmentID: "environment"}
-	failure := ProvisioningFailure{Step: ProvisioningHarness}
+	owner := EnvironmentInitialization{TenantID: "tenant", EnvironmentID: "environment"}
+	failure := ProvisioningFailure{Step: ProvisioningPythonPackages}
 
 	complete := hostedEnvironment
 	complete.Initialization = "complete"
@@ -226,7 +226,7 @@ func TestFailEnvironmentInitializationKeepsACompletedPreparation(t *testing.T) {
 	if !errors.Is(err, ErrTurnConflict) {
 		t.Fatalf("completed preparation failed: %v", err)
 	}
-	assertCalls(t, &tx, "WithInitialization tenant session", "LoadEnvironment")
+	assertCalls(t, &tx, "WithInitialization tenant environment", "LoadEnvironment")
 
 	// The preparation fails before the Environment does; the device is not
 	// consulted.
@@ -236,7 +236,7 @@ func TestFailEnvironmentInitializationKeepsACompletedPreparation(t *testing.T) {
 	if !errors.Is(err, errStorage) {
 		t.Fatal(err)
 	}
-	assertCalls(t, &tx, "WithInitialization tenant session", "LoadEnvironment", "FailInitialization environment",
+	assertCalls(t, &tx, "WithInitialization tenant environment", "LoadEnvironment", "FailInitialization environment",
 		"RecordEnvironmentFailure environment "+failure.Reason())
 }
 
@@ -269,7 +269,7 @@ func TestConnectionGenerationsAreOrdered(t *testing.T) {
 				return o.ReplaceEnvironmentConnection(t.Context(), "tenant", "environment", generation)
 			},
 			nil, tracked("LoadConnection environment")},
-		{"replacement of a failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "failed"}), loadEnvironmentInput: quietInput}, LockedSession{},
+		{"replacement of a failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", AttachedSessionID: "session", Status: "failed"}), loadEnvironmentInput: quietInput}, LockedSession{},
 			func(o *ExecutionOperations) error {
 				return o.ReplaceEnvironmentConnection(t.Context(), "tenant", "environment", generation)
 			},
@@ -294,7 +294,7 @@ func TestConnectionGenerationsAreOrdered(t *testing.T) {
 				return o.ObserveEnvironmentConnection(t.Context(), "tenant", "environment", generation, 5, false)
 			},
 			nil, tracked("LoadConnection environment")},
-		{"observation of a failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "failed"}), loadEnvironmentInput: quietInput, loadConnection: loads(EnvironmentConnection{Generation: generation, Revision: 1}, true)}, LockedSession{},
+		{"observation of a failed Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", AttachedSessionID: "session", Status: "failed"}), loadEnvironmentInput: quietInput, loadConnection: loads(EnvironmentConnection{Generation: generation, Revision: 1}, true)}, LockedSession{},
 			func(o *ExecutionOperations) error {
 				return o.ObserveEnvironmentConnection(t.Context(), "tenant", "environment", generation, 2, true)
 			},

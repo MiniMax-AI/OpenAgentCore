@@ -54,7 +54,7 @@ stateDiagram-v2
 
 Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
 
-Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment derives its Project and immutable configuration from the owning Session. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
+Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment row holds its own Project, immutable configuration and preparation input, and the Session names it; at most one live Session is attached to an Environment. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
 
 A managed outer Environment must exclude broader application credentials and other tenants’ secrets.
 
@@ -135,7 +135,7 @@ stateDiagram-v2
 - Deadlines are checked after taking the Session lock. Expiration and targeted cancellation keep their terminal identity, and a retry of a terminal reservation cannot affect a later reservation or Turn.
 - Initial reservations fail the Session when they expire; later ones return the Session to idle. Failure events capture the settled activity and Usage atomically. A late connection or a creation retry cannot reset or replay expired input.
 
-A Runtime `failed` result with `preparation_failed` and no Run settles the pending input at once with `runtime_preparation_failed`. So does a rejection of the current `execution_prepare` with no Run and code `invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`. Core records a safe Session failure before any Turn exists and releases the input gate; after the local cause is fixed, new input is accepted. Transport loss, capacity rejection and unconfirmed cleanup stay retryable within the original deadline. Core uses these common control states, never Harness-specific error text.
+A Runtime `failed` result with `preparation_failed` and no Run settles the pending input at once with `runtime_preparation_failed`. So does a rejection of the current `execution_prepare` with no Run and code `invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`. Core records a safe Session failure before any Turn exists and releases the input gate; after the local cause is fixed, new input is accepted. Transport loss, capacity rejection and unconfirmed cleanup stay retryable within the original deadline. A Runtime that lacks the attached Session's Harness fails that input the same way when its executor is prepared; initialization checks no Harness. Core uses these common control states, never Harness-specific error text.
 
 ### Activity and required actions
 
@@ -230,7 +230,7 @@ stateDiagram-v2
 ```
 
 - The Worker's initialization scheduler scans 32 Environments at a time, wraps at the end and bounds concurrent preparations by execution concurrency, independently of Provider maintenance.
-- A missing socket does not consume a pending attempt. An unavailable Harness fails before installation. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
+- A missing socket does not consume a pending attempt. Initialization needs no Harness. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
 - Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
@@ -245,7 +245,6 @@ A failed initialization records the events and Session state that [Environment i
 | npm packages, confirmed exit 1–255 | `Failed to provision environment: script "npm package installation" failed with exit code N` |
 | Initial file installation, confirmed failure | `Failed to provision environment: initial file installation failed` |
 | Skill preparation, confirmed failure | `Failed to provision environment: Skill installation failed` |
-| Harness not installed on the Runtime | `Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session.` |
 | Anything else: timeouts, unknown effects, missing or malformed receipts, Plugin installation, snapshot finalization, bootstrap rejection, Core restart | `Failed to provision environment: initialization did not complete` |
 
 Every initialization operation returns a typed `rejected`, `failed` or `unknown` outcome, and the daemon confirms process exit and I/O settlement first. Core composes the reason from a fixed label and integers, so commands, env values, package names, paths and process output never reach the reason, events, logs or responses. The failed step is not retried and later steps do not run. Confidential env and setup snapshots are encrypted separately from ordinary metadata. Initial files use the atomic replacing writer and anchored workspace paths on every platform; Files API creation keeps its own no-overwrite rule.

@@ -34,20 +34,18 @@ func (q *Queries) DeleteEnvironmentConnection(ctx context.Context, environmentID
 	return err
 }
 
-const expireSessionEnvironment = `-- name: ExpireSessionEnvironment :execrows
+const expireEnvironment = `-- name: ExpireEnvironment :execrows
 UPDATE environments e SET status = 'expired'
-WHERE e.id = $1 AND e.session_id = $2
-AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = $3)
+WHERE e.id = $1 AND e.tenant_id = $2
 `
 
-type ExpireSessionEnvironmentParams struct {
-	ID        pgtype.UUID `json:"id"`
-	SessionID pgtype.UUID `json:"session_id"`
-	TenantID  pgtype.UUID `json:"tenant_id"`
+type ExpireEnvironmentParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID pgtype.UUID `json:"tenant_id"`
 }
 
-func (q *Queries) ExpireSessionEnvironment(ctx context.Context, arg ExpireSessionEnvironmentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, expireSessionEnvironment, arg.ID, arg.SessionID, arg.TenantID)
+func (q *Queries) ExpireEnvironment(ctx context.Context, arg ExpireEnvironmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireEnvironment, arg.ID, arg.TenantID)
 	if err != nil {
 		return 0, err
 	}
@@ -66,9 +64,9 @@ func (q *Queries) GetEnvironmentConnection(ctx context.Context, environmentID pg
 }
 
 const listEnvironmentConnections = `-- name: ListEnvironmentConnections :many
-SELECT e.id, e.session_id, s.tenant_id
-FROM environments e JOIN sessions s ON s.id = e.session_id
-WHERE e.id > $1 AND s.deleted_at IS NULL
+SELECT e.id, e.tenant_id
+FROM environments e
+WHERE e.id > $1 AND (NOT e.session_owned OR EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))
   AND (e.status = 'connected' OR EXISTS (
       SELECT 1 FROM environment_connections c WHERE c.environment_id = e.id
   ))
@@ -76,9 +74,8 @@ ORDER BY e.id LIMIT 32
 `
 
 type ListEnvironmentConnectionsRow struct {
-	ID        pgtype.UUID `json:"id"`
-	SessionID pgtype.UUID `json:"session_id"`
-	TenantID  pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+	TenantID pgtype.UUID `json:"tenant_id"`
 }
 
 func (q *Queries) ListEnvironmentConnections(ctx context.Context, id pgtype.UUID) ([]ListEnvironmentConnectionsRow, error) {
@@ -90,7 +87,7 @@ func (q *Queries) ListEnvironmentConnections(ctx context.Context, id pgtype.UUID
 	items := []ListEnvironmentConnectionsRow{}
 	for rows.Next() {
 		var i ListEnvironmentConnectionsRow
-		if err := rows.Scan(&i.ID, &i.SessionID, &i.TenantID); err != nil {
+		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -103,8 +100,7 @@ func (q *Queries) ListEnvironmentConnections(ctx context.Context, id pgtype.UUID
 
 const recordEnvironmentFailure = `-- name: RecordEnvironmentFailure :one
 UPDATE environments e SET status = 'failed', failure_reason = $1, failure_detail = $2, failed_at = clock_timestamp()
-WHERE e.id = $3 AND e.session_id = $4 AND e.status NOT IN ('failed', 'expired')
-AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = $5)
+WHERE e.id = $3 AND e.tenant_id = $4 AND e.status NOT IN ('failed', 'expired')
 RETURNING e.failed_at
 `
 
@@ -112,7 +108,6 @@ type RecordEnvironmentFailureParams struct {
 	FailureReason pgtype.Text `json:"failure_reason"`
 	FailureDetail []byte      `json:"failure_detail"`
 	ID            pgtype.UUID `json:"id"`
-	SessionID     pgtype.UUID `json:"session_id"`
 	TenantID      pgtype.UUID `json:"tenant_id"`
 }
 
@@ -121,7 +116,6 @@ func (q *Queries) RecordEnvironmentFailure(ctx context.Context, arg RecordEnviro
 		arg.FailureReason,
 		arg.FailureDetail,
 		arg.ID,
-		arg.SessionID,
 		arg.TenantID,
 	)
 	var failed_at pgtype.Timestamptz

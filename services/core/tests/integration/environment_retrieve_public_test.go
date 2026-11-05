@@ -105,7 +105,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if err := reopened.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM turns WHERE session_id=$1) +
 		(SELECT count(*) FROM environment_input_reservations WHERE session_id=$1) +
-		(SELECT count(*) FROM session_events WHERE session_id=$1)`, before.SessionID).Scan(&history); err != nil || history != 0 {
+		(SELECT count(*) FROM session_events WHERE session_id=$1)`, before.AttachedSessionID).Scan(&history); err != nil || history != 0 {
 		t.Fatal("read-only retrieval admitted work or emitted events", history, err)
 	}
 }

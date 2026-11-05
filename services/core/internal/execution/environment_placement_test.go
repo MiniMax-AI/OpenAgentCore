@@ -11,7 +11,7 @@ import (
 
 func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	session := sessions.Session{ID: "session", TenantID: "tenant"}
-	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+	environment := sessions.Environment{ID: "environment", AttachedSessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
 	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request)
@@ -41,7 +41,7 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 		}
 	}
 	session := sessions.Session{ID: "session", TenantID: "tenant"}
-	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","network":{"access":"disabled"}}`)}
+	environment := sessions.Environment{ID: "environment", AttachedSessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","network":{"access":"disabled"}}`)}
 	d := &Dispatcher{}
 	for _, scope := range []string{"", "other", environment.ID} {
 		var req proto.PromptRequestPayload
@@ -58,7 +58,7 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 
 func TestToolEnvironmentRemainsInExecutionBinding(t *testing.T) {
 	session := sessions.Session{ID: "session", TenantID: "tenant"}
-	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"npm":["is-number"]}}`)}
+	environment := sessions.Environment{ID: "environment", AttachedSessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"npm":["is-number"]}}`)}
 	var req proto.PromptRequestPayload
 	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
 	if err != nil || req.LocalEnvironment == nil || !req.LocalEnvironment.ToolEnvironment {

@@ -102,9 +102,14 @@ func (e *ExecutionOperations) EnsurePlacement(ctx context.Context, key Allocatio
 // allocation admission and capacity-pressure decisions. Retained files require
 // another external-storage generation; new Sessions may select either kind.
 func (e *ExecutionOperations) eligibleNodes(d placement.Deployment, nodes []placement.Node, engineKind string, retained bool, loadGeneration func(uint64) (GenerationSpecification, error)) ([]placement.Node, error) {
-	declaration, known := e.harnesses.Lookup(engineKind)
-	if !known {
-		return nil, sessions.ErrInvalidInput
+	// An Environment with no attached Session has no Harness and no native history to retain.
+	historySupported := true
+	if engineKind != "" {
+		declaration, known := e.harnesses.Lookup(engineKind)
+		if !known {
+			return nil, sessions.ErrInvalidInput
+		}
+		historySupported = declaration.Capabilities.RetainedNativeHistory.IsSupported()
 	}
 	compatible := make(map[uint64]bool)
 	filtered := make([]placement.Node, 0, len(nodes))
@@ -129,7 +134,7 @@ func (e *ExecutionOperations) eligibleNodes(d placement.Deployment, nodes []plac
 			if err := json.Unmarshal(specification, &spec); err != nil {
 				return nil, err
 			}
-			accepts = (!retained || spec.Workspace != nil) && sessions.ValidateRetainedHistory(spec.Workspace != nil, declaration.Capabilities.RetainedNativeHistory.IsSupported()) == nil
+			accepts = (!retained || spec.Workspace != nil) && sessions.ValidateRetainedHistory(spec.Workspace != nil, historySupported) == nil
 			compatible[generation] = accepts
 		}
 		if accepts {

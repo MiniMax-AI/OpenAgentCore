@@ -20,11 +20,11 @@ type FileWriteReservationTx interface {
 	FileWriteTx
 	ComputeAdmissionTx
 	InputStartTx
-	// LoadEnvironment reads the Session's Environment.
+	// LoadEnvironment reads the Environment.
 	LoadEnvironment(ctx context.Context) (Environment, error)
-	// LoadSessionDevice reads the Runtime device bound to the Session and
-	// reports whether the Session has one that still has authority.
-	LoadSessionDevice(ctx context.Context) (ExecutionDevice, bool, error)
+	// LoadEnvironmentDevice reads the Runtime device of the Environment and
+	// reports whether it has one that still has authority.
+	LoadEnvironmentDevice(ctx context.Context) (ExecutionDevice, bool, error)
 	// LoadPendingInput reports whether Environment input reserved for the
 	// Session is pending.
 	LoadPendingInput(ctx context.Context) (bool, error)
@@ -33,7 +33,7 @@ type FileWriteReservationTx interface {
 	CreateFileWrite(ctx context.Context, key FileWriteIdentity) (EnvironmentFileWrite, error)
 }
 
-// FileWriteSettlementTx is the Session transaction a file write is settled in.
+// FileWriteSettlementTx is the Environment transaction a file write is settled in.
 type FileWriteSettlementTx interface {
 	FileWriteTx
 	// SettleFileWrite settles the pending write in the state and returns it.
@@ -89,10 +89,10 @@ func (o *ExecutionOperations) ReserveEnvironmentFileWrite(ctx context.Context, t
 	return result, nil
 }
 
-// admitFileWrite admits a new write to the Session's live Environment through
-// the device the key names, dedicated to that Environment, while the Session
-// is idle with no pending input. A failed or expired Environment is
-// ErrInvalidInput, a Session without a device ErrNotFound, another device
+// admitFileWrite admits a new write to the live Environment through the
+// device the key names, dedicated to that Environment, while its attached
+// Session, if any, is idle with no pending input. A failed or expired
+// Environment is ErrInvalidInput, an Environment without a device ErrNotFound, another device
 // ErrDeviceBindingConflict, and work in progress ErrTurnConflict.
 func admitFileWrite(ctx context.Context, tx FileWriteReservationTx, owner Environment, key FileWriteIdentity) error {
 	current, err := tx.LoadEnvironment(ctx)
@@ -102,7 +102,7 @@ func admitFileWrite(ctx context.Context, tx FileWriteReservationTx, owner Enviro
 	if current.ID != owner.ID || terminalEnvironment(current.Status) {
 		return ErrInvalidInput
 	}
-	bound, found, err := tx.LoadSessionDevice(ctx)
+	bound, found, err := tx.LoadEnvironmentDevice(ctx)
 	if err != nil {
 		return err
 	}

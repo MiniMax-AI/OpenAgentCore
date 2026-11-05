@@ -371,13 +371,13 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 }
 func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
-	f.sql(`INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes','{}')`, id, owner.SessionID)
+	f.sql(`INSERT INTO turns(id,session_id,status,completed_at,settings) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes','{}')`, id, owner.AttachedSessionID)
 	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
 }
 func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
 	id := uuid.NewString()
-	f.sql(`INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, id, owner.SessionID)
+	f.sql(`INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, id, owner.AttachedSessionID)
 	return id
 }
 
@@ -391,7 +391,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	}
 	queued := f.queued(suspended)
 	awake := f.phase(tenant, env.ID, "running")
-	if awake.SessionID != session.ID || awake.ID != owner.ID || awake.DeviceID != owner.DeviceID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 {
+	if awake.AttachedSessionID != session.ID || awake.ID != owner.ID || awake.DeviceID != owner.DeviceID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 {
 		t.Fatal("wake replaced Session or replayed allocation")
 	}
 	var completedCount, queuedCount int

@@ -323,7 +323,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 		// IDs are immutable API identities, so seed this bounded scheduling fixture
 		// directly instead of modifying an existing Session primary key.
 		runtimeSuspensionSQL(t, s.pool, `INSERT INTO sessions(id,tenant_id,engine,idempotency_key,request_hash,configuration) SELECT $1::uuid,tenant_id,engine,$1::text,$1::text,configuration FROM sessions WHERE id=$2`, id, session.ID)
-		runtimeSuspensionSQL(t, s.pool, `INSERT INTO environments(id,session_id) VALUES($1,$2)`, uuid.NewString(), id)
+		runtimeSuspensionSQL(t, s.pool, `WITH e AS (INSERT INTO environments(id, tenant_id, configuration, session_owned) SELECT $1, tenant_id, COALESCE(configuration->'environment', '{"type":"openai_hosted"}'), true FROM sessions WHERE id=$2 RETURNING id) UPDATE sessions SET environment_id=(SELECT id FROM e) WHERE id=$2`, uuid.NewString(), id)
 		if i <= 34 {
 			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'in_progress','{}')`, uuid.NewString(), id)
 		}

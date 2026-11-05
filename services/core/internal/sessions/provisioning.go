@@ -93,7 +93,6 @@ const (
 	ProvisioningNPMPackages    = "npm"
 	ProvisioningInitialFile    = "file"
 	ProvisioningSkill          = "skill"
-	ProvisioningHarness        = "harness"
 )
 
 // ProvisioningFailure identifies a confirmed failed initialization step.
@@ -124,8 +123,6 @@ func (f ProvisioningFailure) Reason() string {
 		return fmt.Sprintf("Failed to provision environment: script %q failed with exit code %d", label, f.ExitCode)
 	case f.Step == ProvisioningInitialFile:
 		return "Failed to provision environment: initial file installation failed"
-	case f.Step == ProvisioningHarness:
-		return "Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session."
 	case f.Step == ProvisioningSkill:
 		return "Failed to provision environment: Skill installation failed"
 	}
@@ -163,7 +160,7 @@ func SanitizedProvisioningDetail(f ProvisioningFailureDetail) *ProvisioningFailu
 			result.Index = &value
 		}
 	case ProvisioningPythonPackages, ProvisioningNPMPackages:
-	case ProvisioningInitialFile, ProvisioningSkill, ProvisioningHarness:
+	case ProvisioningInitialFile, ProvisioningSkill:
 		value := *f.Step
 		result.Step = &value
 		return result

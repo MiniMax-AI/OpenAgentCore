@@ -36,7 +36,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 				t.Fatal(err)
 			}
 			first, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
-			if err != nil || first.ID == "" || first.ID == session.ID || first.SessionID != session.ID || first.TenantID != tenant || first.Status != "pending" || first.CreatedAt.IsZero() {
+			if err != nil || first.ID == "" || first.ID == session.ID || first.AttachedSessionID != session.ID || first.TenantID != tenant || first.Status != "pending" || first.CreatedAt.IsZero() {
 				t.Fatal(first, err)
 			}
 			got, err := sessionAdapter(s).GetEnvironment(ctx, tenant, first.ID)
@@ -148,7 +148,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 		t.Fatal("creation winners", received, created)
 	}
 	var associations, reservations int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM environments WHERE session_id=$1", first.creation.Session.ID).Scan(&associations); err != nil || associations != 1 {
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.id=$1", first.creation.Session.ID).Scan(&associations); err != nil || associations != 1 {
 		t.Fatal(associations, err)
 	}
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM environment_input_reservations WHERE session_id=$1 AND is_initial", first.creation.Session.ID).Scan(&reservations); err != nil || reservations != 1 {
@@ -257,7 +257,7 @@ func TestEnvironmentDeletionHidesWithoutDestroyingOwnership(t *testing.T) {
 		t.Fatal("deleted retry resurrected ownership", err)
 	}
 	var retained int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM environments WHERE id=$1 AND session_id=$2", environment.ID, session.ID).Scan(&retained); err != nil || retained != 1 {
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE e.id=$1 AND s.id=$2", environment.ID, session.ID).Scan(&retained); err != nil || retained != 1 {
 		t.Fatal(retained, err)
 	}
 }

@@ -88,7 +88,7 @@ func TestHostedEnvironmentResponseHasPinnedShapeAndNoConnectionAction(t *testing
 	}
 	for _, mutate := range []func(*sessions.Environment){
 		func(e *sessions.Environment) { e.TenantID = "foreign" },
-		func(e *sessions.Environment) { e.SessionID = "other" },
+		func(e *sessions.Environment) { e.AttachedSessionID = "other" },
 		func(e *sessions.Environment) {
 			e.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
 		},

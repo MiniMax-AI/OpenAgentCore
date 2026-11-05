@@ -21,13 +21,12 @@ type EnvironmentConnection struct {
 // execution operations.
 type EnvironmentExecution interface {
 	// WithInitialization runs apply in the transaction of the tenant's
-	// Session, with what the Session lock shows. A malformed Session ID is a
-	// missing Session.
-	WithInitialization(ctx context.Context, tenant, session string, apply func(context.Context, InitializationTx, LockedSession) error) error
-	// WithConnection runs apply in the transaction of the Session that owns
-	// the tenant's Environment, with what the Session lock shows. An
-	// Environment of a publicly deleted Session, or a missing one, is
-	// ErrNotFound.
+	// Environment, with what the locks show. A malformed Environment ID is a
+	// missing Environment.
+	WithInitialization(ctx context.Context, tenant, environment string, apply func(context.Context, InitializationTx, LockedSession) error) error
+	// WithConnection runs apply in the transaction of the tenant's
+	// Environment, with what the locks show. An Environment of a publicly
+	// deleted Session, or a missing one, is ErrNotFound.
 	WithConnection(ctx context.Context, tenant, environment string, apply func(context.Context, ConnectionTx, LockedSession) error) error
 	// WithDeviceBinding runs apply in the transaction of the tenant's Session,
 	// with what the Session lock shows.
@@ -49,15 +48,15 @@ type EnvironmentExecution interface {
 	ListEnvironmentConnections(ctx context.Context, after string) ([]EnvironmentKey, error)
 }
 
-// InitializationTx is the Session transaction the Environment initialization
+// InitializationTx is the Environment transaction the initialization
 // operations run in.
 type InitializationTx interface {
 	EnvironmentFailureTx
-	// LoadEnvironment reads the Session's Environment.
+	// LoadEnvironment reads the Environment.
 	LoadEnvironment(ctx context.Context) (Environment, error)
-	// LoadSessionDevice reads the Runtime device bound to the Session and
-	// reports whether the Session has one that still has authority.
-	LoadSessionDevice(ctx context.Context) (ExecutionDevice, bool, error)
+	// LoadEnvironmentDevice reads the Runtime device of the Environment and
+	// reports whether it has one that still has authority.
+	LoadEnvironmentDevice(ctx context.Context) (ExecutionDevice, bool, error)
 	// ClaimInitialization starts the pending preparation of the live
 	// Environment and reports whether it did.
 	ClaimInitialization(ctx context.Context, environment string) (bool, error)
@@ -72,11 +71,11 @@ type InitializationTx interface {
 	FailInitialization(ctx context.Context, environment string) error
 }
 
-// ConnectionTx is the Session transaction the Environment connection
-// operations run in.
+// ConnectionTx is the Environment transaction the connection operations run
+// in.
 type ConnectionTx interface {
 	InputActivityTx
-	// LoadEnvironment reads the Session's Environment.
+	// LoadEnvironment reads the Environment.
 	LoadEnvironment(ctx context.Context) (Environment, error)
 	// LoadConnection reads the Environment's connection generation and
 	// reports whether it has one.
@@ -111,7 +110,7 @@ func terminalEnvironment(status string) bool {
 }
 
 // checkInitializationOwner confirms that the claim of a listed initialization
-// still names the Session's live Environment: another Environment is
+// still names the live Environment: another Environment is
 // ErrDeviceBindingConflict, and a failed or expired one ErrNotFound.
 func checkInitializationOwner(owner EnvironmentInitialization, environment Environment) error {
 	if environment.ID != owner.EnvironmentID {
@@ -124,8 +123,8 @@ func checkInitializationOwner(owner EnvironmentInitialization, environment Envir
 }
 
 // checkInitializationDevice confirms that the device the initialization was
-// listed with is still the Session's device for this Environment. A Session
-// without a device is ErrNotFound and another binding ErrTurnConflict.
+// listed with is still the Environment's device. An Environment without a
+// device is ErrNotFound and another one ErrTurnConflict.
 func checkInitializationDevice(owner EnvironmentInitialization, environment Environment, bound ExecutionDevice, found bool) error {
 	if !found {
 		return ErrNotFound
@@ -136,10 +135,10 @@ func checkInitializationDevice(owner EnvironmentInitialization, environment Envi
 	return nil
 }
 
-// withInitialization runs apply on the Session's live Environment that owner
-// names, in the transaction of its Session.
+// withInitialization runs apply on the live Environment that owner names, in
+// its transaction.
 func (o *ExecutionOperations) withInitialization(ctx context.Context, owner EnvironmentInitialization, apply func(context.Context, InitializationTx, Environment) error) error {
-	return o.storage.WithInitialization(ctx, owner.TenantID, owner.SessionID, func(ctx context.Context, tx InitializationTx, locked LockedSession) error {
+	return o.storage.WithInitialization(ctx, owner.TenantID, owner.EnvironmentID, func(ctx context.Context, tx InitializationTx, locked LockedSession) error {
 		if err := locked.Public(); err != nil {
 			return err
 		}
@@ -159,7 +158,7 @@ func (o *ExecutionOperations) withInitialization(ctx context.Context, owner Envi
 // applied; one that did not is ErrTurnConflict.
 func (o *ExecutionOperations) advanceInitialization(ctx context.Context, owner EnvironmentInitialization, transition func(context.Context, InitializationTx, Environment) (bool, error)) error {
 	return o.withInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) error {
-		bound, found, err := tx.LoadSessionDevice(ctx)
+		bound, found, err := tx.LoadEnvironmentDevice(ctx)
 		if err != nil {
 			return err
 		}
@@ -199,7 +198,7 @@ func journalInitialization(ctx context.Context, tx InitializationTx, environment
 		return false, err
 	}
 	applied, err := transition(ctx, environment.ID)
-	if err != nil || !applied || kind != "openai_hosted" {
+	if err != nil || !applied || kind != "openai_hosted" || environment.AttachedSessionID == "" {
 		return applied, err
 	}
 	return true, tx.AppendChanges(ctx, EnvironmentStateChange(environment.ID, kind, status))
@@ -247,8 +246,8 @@ func connectionStatus(connected bool) string {
 	return "disconnected"
 }
 
-// withConnection runs apply on the Environment in the transaction of its
-// Session, and reports the input activity that apply changes.
+// withConnection runs apply on the Environment in its transaction, and
+// reports the input activity that apply changes to the attached Session.
 func (o *ExecutionOperations) withConnection(ctx context.Context, tenant, environment string, apply func(context.Context, ConnectionTx, Environment) error) error {
 	return o.storage.WithConnection(ctx, tenant, environment, func(ctx context.Context, tx ConnectionTx, locked LockedSession) error {
 		if err := locked.Public(); err != nil {
@@ -257,6 +256,9 @@ func (o *ExecutionOperations) withConnection(ctx context.Context, tenant, enviro
 		current, err := tx.LoadEnvironment(ctx)
 		if err != nil {
 			return err
+		}
+		if current.AttachedSessionID == "" {
+			return apply(ctx, tx, current)
 		}
 		return TrackInputActivity(ctx, tx, func(ctx context.Context) error { return apply(ctx, tx, current) })
 	})
@@ -271,6 +273,9 @@ func recordConnection(ctx context.Context, tx ConnectionTx, environment Environm
 	}
 	if err := tx.SetConnectionStatus(ctx, environment.ID, status); err != nil {
 		return err
+	}
+	if environment.AttachedSessionID == "" {
+		return nil
 	}
 	return tx.AppendChanges(ctx, EnvironmentStateChange(environment.ID, kind, status))
 }

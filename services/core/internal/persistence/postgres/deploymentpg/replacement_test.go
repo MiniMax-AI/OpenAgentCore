@@ -101,7 +101,7 @@ func TestReplacementKeepsSessionIdentityAndFencesPriorOwner(t *testing.T) {
 		t.Fatal("replacement reused identity", fresh, first, second)
 	}
 	var device, native string
-	if err := f.pool.QueryRow(t.Context(), `SELECT device_id,native_session_id FROM session_devices WHERE session_id=$1`, second.SessionID).Scan(&device, &native); err != nil || device != second.DeviceID || native != "retained-native-session" {
+	if err := f.pool.QueryRow(t.Context(), `SELECT device_id,native_session_id FROM session_devices WHERE session_id=$1`, second.AttachedSessionID).Scan(&device, &native); err != nil || device != second.DeviceID || native != "retained-native-session" {
 		t.Fatal(device, native, err)
 	}
 	for name, write := range map[string]func() (deployment.Allocation, error){"cleanup": func() (deployment.Allocation, error) { return changes.RequestCleanup(t.Context(), first) }, "release": func() (deployment.Allocation, error) { return changes.ReleaseAllocation(t.Context(), first) }, "observe": func() (deployment.Allocation, error) { return changes.ObserveRunning(t.Context(), first) }} {
@@ -290,7 +290,7 @@ func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	if err != nil || started.Reset == nil {
 		t.Fatal(started, err)
 	}
-	if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET created_at=$2 WHERE id=$1`, retained[4].SessionID, started.Reset.RequestedAt.Add(time.Second)); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET created_at=$2 WHERE id=$1`, retained[4].EnvironmentID, started.Reset.RequestedAt.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	candidates, err := f.adapter.ResetSessions(t.Context(), "", true)
@@ -303,7 +303,7 @@ func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	}
 	for _, candidate := range candidates {
 		for _, excluded := range retained[1:5] {
-			if candidate.SessionID == excluded.SessionID {
+			if candidate.SessionID == excluded.AttachedSessionID {
 				t.Fatal("out-of-scope history entered reset", candidate)
 			}
 		}

@@ -116,9 +116,9 @@ type AllocationTx interface {
 
 	// LoadAllocation returns the Environment's allocation.
 	LoadAllocation() (Allocation, error)
-	// LoadSessionDevice returns the device the Session is bound to and
-	// whether it is bound to one.
-	LoadSessionDevice() (SessionDevice, bool, error)
+	// LoadEnvironmentDevice returns the Environment's device and whether it
+	// has one.
+	LoadEnvironmentDevice() (EnvironmentDevice, bool, error)
 	// LoadActivity returns the allocation's activity.
 	LoadActivity(current Allocation) (Activity, error)
 	// LoadSuspensionDemand locks the deployment and reads demand and capacity.

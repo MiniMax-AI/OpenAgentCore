@@ -31,7 +31,7 @@ func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment sessi
 	if err != nil {
 		return proto.WorkspaceDirectoryResult{}, err
 	}
-	if current.SessionID != environment.SessionID {
+	if current.AttachedSessionID != environment.AttachedSessionID {
 		return proto.WorkspaceDirectoryResult{}, sessions.ErrNotFound
 	}
 	if err := w.waitRuntimeAwake(ctx, current); err != nil {
@@ -74,7 +74,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		result.err = err
 		return
 	}
-	if environment.SessionID != request.environment.SessionID {
+	if environment.AttachedSessionID != request.environment.AttachedSessionID {
 		result.err = sessions.ErrNotFound
 		return
 	}
@@ -82,7 +82,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	if err != nil {
 		return
 	}
-	session, err := w.dispatcher.SessionsReader.GetSession(check, environment.TenantID, environment.SessionID)
+	session, err := w.dispatcher.SessionsReader.GetSession(check, environment.TenantID, environment.AttachedSessionID)
 	if err != nil {
 		result.err = err
 		return
