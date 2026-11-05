@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 9ae9f467b9e62291dcb31e3b5a8c1c64c21ef3f790ad804c85a2939119c0a218
+source_hash: c7b69e705061c6c0ee95d9a89d93f82e20304e3f4f12b5ed0442614950867806
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -229,7 +229,7 @@ stateDiagram-v2
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` 接受 `{name, max_active, max_retained}`；降低限制不会停止任何正在运行的沙箱。当节点仍持有分配、快照、预留或待处理清理时，包括节点离线期间，`DELETE /core/v1/sandbox/nodes/{node_id}` 会拒绝操作并返回 409 `runtime_node_in_use`。移除操作不会删除任何计算资源，并且会停用该节点的身份；该主机只能作为新节点重新加入。不存在节点排空过程。
 
-`GET /core/v1/sandbox/nodes/{node_id}/allocations` 列出节点尚未释放的分配。每个项的 `compute_phase_changed_at` 表示该分配进入当前 `compute_phase` 的时间；未知时为 null。该时间是阶段切换时间，不是快照到期时间。此响应不提供快照截止时间，不应根据 `suspension.retention_seconds` 推算。
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` 列出节点尚未释放的分配。每个项的 `session_id` 是该分配的 Environment 当前挂接的存活 Session；没有挂接时为 null。每个项的 `compute_phase_changed_at` 表示该分配进入当前 `compute_phase` 的时间；未知时为 null。该时间是阶段切换时间，不是快照到期时间。此响应不提供快照截止时间，不应根据 `suspension.retention_seconds` 推算。
 
 ### 推荐容量 {#recommended-capacity}
 

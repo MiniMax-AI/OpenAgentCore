@@ -114,7 +114,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
               <tbody>
                 {own.map((allocation) => (
                   <tr key={allocation.id}>
-                    <th scope="row"><CopyableId id={allocation.session_id} label={t("Session")} /></th>
+                    <th scope="row">{allocation.session_id ? <CopyableId id={allocation.session_id} label={t("Session")} /> : MISSING}</th>
                     <td>{allocation.deployment_generation}</td>
                     <td>{sandboxStateLabel(allocation.state, shortLocale)}</td>
                     <td>{allocation.compute_phase ? sandboxStateLabel(allocation.compute_phase, shortLocale) : MISSING}</td>

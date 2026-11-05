@@ -1412,7 +1412,9 @@ definitions:
       node_id:
         type: string
       session_id:
+        description: The live Session attached to the Environment, or null when none is.
         type: string
+        x-nullable: true
       state:
         type: string
       tenant_id:
