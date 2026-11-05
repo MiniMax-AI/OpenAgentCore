@@ -47,9 +47,6 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		_ = json.Unmarshal(request.Execution, &fields)
 		input.modelProviderNull = bytes.Equal(bytes.TrimSpace(fields["model_provider"]), []byte("null"))
 	}
-	if err := rejectAutoReview(request.Review); err != nil {
-		return input, err
-	}
 	input.VaultIDs = append([]string{}, request.VaultIDs...)
 	canonicalEnvironment, err := preparationEnvironmentInput(request.Environment, input.XAgentsCore)
 	if err != nil {

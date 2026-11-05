@@ -100,15 +100,19 @@ func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, 
 			if err != nil {
 				return err
 			}
+			settings, err := tx.LoadTurnSettings(ctx)
+			if err != nil {
+				return err
+			}
 			if joinsActiveTurn(turn, active) {
-				receipts, err := AdmitInputs(ctx, tx, key, batch)
+				receipts, err := AdmitInputs(ctx, tx, key, batch, settings)
 				if err != nil {
 					return err
 				}
 				result = EnvironmentInputReservation{SessionID: session, State: EnvironmentInputAdmitted, Receipts: receipts}
 				return tx.RecordInputAudit(ctx)
 			}
-			if result, err = tx.CreateInputReservation(ctx, key, encoded, false); err != nil {
+			if result, err = tx.CreateInputReservation(ctx, key, encoded, false, settings); err != nil {
 				return err
 			}
 			return tx.RecordInputAudit(ctx)

@@ -85,7 +85,7 @@ func TestExecutionControlsCarryOnlyOfficialValues(t *testing.T) {
 			snapshot := Snapshot{Agent: tc.agent}
 			before, _ := json.Marshal(snapshot)
 			for _, nativeID := range []string{"", "native-session"} {
-				request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID})
+				request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID}, sessions.TurnSettings{})
 				if err != nil || !reflect.DeepEqual(*request.ExecutionControls, tc.want) || request.AgentSessionID != nativeID {
 					t.Fatalf("%+v %v", request.ExecutionControls, err)
 				}
@@ -97,14 +97,14 @@ func TestExecutionControlsCarryOnlyOfficialValues(t *testing.T) {
 	}
 }
 
-func TestTurnSettingsComeFromTheSnapshot(t *testing.T) {
+func TestTurnSettingsComeFromTheBoundSettings(t *testing.T) {
 	effort := "max"
-	snapshot := Snapshot{Agent: v1.Agent{Model: "m", ServiceTier: "flex", Reasoning: v1.Reasoning{Effort: &effort}}}
-	request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{})
+	snapshot := Snapshot{Agent: v1.Agent{Model: "later", ServiceTier: "auto"}}
+	request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}, sessions.TurnSettings{Model: "m", ServiceTier: "flex", ReasoningEffort: &effort})
 	if err != nil || request.Turn != (proto.TurnSettings{Model: "m", ReasoningEffort: "max", ServiceTier: "flex"}) || request.AgentOptions["model"] != nil {
 		t.Fatalf("%+v %v", request.Turn, err)
 	}
-	if turnSettings(v1.Agent{Model: "m", ServiceTier: "auto"}) != (proto.TurnSettings{Model: "m"}) {
+	if turnSettings(sessions.TurnSettings{Model: "m", ServiceTier: "auto"}) != (proto.TurnSettings{Model: "m"}) {
 		t.Fatal("auto service tier was sent")
 	}
 }

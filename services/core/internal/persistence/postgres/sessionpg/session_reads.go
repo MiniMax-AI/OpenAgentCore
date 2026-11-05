@@ -225,6 +225,12 @@ func (s *Store) GetSessionExecutionConfiguration(ctx context.Context, tenantID, 
 	} else if err := json.Unmarshal(row.ExecutionConfiguration, &projection); err != nil {
 		return v1.SessionExecutionConfiguration{}, errors.New("invalid stored session execution configuration")
 	}
+	// The model is the Session's current one, which an update may have changed.
+	model, err := sessions.ExecutionModel(row.SessionConfiguration)
+	if err != nil {
+		return projection, err
+	}
+	projection.Model.Value = model
 	sessions.NormalizeExecutionProjection(&projection, uuid.UUID(row.ID.Bytes).String())
 	return projection, nil
 }

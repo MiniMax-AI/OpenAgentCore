@@ -99,8 +99,9 @@ type CreationTx interface {
 	// returns its ID.
 	CreateEnvironment(ctx context.Context) (string, error)
 	// CreateInputReservation reserves the batch under key until the deadline
-	// the database clock sets, marked as the Session's initial input.
-	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool) (EnvironmentInputReservation, error)
+	// the database clock sets, marked as the Session's initial input and
+	// bound to settings.
+	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool, settings TurnSettings) (EnvironmentInputReservation, error)
 	// PruneChanges bounds the Session's retained public changes.
 	PruneChanges(ctx context.Context) error
 	// AuditCreation records the create write audit, listing created.
@@ -234,14 +235,18 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 	// The input key is internal, independent of the creation key and of keys
 	// callers send to the events endpoint.
 	key := uuid.NewString()
+	settings, err := TurnSettingsOf(session.Configuration)
+	if err != nil {
+		return nil, err
+	}
 	if environment != "" {
 		// Environment input waits for preparation and the leased promotion.
 		err = TrackInputActivity(ctx, tx, func(ctx context.Context) error {
-			_, err := tx.CreateInputReservation(ctx, key, encoded, true)
+			_, err := tx.CreateInputReservation(ctx, key, encoded, true, settings)
 			return err
 		})
 	} else {
-		_, err = AdmitInputs(ctx, tx, key, batch)
+		_, err = AdmitInputs(ctx, tx, key, batch, settings)
 	}
 	if err != nil {
 		return nil, err
@@ -305,6 +310,9 @@ func freezeProjection(session Session, frozen v1.SessionExecutionConfiguration, 
 		!validExecutionSource(frozen.Model.Source) || !validExecutionSource(frozen.Harness.Source) {
 		return v1.SessionExecutionConfiguration{}, uuid.Nil, fmt.Errorf("%w: execution projection does not match Session configuration", ErrInvalidInput)
 	}
+	// The model is read from the Session configuration, which a Session update
+	// changes; no second copy is stored.
+	frozen.Model.Value = nil
 	recorded := uuid.Nil
 	switch frozen.ModelProvider.Source {
 	case v1.ExecutionSourceDeployment:

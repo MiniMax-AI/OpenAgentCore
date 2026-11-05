@@ -27,7 +27,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Resource | Operations | Status | Contract |
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](./wire-semantics.md#agents) |
-| Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only and `agent` is rejected; list filters on `metadata[key]=value`; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
+| Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata`, `agent.model`, `agent.reasoning`, `agent.service_tier` and `review`, and rejects `agent.tools`; list filters on `metadata[key]=value`; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
 | Session events | create, stream | Partial: messages with text and images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
 | Turns | retrieve, list; Turn Items | Implemented; Session Turn routes hold root Turns only | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
@@ -146,6 +146,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools are saved but rejected at Session admission for every Harness, because none runs them natively ([Session admission](./wire-semantics.md#session-admission)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
+- A Session update that changes `agent.model`, `agent.reasoning.effort`, `agent.service_tier` or `review` is rejected when the Harness cannot apply it natively between Turns ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 
 **Execution and history**
 
@@ -185,12 +186,15 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Sessions**
 
+- A Session update rejects `agent.tools`, because no Harness changes its tools after it starts.
 - The pinned SDK sends `spend_control` on Session create and update, but the pinned OpenAPI schema does not define it; Core rejects it as an unknown parameter.
 - Session deletion does not purge the stored history physically.
 - Stream lifetimes for `self_hosted`, hosted and no-input creation, and the creation-stream retry, are Core's own choices.
 
 ### Unverified against the official service
 
+- When a Session update binds to a queued Turn: Core binds each root Turn's settings when it accepts the input that creates the Turn, so a Turn queued before an update keeps the earlier values.
+- The meaning of "automatic review is not enabled" in a Session response: Core omits `review` unless it is `auto_review`.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.

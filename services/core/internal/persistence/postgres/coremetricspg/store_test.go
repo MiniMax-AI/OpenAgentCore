@@ -35,8 +35,8 @@ func coreMetricsSession(t *testing.T, pool *pgxpool.Pool, deleted bool) string {
 
 func coreMetricsTurn(t *testing.T, pool *pgxpool.Pool, session, status, code string, created time.Time, started, completed *time.Time) {
 	t.Helper()
-	_, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status,created_at,started_at,completed_at,outcome)
-		VALUES($1,$2,$3,$4,$5,$6,jsonb_build_object('error_code',$7::text))`, uuid.NewString(), session, status, created, started, completed, code)
+	_, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status,created_at,started_at,completed_at,outcome,settings)
+		VALUES($1,$2,$3,$4,$5,$6,jsonb_build_object('error_code',$7::text),'{}')`, uuid.NewString(), session, status, created, started, completed, code)
 	if err != nil {
 		t.Fatal(err)
 	}

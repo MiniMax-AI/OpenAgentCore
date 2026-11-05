@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 664b5d01759bf29735e4e062739843b48c8130b302002b7a3c0e53b2306e7057
+source_hash: 32e834142d199c6ba6ec276e6cd4365c551235e9d2233d296f3f18ab90e86046
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -135,7 +135,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 
 ## 执行配置 {#execution-configuration}
 
-`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` 报告 Session 在创建时冻结的模型、Harness、原生参数和模型提供商。它仅读取已存储的配置：绝不会联系提供商、启动 Turn 或唤醒沙箱。响应带有 `Cache-Control: no-store`。
+`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` 报告 Session 当前的模型，以及它在创建时冻结的 Harness、原生参数和模型提供商。经 Session 更新改变的模型，其来源读为 `session`。它仅读取已存储的配置：绝不会联系提供商、启动 Turn 或唤醒沙箱。响应带有 `Cache-Control: no-store`。
 
 ```json
 {

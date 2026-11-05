@@ -42,6 +42,24 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 	return validateDeclaredConfiguration(declaration, snapshot)
 }
 
+// ValidateSessionUpdate checks the configuration an update produces and that
+// the Harness applies each changed setting natively.
+func (p Policy) ValidateSessionUpdate(engine string, before, after json.RawMessage) error {
+	if err := p.ValidateSessionConfiguration(engine, after); err != nil {
+		return err
+	}
+	old, err := sessions.TurnSettingsOf(before)
+	if err != nil {
+		return err
+	}
+	updated, err := sessions.TurnSettingsOf(after)
+	if err != nil {
+		return err
+	}
+	declaration, _ := p.Harnesses().Lookup(engine)
+	return declaration.ValidateSessionUpdate(turnSettings(old), turnSettings(updated))
+}
+
 func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) bool {
 	var snapshot Snapshot
 	if json.Unmarshal(configuration, &snapshot) != nil || !environmentNone(snapshot) {

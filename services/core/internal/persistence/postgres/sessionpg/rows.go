@@ -57,12 +57,15 @@ func ResourceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
 
 // TurnFromRow maps a stored Turn.
 func TurnFromRow(row sqlc.Turn) sessions.Turn {
-	return sessions.Turn{
+	turn := sessions.Turn{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), Status: row.Status,
 		CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time,
 		CancelRequestedAt: row.CancelRequestedAt.Time, Outcome: json.RawMessage(row.Outcome), Usage: json.RawMessage(row.TokenUsage),
 		ArtifactCaptureStarted: row.ArtifactCaptureStarted,
 	}
+	// The settings were written by TurnSettings and checked as an object.
+	_ = json.Unmarshal(row.Settings, &turn.Settings)
+	return turn
 }
 
 // sessionFromRow maps a stored Session with its creator, normalized

@@ -128,7 +128,7 @@ func (o observed) terminal(t *testing.T, sessionID, status, errorCode, engineErr
 	t.Helper()
 	outcome, _ := json.Marshal(map[string]string{"error_code": errorCode, "engine_error_code": engineErrorCode})
 	id := uuid.NewString()
-	if _, err := o.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,outcome,completed_at) VALUES($1,$2,$3,$4,clock_timestamp())", id, sessionID, status, outcome); err != nil {
+	if _, err := o.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,outcome,completed_at,settings) VALUES($1,$2,$3,$4,clock_timestamp(),'{}')", id, sessionID, status, outcome); err != nil {
 		t.Fatal(err)
 	}
 	return id

@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 0d3cfce2ec6a1ff9714c021b8ba154c1a955efbdc7f1a77b6d16616a6b16ab1e
+source_hash: d2353e23d1424b76a2e8f9d171bcb06e5c5c70a7d56d49ff95b2b7a71cdc080b
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -186,7 +186,8 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 - 模型 `Configuration`（[原生模型配置](#native-model-configuration)）；
 - `Capabilities`，即 `proto.AgentKindCapabilities`，表示 Harness 在能力完备的主机上最多能做什么；每个字段都是 `Supported` 或 `Unsupported`，零值无效（[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)）；
 - 受支持的 `Placements` 和公共 `MCPOrigins`、是否接受仅含空白的文本，以及 `MaxInstructionsBytes`（原生对 Agent instructions 的字节上限，零表示没有上限，超出时准入会拒绝）；
-- `Execution`，即适配器映射到原生设置的官方执行选项取值：web search 模式及是否接受搜索设置、推理强度和摘要、服务层级、程序化工具调用取值和文本详细程度。Core 准入和 Runtime 用同一检查拒绝未声明的取值（[工具策略](execution-tools.md#web-search-and-programmatic-tool-calling)）。Core 总会发送官方默认文本详细程度，因此 `TextVerbosities` 必须包含 `medium`；
+- `Execution`，即适配器映射到原生设置的官方执行选项取值：web search 模式及是否接受搜索设置、推理强度和摘要、服务层级、程序化工具调用取值和文本详细程度。Core 准入和 Runtime 用同一检查拒绝未声明的取值（[工具策略](execution-tools.md#web-search-and-programmatic-tool-calling)）。Core 总会发送官方默认文本详细程度，因此 `TextVerbosities` 必须包含 `medium`。`Reviews` 列出除 `none` 外支持的 `review` 取值（仅 `auto_review`）；
+- `SessionUpdates`，即适配器是否在保留的 Executor 的根 Turn 之间原生应用 Session 更新：`Model`、`ReasoningEffort`、`ReasoningEffortReset`（null 强度）和 `ServiceTier`，各自为 `Supported` 或 `Unsupported`。Core 拒绝更改不支持设置的更新，对支持设置的更改会通过下一个 Turn 的设置到达适配器；
 - 可选的纯限制 `ValidateConfiguration`、`ValidateTools`、`ValidateMessageInput` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。`ValidateMessageInput` 仅对携带图像的消息运行，在 `MessageImages` 能力检查之后、任何存储之前执行，决定 Harness 接受哪些 `image_url`；Core 只检查引用不为空白。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程。配置限制最先执行，工具解码错误先于 `ValidateTools`。
 
 `harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。

@@ -93,6 +93,9 @@ type Declaration struct {
 	// Execution declares which official execution option values the Harness
 	// maps to a native setting. Admission rejects any other user-set value.
 	Execution ExecutionOptions
+	// SessionUpdates declares which settings a Session update changes natively
+	// between root Turns. A change to an unsupported setting is a typed error.
+	SessionUpdates SessionUpdates
 	// WhitespaceOnlyText declares messages without an image or non-whitespace
 	// text. Unsupported Harnesses reject them at admission; Core never trims or
 	// pads model input to fit a Harness.
@@ -156,6 +159,14 @@ func (d Declaration) ValidateDeclaration() error {
 		(slices.Contains(d.MCPOrigins, "environment") && !d.Accepts("openai_hosted") && !d.Accepts("self_hosted")) ||
 		(d.Capabilities.MCPHTTPBearerAuth.IsSupported() && len(d.MCPOrigins) == 0) {
 		return errors.New("harnessconfig: invalid MCP origins")
+	}
+	for _, support := range []proto.CapabilitySupport{d.SessionUpdates.Model, d.SessionUpdates.ReasoningEffort, d.SessionUpdates.ReasoningEffortReset, d.SessionUpdates.ServiceTier} {
+		if support != proto.CapabilitySupported && support != proto.CapabilityUnsupported {
+			return errors.New("harnessconfig: session update support must be declared")
+		}
+	}
+	if !validChoices(d.Execution.Reviews, "auto_review") {
+		return errors.New("harnessconfig: invalid reviews")
 	}
 	// Core always sends the official default text verbosity.
 	if !slices.Contains(d.Execution.TextVerbosities, "medium") {
@@ -374,6 +385,14 @@ type ExecutionOptions struct {
 	ProgrammaticToolCalling []bool
 	// TextVerbosities are the supported text verbosity levels.
 	TextVerbosities []string
+	// Reviews are the supported review values other than none: auto_review.
+	Reviews []string
+}
+
+// SessionUpdates declares which settings the adapter changes natively between
+// root Turns. Every field is Supported or Unsupported.
+type SessionUpdates struct {
+	Model, ReasoningEffort, ReasoningEffortReset, ServiceTier proto.CapabilitySupport
 }
 
 func (o ExecutionOptions) Clone() ExecutionOptions {
@@ -383,6 +402,7 @@ func (o ExecutionOptions) Clone() ExecutionOptions {
 	o.ServiceTiers = slices.Clone(o.ServiceTiers)
 	o.ProgrammaticToolCalling = slices.Clone(o.ProgrammaticToolCalling)
 	o.TextVerbosities = slices.Clone(o.TextVerbosities)
+	o.Reviews = slices.Clone(o.Reviews)
 	return o
 }
 
@@ -429,6 +449,36 @@ func (d Declaration) ValidateTurnSettings(turn proto.TurnSettings) error {
 	}{{"reasoning.effort", turn.ReasoningEffort, o.ReasoningEfforts}, {"service_tier", turn.ServiceTier, o.ServiceTiers}} {
 		if check.value != "" && !slices.Contains(check.allowed, check.value) {
 			return fmt.Errorf("%s %q is not supported by this Harness.", check.field, check.value)
+		}
+	}
+	return nil
+}
+
+// ValidateReview rejects a review value the Harness does not declare. None is
+// always accepted.
+func (d Declaration) ValidateReview(review string) error {
+	if review != "" && review != "none" && !slices.Contains(d.Execution.Reviews, review) {
+		return fmt.Errorf("review %q is not supported by this Harness.", review)
+	}
+	return nil
+}
+
+// ValidateSessionUpdate rejects a change of model, effort or tier that the
+// Harness does not declare it applies natively between root Turns. Unchanged
+// settings pass.
+func (d Declaration) ValidateSessionUpdate(before, after proto.TurnSettings) error {
+	u := d.SessionUpdates
+	effort := u.ReasoningEffort
+	if after.ReasoningEffort == "" {
+		effort = u.ReasoningEffortReset
+	}
+	for _, check := range []struct {
+		field   string
+		changed bool
+		support proto.CapabilitySupport
+	}{{"agent.model", before.Model != after.Model, u.Model}, {"agent.reasoning.effort", before.ReasoningEffort != after.ReasoningEffort, effort}, {"agent.service_tier", before.ServiceTier != after.ServiceTier, u.ServiceTier}} {
+		if check.changed && !check.support.IsSupported() {
+			return fmt.Errorf("%s cannot be changed on this Harness.", check.field)
 		}
 	}
 	return nil

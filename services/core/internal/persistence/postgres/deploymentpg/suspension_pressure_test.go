@@ -295,7 +295,7 @@ func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
 			f.connect(t, node.NodeID)
 			waiting := pendingPressureDemand(t, f)
 			// A real pending reservation supplies demand and retains its original deadline.
-			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) SELECT $1,session_id,'pressure','[{}]',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
+			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,settings,created_at,deadline) SELECT $1,session_id,'pressure','[{}]','{}',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
 				t.Fatal(err)
 			}
 			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)

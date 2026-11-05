@@ -41,6 +41,9 @@ func sessionResponse(session sessions.Session, executorURL string) (v1.Session, 
 		Metadata: session.Metadata, Object: "agent.session", Status: "idle",
 		RequiredActions: []v1.RequiredAction{}, VaultIDs: append([]string{}, cfg.VaultIDs...),
 	}
+	if cfg.Review != "" {
+		response.Review = &cfg.Review
+	}
 	if turn := session.LastTurn; turn != nil {
 		active := turn.CreatedAt
 		if turn.StartedAt.After(active) {

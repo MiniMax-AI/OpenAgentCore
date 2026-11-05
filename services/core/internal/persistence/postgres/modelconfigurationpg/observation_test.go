@@ -109,7 +109,7 @@ func TestObservationExcludesOtherSourcesAndHistoricalSessions(t *testing.T) {
 func TestObservationIgnoresActiveAndNonRootTurns(t *testing.T) {
 	o := newObserved(t)
 	id := uuid.NewString()
-	if _, err := o.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')", id, o.session.ID); err != nil {
+	if _, err := o.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')", id, o.session.ID); err != nil {
 		t.Fatal(err)
 	}
 	o.observe(t, id, 0)

@@ -8,3 +8,7 @@ SELECT s.id, s.engine, s.configuration AS session_configuration,
 FROM sessions s
 LEFT JOIN session_execution_configuration p ON p.session_id = s.id
 WHERE s.tenant_id = @tenant_id AND s.id = @session_id AND s.deleted_at IS NULL;
+
+-- name: MarkSessionModelSource :exec
+UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model,source}', '"session"')
+WHERE session_id = $1;

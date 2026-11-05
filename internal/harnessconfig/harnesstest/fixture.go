@@ -17,6 +17,7 @@ func Declaration(kind string, change func(*harnessconfig.Declaration)) harnessco
 		Execution:          harnessconfig.ExecutionOptions{TextVerbosities: []string{"medium"}},
 		Placements:         []string{"none"},
 		MCPOrigins:         []string{},
+		SessionUpdates:     harnessconfig.SessionUpdates{Model: proto.CapabilityUnsupported, ReasoningEffort: proto.CapabilityUnsupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilityUnsupported},
 		WhitespaceOnlyText: proto.CapabilityUnsupported,
 	}
 	if change != nil {

@@ -9,9 +9,7 @@ import (
 func TestUnsupportedOfficialFieldsAreRejectedByParam(t *testing.T) {
 	h, s := validationHandler(t)
 	for _, test := range []struct{ path, body, param string }{
-		{"/v1/agents/sessions/s", `{"agent":{"model":"m"}}`, "agent"},
-		{"/v1/agents/sessions/s", `{"review":"auto_review"}`, "review"},
-		{"/v1/agents/sessions", `{"agent":{"model":"m"},"review":"auto_review","environment":{"type":"none"},"input":"hi"}`, "review"},
+		{"/v1/agents/sessions/s", `{"agent":{"tools":[]}}`, "agent.tools"},
 		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","container_size":"small"},"input":"hi"}`, "container_size"},
 		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","desktop":{"enabled":true}},"input":"hi"}`, "desktop.enabled"},
 		{"/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"openai_hosted","network":{"access":"enabled","blocked_domains":["a.example"]}},"input":"hi"}`, "network.blocked_domains"},

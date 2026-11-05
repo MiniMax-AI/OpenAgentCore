@@ -31,8 +31,14 @@ ORDER BY
     CASE WHEN NOT sqlc.arg(ascending)::boolean THEN id END DESC
 LIMIT sqlc.arg(page_limit);
 
--- name: UpdateSessionMetadata :one
-UPDATE sessions SET metadata = $3 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL RETURNING *;
+-- name: LockVisibleSession :one
+SELECT * FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE;
+
+-- name: UpdateSession :one
+UPDATE sessions SET configuration = $3, metadata = $4 WHERE tenant_id = $1 AND id = $2 RETURNING *;
+
+-- name: GetSessionConfiguration :one
+SELECT configuration FROM sessions WHERE id = $1;
 
 -- name: FindSessionCreation :one
 SELECT * FROM sessions

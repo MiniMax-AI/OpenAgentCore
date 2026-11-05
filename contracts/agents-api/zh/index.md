@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: f2b074b5f3011d44555f0abb890f1426e59f676902206c18e4a79b428e37bc8a
+source_hash: 198b4deb88832ac7cdb28e67a0781469e44621b1baa2cccc54b7a2b9bceea36e
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -30,7 +30,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | 资源 | 操作 | 状态 | 契约 |
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | 已实现。所有固定版本设置都会保存；Session 准入只会用到其中一个子集 | [Agents](wire-semantics.md#agents) |
-| Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新只修改 `metadata`，并拒绝 `agent`；列表支持按 `metadata[key]=value` 过滤；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
+| Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新接受 `metadata`、`agent.model`、`agent.reasoning`、`agent.service_tier` 和 `review`，并拒绝 `agent.tools`；列表支持按 `metadata[key]=value` 过滤；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
 | Session events | create, stream | 部分实现：支持包含文本和图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
 | Turns | retrieve, list; Turn Items | 已实现；Session Turn 路由仅承载根级 Turns | [Turns and Items](sessions-events.md#turns-and-items) |
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
@@ -149,6 +149,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `compaction.async: true`、`experimental.time_awareness: true` 以及 `automations` 和 `computer_use` 工具会被保存，但对所有 Harness 都在 Session 准入时被拒绝，因为没有 Harness 原生运行它们（[Session 准入](wire-semantics.md#session-admission)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
+- 当 Harness 无法在 Turn 之间原生应用时，更改 `agent.model`、`agent.reasoning.effort`、`agent.service_tier` 或 `review` 的 Session 更新会被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 
 **执行和历史**
 
@@ -188,12 +189,15 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Sessions**
 
+- Session 更新拒绝 `agent.tools`，因为没有 Harness 能在启动后更改其工具。
 - 固定版本 SDK 在 Session 创建和更新中发送 `spend_control`，但固定的 OpenAPI 模式没有定义它；Core 将其作为未知参数拒绝。
 - 删除 Session 不会从物理存储中清除已保存的历史记录。
 - 对于 `self_hosted`、hosted 和无输入创建的流生命周期，以及创建流重试机制，均由 Core 自行决定。
 
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
+- Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
+- Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
 - Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。

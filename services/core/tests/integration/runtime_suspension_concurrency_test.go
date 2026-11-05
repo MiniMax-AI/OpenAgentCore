@@ -57,7 +57,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			s, w, pool, owner := runtimeSuspensionFixture(t)
 			turn := uuid.NewString()
-			runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, owner.SessionID)
+			runtimeSuspensionSQL(t, pool, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.SessionID)
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
@@ -131,9 +131,9 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			var err error
 			switch kind {
 			case "queued":
-				_, err = tx.Exec(ctx, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, uuid.NewString(), owner.SessionID)
+				_, err = tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, uuid.NewString(), owner.SessionID)
 			case "input":
-				_, err = tx.Exec(ctx, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
+				_, err = tx.Exec(ctx, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline,settings) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute','{}')`, uuid.NewString(), owner.SessionID)
 			case "file_write":
 				_, err = tx.Exec(ctx, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64))
 			case "wake":
@@ -198,7 +198,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
 	turn := uuid.NewString()
-	if _, err := tx.Exec(ctx, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, owner.SessionID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO turns(id,session_id,status,settings) VALUES($1,$2,'queued','{}')`, turn, owner.SessionID); err != nil {
 		t.Fatal(err)
 	}
 	params, err := sessionpg.TurnLookup(owner.TenantID, owner.SessionID, turn)

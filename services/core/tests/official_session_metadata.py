@@ -117,11 +117,18 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
     assert list(sessions.list(metadata={key: value, "absent": "x"})) == []
     assert list(other.beta.agents.sessions.list(metadata={key: value})) == []
     expect_error(BadRequestError, lambda: sessions.list(metadata={"k" * 65: "v"}))
-    # Core cannot run a Session review or change the agent of a Session.
-    for fields in [{"review": "auto_review"}, {"agent": {"model": "other"}}]:
-        expect_error(BadRequestError, lambda: sessions.update(first.id, **fields))
-    assert sessions.update(first.id, review="none") == current
+    # No built-in Harness applies a settings update natively, so a real change is a typed error; a same-value update succeeds.
+    agent = current.agent
+    same = {"model": agent.model, "reasoning": {"effort": None}, "service_tier": None}
+    assert agent.reasoning.effort is None and agent.service_tier == "auto"
+    assert sessions.update(first.id, agent=same, review="none") == current
     assert sessions.update(first.id, agent={}) == current
+    for fields in [{"review": "auto_review"}, {"agent": {"model": "other"}}, {"agent": {"reasoning": {"effort": "high"}}}, {"agent": {"service_tier": "flex"}}]:
+        expect_error(BadRequestError, lambda: sessions.update(first.id, **fields))
+    with httpx2.Client(trust_env=False, timeout=10) as raw:
+        for tools in ([], [{"type": "tool_search"}]):
+            response = raw.post(url, headers=headers, json={"agent": {"tools": tools}})
+            assert response.status_code == 400 and response.json()["error"]["param"] == "agent.tools"
     assert sessions.retrieve(first.id) == current
     print("Session metadata: pinned SDK and raw HTTP replacement, clearing, omission, limits, authentication, tenant isolation, unchanged configuration and creation retry identity passed.")
     return current

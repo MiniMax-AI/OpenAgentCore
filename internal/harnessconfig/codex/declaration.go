@@ -65,6 +65,7 @@ var Declaration = harnessconfig.Declaration{
 	},
 	Placements:           []string{"none", "self_hosted", "openai_hosted"},
 	MCPOrigins:           []string{"service", "environment"},
+	SessionUpdates:       harnessconfig.SessionUpdates{Model: proto.CapabilityUnsupported, ReasoningEffort: proto.CapabilityUnsupported, ReasoningEffortReset: proto.CapabilityUnsupported, ServiceTier: proto.CapabilityUnsupported},
 	WhitespaceOnlyText:   proto.CapabilitySupported,
 	ValidateMessageInput: rejectRemoteImages,
 	ValidateFunctionResult: func(result proto.FunctionResultPayload) error {

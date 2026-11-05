@@ -24,7 +24,7 @@ func stagingTurn(t *testing.T, pool *pgxpool.Pool, kind string) (tenant, session
 	t.Helper()
 	tenantID, sessionID, environmentID := newEnvironment(t, pool, kind, "connected")
 	turnID := uuid.New()
-	exec(t, pool, `INSERT INTO turns(id, session_id, status) VALUES ($1, $2, 'in_progress')`, turnID, sessionID)
+	exec(t, pool, `INSERT INTO turns(id, session_id, status, settings) VALUES ($1, $2, 'in_progress', '{}')`, turnID, sessionID)
 	return uuidText(tenantID), uuidText(sessionID), uuidText(environmentID), turnID.String()
 }
 

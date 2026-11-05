@@ -63,7 +63,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("changed configuration accepted", err)
 			}
-			if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
+			if _, err := sessionService(t, s).UpdateSession(ctx, sessions.UpdateSessionCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
 				t.Fatal(err)
 			}
 			restarted := reopenStore(t, s)
