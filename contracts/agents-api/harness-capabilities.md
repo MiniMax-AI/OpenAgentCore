@@ -27,7 +27,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
 | `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted; `ultrafast` rejected | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
-| Session update of `agent.model`, `reasoning.effort`, `service_tier` and `review: auto_review` | Applied on the next root Turn; `reasoning.effort` cannot be reset to null | Rejected | Rejected |
+| Session update of `agent.model`, `reasoning.effort` (including null), `service_tier` and `review: auto_review` | Applied on the next root Turn; `reasoning.effort` cannot be reset to null | Applied on the next root Turn, except `service_tier`, which is rejected | Rejected |
 | Session update of `agent.tools` | Rejected | Rejected | Rejected |
 | `compaction.async: true`, `experimental.time_awareness: true` and the `automations` and `computer_use` tools | Rejected | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |

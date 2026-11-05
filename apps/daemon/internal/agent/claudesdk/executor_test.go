@@ -51,7 +51,7 @@ func runPersistentExecutorHelper() {
 	}
 	_ = os.WriteFile(filepath.Join(root, "prepared"), []byte(strconv.Itoa(os.Getpid())), 0600)
 	encode := func(event bridgeEvent) { _ = json.NewEncoder(os.Stdout).Encode(event) }
-	encode(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	encode(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if os.Getenv("SDK_EXECUTOR_MODE") == "block" {
 		time.Sleep(time.Hour)
 		return

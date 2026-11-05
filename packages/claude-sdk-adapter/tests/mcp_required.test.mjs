@@ -99,7 +99,7 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
       if (ready) {
         const until = Date.now() + 5000;
         while (!stdout.includes("executor_ready") && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
-        child.stdin.write(JSON.stringify({ type: "turn_start", turn_id: "run", input: [{ content: [{ type: "input_text", text: "one input" }] }] }) + "\n");
+        child.stdin.write(JSON.stringify({ type: "turn_start", turn_id: "run", input: [{ content: [{ type: "input_text", text: "one input" }] }], settings: { model: "fixed", effort: null, review: "" } }) + "\n");
         while (!stdout.includes("turn_settled") && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
         child.stdin.end();
       }

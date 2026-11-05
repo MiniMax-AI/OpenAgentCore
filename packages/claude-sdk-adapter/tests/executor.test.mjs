@@ -89,7 +89,7 @@ async function launch(t,mode="normal") {
  t.after(async()=>{child.kill("SIGKILL");await closed});
  const wait=async predicate=>{const until=Date.now()+5000;while(!predicate()){assert.ok(Date.now()<until,JSON.stringify({events,observations,stderr}));await new Promise(resolve=>setTimeout(resolve,5))}};
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
- const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
+ const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}],settings:{model:"fixture",effort:null,review:""}});
  send({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",
  ...(mode==="features" || mode==="later-function" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type==="executor_ready"));

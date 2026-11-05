@@ -209,6 +209,7 @@ Each item is Core's deliberate or native behavior where the official service beh
   - [Conflict and rejection cases](./automations.md#state-changes).
   - [Target validation and saved references](./automations.md#targets).
   - [Paging](./automations.md): `limit` clamping and unresolved `after`.
+- Whether a Claude Code Subagent from an earlier Turn, resumed by `SendMessage`, runs in the current Turn's permission mode rather than the mode it started under: the native mode is session-wide, so the adapter assumes the current one.
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.

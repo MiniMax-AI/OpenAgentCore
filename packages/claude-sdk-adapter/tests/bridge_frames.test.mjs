@@ -16,7 +16,7 @@ test("the bridge accepts every frame Go sends", async () => {
   turns.configure({ interrupt: async () => ({ still_queued: [] }) }, input => (inputs = new Inputs(input)), async payload => {
     if (payload.type === "steer") events.push(...inputs.submit(payload));
     else functions.submit(JSON.stringify(payload));
-  });
+  }, { model: "claude-fixture", effort: "high", review: "auto_review" });
   const [start, cancel, steer, result] = ["turn_start", "turn_cancel", "steer", "function_result"].map(type => frames.to_bridge.find(frame => frame.type === type));
   await turns.start(start);
   events.push(...inputs.start("native-session"));

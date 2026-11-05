@@ -52,7 +52,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				}
 			}
 			var started map[string]json.RawMessage
-			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &started); err != nil || len(started) != 3 || started["output_format"] != nil {
+			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &started); err != nil || len(started) != 4 || started["output_format"] != nil {
 				t.Fatal("Start replaced the prepared configuration", err)
 			}
 		})
