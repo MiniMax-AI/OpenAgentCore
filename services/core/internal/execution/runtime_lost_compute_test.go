@@ -371,7 +371,7 @@ func TestLostComputeReleaseSerializesWithConcurrentIntent(t *testing.T) {
 			}{
 				{name: "compute_revision", statement: `UPDATE runtime_allocations SET compute_revision=compute_revision+1 WHERE environment_id=$1`, want: deployment.ErrAllocationConflict, status: "disconnected"},
 				{name: "archive", statement: `UPDATE environments SET status='expired' WHERE id=$1`, want: deployment.ErrAllocationConflict, status: "expired"},
-				{name: "deletion", statement: `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, want: sessions.ErrNotFound},
+				{name: "deletion", statement: `UPDATE sessions SET deleted_at=clock_timestamp() WHERE environment_id=$1 AND deleted_at IS NULL`, want: sessions.ErrNotFound},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					f := newLostComputeFixture(t)

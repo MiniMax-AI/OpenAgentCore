@@ -77,9 +77,6 @@ func (e *Execution) WithReservation(ctx context.Context, key deployment.Allocati
 		return err
 	}
 	return translate(sessionpg.WithEnvironment(ctx, e.lease, tenant, environment, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession, session pgtype.UUID) error {
-		if locked.Deleted {
-			return sessions.ErrNotFound
-		}
 		t := &reservationTx{SessionTx: sessionpg.BindSession(q, tenant, session), ctx: ctx, q: q, tenant: tenant, environment: environment, session: session}
 		return apply(locked, t)
 	}))
