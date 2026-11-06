@@ -490,12 +490,19 @@ func (f *fakeExecutionStorage) WithAllocationCleanup(ctx context.Context, key Al
 	return f.withAllocationCleanup(ctx, key, apply)
 }
 
+func (f *fakeExecutionStorage) WithResetEnvironment(context.Context, AllocationKey, func(ResetEnvironmentTx) error) error {
+	unexpected(f.t, "WithResetEnvironment")
+	return nil
+}
+
 func (f *fakeExecutionStorage) WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error {
 	if f.withSessionArchive == nil {
 		unexpected(f.t, "WithSessionArchive")
 	}
 	return f.withSessionArchive(ctx, tenantID, sessionID, apply)
 }
+
+func (f *fakeExecutionStorage) ReleaseInactivePlacements(context.Context) error { return nil }
 
 func (f *fakeExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
 	if f.clearWake == nil {

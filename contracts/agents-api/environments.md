@@ -2,7 +2,7 @@
 title: "Environments and Templates"
 ---
 
-An Environment is the execution resource of a Session: the machine, workspace and prepared capabilities that a Harness runs in. A Session creates its Environment through its `environment` configuration; there is no standalone create call. An Environment Template is reusable preparation configuration that a Session resolves when it is created. This contract covers both resources, the two placements, input admission, capability preparation, Skills, Plugins and MCP connection origins.
+An Environment is the execution resource of a Session: the machine, workspace and capabilities that a Harness runs in. A Session creates its Environment through its `environment` configuration, or attaches one that `POST /agents/environments` created earlier ([standalone Environments](#standalone-environments)). An Environment Template is reusable preparation configuration that a Session resolves when it is created. This contract covers both resources, the two placements, input admission, capability preparation, Skills, Plugins and MCP connection origins.
 
 Related owners:
 
@@ -18,12 +18,12 @@ Paths follow the SDK resource methods, before the service's `/v1` prefix. The li
 
 | Resource | Operations | Rules |
 | --- | --- | --- |
-| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | Created through Session configuration. Returns `id`, `type`, `status` and the `files`, `plugins` and `skills` recorded at Session creation. |
-| Environment collection | `POST`, `GET /agents/environments` | Not supported: 404 `unsupported_operation` ([unsupported operations](./wire-semantics.md#unsupported-operations)). Environments are created only through Session configuration. |
+| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | Created through Session configuration or `POST /agents/environments`. Returns `id`, `type`, `status` and the `files`, `plugins` and `skills` recorded at creation. |
+| Environment collection | `POST`, `GET /agents/environments` | See [Standalone Environments](#standalone-environments). |
 | [Template](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`, `GET /agents/environments/templates`; `GET`, `POST`, `DELETE /agents/environments/templates/{id}` | See [Templates](#templates). |
 | [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](./environment-files.md). |
 
-An Environment read joins its live owning Session within the caller's Project and returns the durable connection status. It needs no live Runtime, starts no native work and changes no connection state. The installation arrays list API-managed files, Plugins and Skills for both placements: files as `{id, type, path, file_id, size_bytes}` without content, Skills as `{type, name, description, skill_id, version}` and Plugins as `{type, name, description}`. Capabilities discovered in local capability directories are not listed.
+An Environment read stays within the caller's Project, hides an Environment whose owning Session was deleted, and returns the durable connection status. It needs no live Runtime, starts no native work and changes no connection state. The installation arrays list API-managed files, Plugins and Skills for both placements: files as `{id, type, path, file_id, size_bytes}` without content, Skills as `{type, name, description, skill_id, version}` and Plugins as `{type, name, description}`. Capabilities discovered in local capability directories are not listed.
 
 [Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) and [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) have different shapes:
 
@@ -36,11 +36,16 @@ An Environment read joins its live owning Session within the caller's Project an
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`, `ready`, `connected`, `disconnected`, `suspended`, `expired`, `failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | The same seven states, with a nullable error |
 
-Core emits `ready` only in events. It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
+Core emits `ready` in events, and the resource reads `ready` for a prepared standalone Environment that no Session is attached to ([List and retrieve](#standalone-environments)). It never reports `suspended`, even for an idle hosted Environment it checkpoints and stops, and it emits no `agent.session.environment.suspended`, `.expired` or `.reset` event; an Environment whose retention ends reads `expired` without the event. The resource moves as follows, and a failed or expired Environment is final:
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending
+    pending --> ready
+    ready --> connected
+    connected --> ready
+    disconnected --> ready
+    ready --> expired
     pending --> connected
     connected --> disconnected
     disconnected --> connected
@@ -54,9 +59,34 @@ stateDiagram-v2
 
 Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
 
-Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment row holds its own Project, immutable configuration and preparation input, and the Session names it; at most one live Session is attached to an Environment. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
+Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair a Session-owned Environment. The Environment row holds its own Project, immutable configuration and preparation input, and the Session names it; at most one live Session is attached to an Environment. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session of a Session-owned Environment is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A standalone Environment outlives its Sessions. A Session with `none` has no Environment.
 
 A managed outer Environment must exclude broader application credentials and other tenants’ secrets.
+
+## Standalone Environments
+
+`POST /agents/environments` creates and initializes an `openai_hosted` Environment before any Session exists, so that a later Session starts on warm compute. A standalone Environment is reusable: one Session at a time attaches to it, and when that Session is deleted the next one can attach. The Environment keeps its compute, workspace and preparation across Sessions.
+
+**Create.** The body is `{environment, vault_ids}`. `environment` takes the `openai_hosted` member of the [Session `environment`](#placements) without `environment_id`, and may name a Template; Core resolves and applies the Template as it does for a Session. `vault_ids` may be null or `[]`; a nonempty list returns 400. The `Idempotency-Key` is 1–256 bytes and scoped to the Project. Every Project key authenticates as the Project, so the creator adds no further scope: the list, retrieve and the key reach the Project's Environments. A retry with the same key and the same body as sent returns the Environment in its current state, `pending` included, even if the named Template was deleted since; creation completes in one transaction, so a retry never sees an incomplete one; a different body returns 409 `idempotency_conflict`. Core validates the admission that a hosted Session needs for its Environment (deployment, workspace storage, network policy), freezes Skills, seals the setup and initial files, and returns 201 with the Environment in status `pending`. Provisioning then starts and needs no caller action.
+
+**List and retrieve.** `GET /agents/environments` lists the Project's standalone Environments, including `failed` and `expired` ones, in the official pagination with `type=openai_hosted` as the only value; [Page size](./wire-semantics.md#page-size) owns `limit`. `GET /agents/environments/{id}` serves both kinds. An Environment with no attached Session whose initialization is complete reads `ready` where it would read `pending`, `connected` or `disconnected`; once a Session is attached it reads the connection status, and `failed` and `expired` always read as such.
+
+**Attach.** `POST /agents/sessions` with `environment: {"type": "openai_hosted", "environment_id": "…"}` (9–256 characters) runs the Session on that Environment, with its frozen configuration. Any other member beside `environment_id` returns 400 with the member as `param` (`environment.packages`, …), as does `x_agents_core.environment`. The Harness, model and tools come from the Session. Core returns:
+
+| Case | Response |
+| --- | --- |
+| Missing, another Project's, or a deleted Session-owned Environment | 404 `not_found_error` |
+| Attached to a live Session | 409 `conflict_error`, "Environment is attached to another session.", `param` `environment.environment_id` |
+| `failed` or `expired` | 409 `conflict_error`, "Environment has failed or expired and cannot take a session.", `param` `environment.environment_id` |
+| The Environment's network policy cannot reach the Session's model provider | 400 `model_provider_unreachable`, `param` `environment.environment_id` |
+
+A `pending` Environment is accepted: the Session's first input waits for preparation like any hosted input, and a suspended or released allocation wakes. Attach repeats no workspace admission and checks the Session's model provider against the Environment's frozen network policy (the last row above). It also applies the checks that depend on the Session, such as the Harness's native history requirement, and the deployment must admit new hosted work: a pending reset or closed admission rejects the attach like an inline create. Two concurrent attaches have exactly one winner.
+
+**Detach.** Deleting the Session is the only detach. The Environment is attachable at once and keeps its workspace and preparation.
+
+**Files.** [Environment files](./environment-files.md#where-files-work) owns the files routes while no Session is attached.
+
+**Lifecycle without a Session.** An unattached Environment provisions and initializes without a Harness, and its lifetime depends on the Provider. With checkpoint support it suspends after the deployment's idle timeout and expires when snapshot retention ends; [Suspension policy](./sandbox-deployment.md#suspension-policy) owns both values. Without checkpoint support it cannot be suspended, so it expires after the idle timeout without activity, counted from its last activity: the end of its initialization, a detach or later activity. A failed Environment releases its compute at once. On any Provider it also expires after confirmed compute loss, including compute released while a Session held it once that Session is deleted, because Core never replaces it on new compute: nothing identifies the work to replay. A [sandbox reset](./sandbox-deployment.md#reset) expires it as well. An expired Environment cannot be attached. An ended (`expired` or `failed`) unattached Environment releases its placement and workspace.
 
 ## Placements
 
@@ -79,7 +109,7 @@ The deployment's configured Sandbox Provider (microsandbox, E2B or OpenSandbox, 
 - Omitted or null `network` means enabled; `disabled` and `restricted` need a hosted Environment on a sandbox Provider that can restrict ([network policy](#restricted-network)).
 - A Core restart keeps the allocation, workspace and native identity and never replays uncertain work.
 - Terminal cleanup revokes authority and settles pending input in one transaction before the Provider reclaims compute. New input on a terminal Environment is rejected.
-- Deleting the Session reclaims its Environment; deleting a Template does not.
+- Deleting the Session reclaims a Session-owned Environment; it never reclaims a standalone one, and deleting a Template reclaims neither.
 
 ### Self-hosted (`self_hosted`)
 
@@ -135,7 +165,7 @@ stateDiagram-v2
 - Deadlines are checked after taking the Session lock. Expiration and targeted cancellation keep their terminal identity, and a retry of a terminal reservation cannot affect a later reservation or Turn.
 - Initial reservations fail the Session when they expire; later ones return the Session to idle. Failure events capture the settled activity and Usage atomically. A late connection or a creation retry cannot reset or replay expired input.
 
-A Runtime `failed` result with `preparation_failed` and no Run settles the pending input at once with `runtime_preparation_failed`. So does a rejection of the current `execution_prepare` with no Run and code `invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`. Core records a safe Session failure before any Turn exists and releases the input gate; after the local cause is fixed, new input is accepted. Transport loss, capacity rejection and unconfirmed cleanup stay retryable within the original deadline. A Runtime that lacks the attached Session's Harness fails that input the same way when its executor is prepared; initialization checks no Harness. Core uses these common control states, never Harness-specific error text.
+A Runtime `failed` result with `preparation_failed` and no Run settles the pending input at once with `runtime_preparation_failed`. So does a rejection of the current `execution_prepare` with no Run and code `invalid_configuration`, `unsupported_configuration` or `unsupported_preparation`. Core records a safe Session failure before any Turn exists and releases the input gate; after the local cause is fixed, new input is accepted. Transport loss, capacity rejection and unconfirmed cleanup stay retryable within the original deadline. A Runtime that lacks the attached Session's Harness fails that input the same way when its executor is prepared. Core uses these common control states, never Harness-specific error text.
 
 ### Activity and required actions
 
@@ -230,11 +260,11 @@ stateDiagram-v2
 ```
 
 - The Worker's initialization scheduler scans 32 Environments at a time, wraps at the end and bounds concurrent preparations by execution concurrency, independently of Provider maintenance.
-- A missing socket does not consume a pending attempt. Initialization needs no Harness. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
+- A missing socket does not consume a pending attempt. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
 - Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
-- Every `openai_hosted` Environment starts `pending`, including one with no files or setup, and journals `agent.session.environment.pending` in the transaction that starts its initialization and `agent.session.environment.ready` in the one that completes it, each exactly once. Core journals `agent.session.environment.connected` when it observes the Runtime's connection, before or after `pending`. A `self_hosted` Environment emits neither `pending` nor `ready`, and starts `complete` unless it has files or setup.
+- Every `openai_hosted` Environment starts `pending`, including one with no files or setup, and journals `agent.session.environment.pending` in the transaction that starts its initialization and `agent.session.environment.ready` in the one that completes it, each exactly once. Core journals `agent.session.environment.connected` when it observes the Runtime's connection, before or after `pending`. These are Session events, journaled only while a Session is attached: an Environment prepared before attach emits no `pending` or `ready` to the Session that attaches later. A `self_hosted` Environment emits neither `pending` nor `ready`, and starts `complete` unless it has files or setup.
 
 A failed initialization records the events and Session state that [Environment initialization failure](./sessions-events.md#environment-initialization-failure) defines. The reason names only the step and its exit status:
 
@@ -251,7 +281,7 @@ Every initialization operation returns a typed `rejected`, `failed` or `unknown`
 
 ## Templates
 
-A Template is Project-owned configuration for `openai_hosted` Sessions and for `x_agents_core.environment`. It holds no running workspace and is unrelated to Provider images such as E2B templates. Every Session that references it gets its own Environment through the same preparation as inline configuration. Template parsing, storage and resolution never select a Harness or Provider or depend on native tool names or private Harness paths, so a new Harness or Provider needs no Template change.
+A Template is Project-owned configuration for `openai_hosted` Sessions, for `POST /agents/environments` and for `x_agents_core.environment`. It holds no running workspace and is unrelated to Provider images such as E2B templates. Every Session that references it gets its own Environment through the same preparation as inline configuration. Template parsing, storage and resolution never select a Harness or Provider or depend on native tool names or private Harness paths, so a new Harness or Provider needs no Template change.
 
 ```python
 from openai import OpenAI

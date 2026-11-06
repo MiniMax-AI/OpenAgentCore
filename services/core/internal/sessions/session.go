@@ -62,6 +62,9 @@ type CreateSession struct {
 	IdempotencyKey             string
 	Configuration              json.RawMessage
 	InitialInputs              []Input
+	// EnvironmentID names the standalone Environment the Session attaches to
+	// instead of creating one. Configuration then carries its composed snapshot.
+	EnvironmentID string
 }
 
 type Page struct {

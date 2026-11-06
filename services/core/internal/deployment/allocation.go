@@ -29,10 +29,11 @@ type Allocation struct {
 	// CreateSettled records evidence that the original Create can no longer
 	// change resources.
 	CreateSettled bool
-	// Reclaimed reports that the Environment is Session-owned and its Session
-	// was publicly deleted. AttachedSessionID is the live Session using the
-	// Environment, empty when none is attached.
-	Reclaimed bool
+	// Ended reports that nothing can run on the Environment again: no live
+	// Session holds it and it is Session-owned or failed or expired.
+	// AttachedSessionID is the live Session using the Environment, empty when
+	// none is attached.
+	Ended bool
 	// Replayed reports that ReserveAllocation returned an existing allocation,
 	// which never authorizes another Create.
 	Replayed bool

@@ -43,6 +43,10 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusUnauthorized, "installation_authorization_invalid", sessions.ErrInstallationAuthorization.Error())
 	case errors.Is(err, sessions.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
+	case errors.Is(err, sessions.ErrEnvironmentAttached):
+		writeError(w, http.StatusConflict, "conflict_error", "Environment is attached to another session.", "environment.environment_id")
+	case errors.Is(err, sessions.ErrEnvironmentTerminal):
+		writeError(w, http.StatusConflict, "conflict_error", "Environment has failed or expired and cannot take a session.", "environment.environment_id")
 	case errors.Is(err, sessions.ErrHostedEnvironmentFailed):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "the hosted environment failed to provision")

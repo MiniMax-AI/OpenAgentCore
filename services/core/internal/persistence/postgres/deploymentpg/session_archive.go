@@ -76,10 +76,6 @@ func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {
 	return err
 }
 
-func (t *archiveTx) ReleasePlacement() error {
-	return t.q.ReleaseUnallocatedRuntimePlacement(t.ctx, t.session)
-}
-
 func (t *archiveTx) RecordArchiveAudit(ctx context.Context) error {
 	return auditpg.RecordAdminMutation(ctx, t.q, t.tenantID, "archive", "session", uuidString(t.session))
 }

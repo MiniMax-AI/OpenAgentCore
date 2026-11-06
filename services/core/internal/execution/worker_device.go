@@ -122,7 +122,8 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 }
 
 // harnessUnavailable reports whether the Runtime bound to the Session is
-// connected and reports the Session's Harness missing or unavailable.
+// connected and reports the Session's Harness missing or unavailable, or lacks
+// the retained native history the Environment requires.
 func (w *Worker) harnessUnavailable(ctx context.Context, tenantID, sessionID string) (bool, error) {
 	session, err := w.dispatcher.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
@@ -137,7 +138,16 @@ func (w *Worker) harnessUnavailable(ctx context.Context, tenantID, sessionID str
 		return false, nil
 	}
 	info, found, known := peer.AgentKindStatus(session.Engine)
-	return known && (!found || !info.Available), nil
+	if !known || !found || !info.Available {
+		return known, nil
+	}
+	environment, err := w.dispatcher.SessionsReader.GetSessionEnvironment(ctx, tenantID, sessionID)
+	if err != nil {
+		return false, nilIfNotFound(err)
+	}
+	// A Runtime without retained native history cannot serve an Environment
+	// that keeps its history outside compute.
+	return w.dispatcher.validateEnvironmentHistory(session.Engine, environment, info.Capabilities.RetainedNativeHistory.IsSupported()) != nil, nil
 }
 
 func nilIfNotFound(err error) error {

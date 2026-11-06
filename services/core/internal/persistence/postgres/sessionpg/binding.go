@@ -162,8 +162,8 @@ func (t *SessionTx) LoadBoundDevice(ctx context.Context) (bool, error) {
 	return err == nil, err
 }
 
-// InsertEnvironmentDevice inserts the device only for the Session's own hosted
-// Environment. The insert takes no row when the Environment already has a
+// InsertEnvironmentDevice inserts the device only for a hosted Environment,
+// bound to the attached Session if there is one. The insert takes no row when the Environment already has a
 // device, including one a concurrent transaction inserted first, or cannot
 // take one: that is sessions.ErrDeviceBindingConflict.
 func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions.ExecutionDevice, credentialHash string) error {
@@ -184,6 +184,10 @@ func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions
 	}
 	if err != nil {
 		return err
+	}
+	if !t.session.Valid {
+		// A standalone Environment has no Session to bind yet; attaching one binds it.
+		return nil
 	}
 	_, err = t.q.BindHostedSessionDevice(ctx, sqlc.BindHostedSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
 	if errors.Is(err, pgx.ErrNoRows) {

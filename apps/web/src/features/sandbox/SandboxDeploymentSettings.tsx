@@ -40,7 +40,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
           {t("One provider serves this deployment. Reset it before choosing a different backend.")}
           {deployment.mode === "direct" ? ` ${t("Core creates {{provider}} sandboxes directly. No node enrollment is needed.", { provider: setup?.label })} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
           <dl className="sandbox-summary">
-            {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.suspension.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
+            {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
             <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
             <div><dt>{t("Pending environments")}</dt><dd>{deployment.resources?.pending ?? t("Unknown state")}</dd></div>
           </dl>

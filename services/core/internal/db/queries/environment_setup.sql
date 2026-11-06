@@ -2,8 +2,8 @@
 INSERT INTO environment_setups (environment_id, contents) VALUES ($1, $2);
 
 -- name: GetEnvironmentSetup :one
-SELECT f.contents, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS owner_session_id
-FROM environments e LEFT JOIN environment_setups f ON f.environment_id = e.id
+SELECT f.contents, l.ended::boolean AS ended
+FROM environments e JOIN environment_liveness l ON l.id = e.id LEFT JOIN environment_setups f ON f.environment_id = e.id
 WHERE e.tenant_id = $1 AND e.id = $2;
 
 -- name: SetEnvironmentSetupMetadata :exec

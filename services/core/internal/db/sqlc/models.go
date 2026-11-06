@@ -159,6 +159,12 @@ type EnvironmentInputReservation struct {
 	Settings       []byte             `json:"settings"`
 }
 
+type EnvironmentLiveness struct {
+	ID     pgtype.UUID `json:"id"`
+	Ended  pgtype.Bool `json:"ended"`
+	Active pgtype.Bool `json:"active"`
+}
+
 type EnvironmentSetup struct {
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 	Contents      []byte      `json:"contents"`

@@ -1,7 +1,7 @@
 ---
 title: "Automations"
 source: contracts/agents-api/automations.md
-source_hash: 4644f72c63abb5381898a794a5421bbe968bf5ab418237ea40d111dee850a515
+source_hash: 3408eb6d69fde360c3a22accfc96deab62e4455a27ca31c9ac0cc725061c530c
 ---
 
 Automation 保存一个计划和一个目标。计划触发时，Core 投递目标：创建新 Session，或向已有 Session 发送指令。锁定版本 SDK 的全部十个操作都在 `/v1/agents/automations` 下实现，并与其他 Beta 路由一样需要项目身份验证和 `OpenAI-Beta: agents=v1`。Automation 属于其密钥所在的项目；不存在的 ID 与其他项目的 ID 都返回 404。
@@ -41,7 +41,7 @@ Automation 保存一个计划和一个目标。计划触发时，Core 投递目�
 
 `target.type` 为 `new_session` 或 `existing_session`。更新保持类型不变；另一种类型返回 400，param 为 `target.type`。
 
-`new_session` 采用 Session 创建请求体的字段，外加 `type`：`environment` 和 `input`（用户消息数组）必填，`agent` 与 `agent_id` 必须恰好提供其中一个，`metadata` 和 `vault_ids` 可选。创建和更新会执行 Session 创建在创建任何东西之前执行的检查：请求形状、Environment Template、已保存的 Agent、模型及其 provider、Vault 绑定，以及 Harness 对该配置的支持，因此不受支持的工具（如 `automations`）在创建时返回 400。拒绝规则与 Session 创建相同，param 加上前缀 `target.`：`environment.environment_id`、`container_size`、`desktop.enabled`、`packages.system` 和 `blocked_domains` 会被拒绝。部署就绪、准入和租约在每次投递时检查。此外：
+`new_session` 采用 Session 创建请求体的字段，外加 `type`：`environment` 和 `input`（用户消息数组）必填，`agent` 与 `agent_id` 必须恰好提供其中一个，`metadata` 和 `vault_ids` 可选。创建和更新会执行 Session 创建在创建任何东西之前执行的检查：请求形状、Environment Template、已保存的 Agent、模型及其 provider、Vault 绑定，以及 Harness 对该配置的支持，因此不受支持的工具（如 `automations`）在创建时返回 400。拒绝规则与 Session 创建相同，param 加上前缀 `target.`：`container_size`、`desktop.enabled`、`packages.system` 和 `blocked_domains` 会被拒绝。`environment.environment_id` 指向一个[独立 Environment](environments.md#standalone-environments)：创建和更新只检查它存在于项目中（404），每次投递都会挂载它，因此在另一个 Session 占用它时投递会因挂载冲突而失败。部署就绪、准入和租约在每次投递时检查。此外：
 
 - 内联 `agent` 与 Session 创建一致：除非适用部署默认模型，否则 `model` 必填。
 - 目标中任何位置的 `x_agents_core` 都会被拒绝。

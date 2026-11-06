@@ -45,7 +45,7 @@ func (s *Service) View(ctx context.Context) (View, error) {
 // view reports the public URL as the deployment's read-only core_url.
 func (s *Service) view(snapshot Snapshot) (View, error) {
 	d := snapshot.Record
-	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: sandbox.DeploymentMode(d.Mode), Rollout: snapshot.Rollout, Resources: snapshot.Resources}
+	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), IdleSeconds: d.IdleSeconds, OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: sandbox.DeploymentMode(d.Mode), Rollout: snapshot.Rollout, Resources: snapshot.Resources}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) == nil {
@@ -65,7 +65,7 @@ func (s *Service) view(snapshot Snapshot) (View, error) {
 		result.Configuration = configurationJSON(record.Public)
 		result.Metadata = configurationJSON(record.Metadata)
 		result.CredentialConfigured = d.CredentialStored
-		if result.Suspension, err = s.suspension(d.Provider, d.IdleSeconds); err != nil {
+		if result.Suspension, err = s.suspension(d.Provider); err != nil {
 			return View{}, err
 		}
 	}
@@ -108,23 +108,18 @@ func (s *Service) setup(d Record) (Setup, error) {
 	if err != nil {
 		return Setup{}, ErrConflict
 	}
-	result, err = s.describe(result)
-	if result.Suspension != nil {
-		result.Suspension.IdleSeconds = d.IdleSeconds
-	}
-	return result, err
+	return s.describe(result)
 }
 
 // describe adds the provider's declared operations, suspension policy and
-// credential use. The idle policy lives in the stored deployment row, so a
-// setup that is not read from it leaves IdleSeconds zero.
+// credential use.
 func (s *Service) describe(setup Setup) (Setup, error) {
 	adapter, err := s.registry.Lookup(setup.Provider)
 	if err != nil {
 		return Setup{}, err
 	}
 	setup.Operations = adapter.Operations()
-	if setup.Suspension, err = s.suspension(setup.Provider, 0); err != nil {
+	if setup.Suspension, err = s.suspension(setup.Provider); err != nil {
 		return Setup{}, err
 	}
 	setup.UsesCredential, err = s.registry.UsesCredential(setup.Provider)
@@ -255,14 +250,14 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 	return s.describe(result)
 }
 
-// suspension returns Core's idle suspension policy for a provider that
-// declares checkpoint support, and nil for any other provider.
-func (s *Service) suspension(provider string, idleSeconds int64) (*Suspension, error) {
+// suspension returns Core's snapshot retention for a provider that declares
+// checkpoint support, and nil for any other provider.
+func (s *Service) suspension(provider string) (*Suspension, error) {
 	checkpoint, err := s.registry.SupportsCheckpoint(provider)
 	if err != nil || !checkpoint {
 		return nil, err
 	}
-	return &Suspension{IdleSeconds: idleSeconds, RetentionSeconds: 24 * 60 * 60}, nil
+	return &Suspension{RetentionSeconds: 24 * 60 * 60}, nil
 }
 
 // validateSelection rejects a selection its provider cannot normalize.
@@ -334,13 +329,6 @@ func (s *Service) UpdateIdleSeconds(ctx context.Context, seconds int64) (View, e
 		}
 		if d.Reset != nil {
 			return ErrResetInProgress
-		}
-		supported, err := s.registry.SupportsCheckpoint(d.Provider)
-		if err != nil {
-			return err
-		}
-		if !supported {
-			return ErrInvalidInput
 		}
 		return tx.SaveIdleSeconds(seconds)
 	})

@@ -27,6 +27,22 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
+const endUnattachedStandaloneEnvironment = `-- name: EndUnattachedStandaloneEnvironment :exec
+UPDATE environments e SET status = 'expired'
+FROM environment_liveness l
+WHERE e.id = $1 AND l.id = e.id AND l.active AND NOT e.session_owned
+  AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+  AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state IN ('creating', 'running'))
+`
+
+// An unattached standalone Environment whose compute is gone or being removed has nothing to resume, so it ends.
+// One that never had compute is waiting for its first placement and stays.
+func (q *Queries) EndUnattachedStandaloneEnvironment(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, endUnattachedStandaloneEnvironment, id)
+	return err
+}
+
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
     GREATEST(a.compute_activity_at, a.compute_phase_changed_at,
@@ -60,6 +76,17 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 		&i.ComputeWakeRequested,
 	)
 	return i, err
+}
+
+const getSessionEnvironmentID = `-- name: GetSessionEnvironmentID :one
+SELECT environment_id FROM sessions WHERE id = $1
+`
+
+func (q *Queries) GetSessionEnvironmentID(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getSessionEnvironmentID, id)
+	var environment_id pgtype.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
 }
 
 const moveSuspendedRuntimeCompute = `-- name: MoveSuspendedRuntimeCompute :one
@@ -135,6 +162,17 @@ WHERE a.environment_id = s.environment_id AND s.id = $1
 
 func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, recordRuntimeTerminalActivity, id)
+	return err
+}
+
+const recordStandaloneActivity = `-- name: RecordStandaloneActivity :exec
+UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
+FROM environments e
+WHERE e.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released'
+`
+
+func (q *Queries) RecordStandaloneActivity(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, recordStandaloneActivity, id)
 	return err
 }
 

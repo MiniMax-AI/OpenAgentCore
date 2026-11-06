@@ -106,3 +106,39 @@ func TestAdmissionNeedsProviderSupport(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestEgressCoversTheModelProviderOfAnAttachingSession(t *testing.T) {
+	cap := sandbox.Network{Public: true, Domains: []string{"model.internal", "*.corp.example"}}
+	enabled, err := egressFor(cap, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := egressFor(cap, &v1.EnvironmentNetworkInput{Access: "disabled"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	restricted, err := egressFor(cap, &v1.EnvironmentNetworkInput{Access: "restricted", AllowedDomains: []string{"api.example.com"}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, test := range map[string]struct {
+		created sandbox.Egress
+		url     string
+		want    bool
+	}{
+		"public host, public network":     {enabled, "https://api.example.com/v1", true},
+		"private IP, public network":      {enabled, "http://10.0.0.8:8080", false},
+		"cap-listed host, public network": {enabled, "http://model.internal/v1", true},
+		"cap wildcard, public network":    {enabled, "http://llm.corp.example/v1", true},
+		"cap-listed host under disabled":  {disabled, "http://model.internal/v1", false},
+		"public host under disabled":      {disabled, "https://api.example.com/v1", false},
+		"loopback under disabled":         {disabled, "http://127.0.0.1:9000", true},
+		"allowed domain under restricted": {restricted, "https://api.example.com/v1", true},
+		"other host under restricted":     {restricted, "https://other.example.com/v1", false},
+		"no model provider":               {disabled, "", true},
+	} {
+		if got := egressCovers(test.created, test.url); got != test.want {
+			t.Errorf("%s: covers = %v, want %v", name, got, test.want)
+		}
+	}
+}

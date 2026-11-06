@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/placementpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -170,7 +171,7 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 		size := int64(len(body))
 		metadata[i].ID = id.String()
 		metadata[i].SizeBytes = &size
-		encrypted, err := t.cipher.SealEnvironmentFile(body, fileBinding(t.tenant, t.session, id.String()))
+		encrypted, err := t.cipher.SealEnvironmentFile(body, fileBinding(t.tenant, t.environment, id.String()))
 		if err != nil {
 			return fmt.Errorf("seal initial file: %w", err)
 		}
@@ -192,7 +193,7 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 	if err != nil {
 		return err
 	}
-	encrypted, err := t.cipher.SealEnvironmentSetup(plaintext, setupBinding(t.tenant, t.session))
+	encrypted, err := t.cipher.SealEnvironmentSetup(plaintext, setupBinding(t.tenant, t.environment))
 	if err != nil {
 		return fmt.Errorf("seal environment setup: %w", err)
 	}
@@ -217,14 +218,61 @@ func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setu
 }
 
 func (t *creationTx) CreateEnvironment(ctx context.Context, configuration json.RawMessage, prepared bool) (string, error) {
-	t.environment = pgtype.UUID{Bytes: uuid.New(), Valid: true}
-	if err := t.q.CreateEnvironment(ctx, sqlc.CreateEnvironmentParams{ID: t.environment, TenantID: t.tenant, Configuration: configuration, Prepared: prepared}); err != nil {
+	if err := t.insertEnvironment(ctx, sqlc.CreateEnvironmentParams{Configuration: configuration, Prepared: prepared}); err != nil {
 		return "", err
 	}
 	if err := t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: t.environment}); err != nil {
 		return "", err
 	}
 	return optionalID(t.environment), nil
+}
+
+func (t *creationTx) AttachEnvironment(ctx context.Context, environment string) error {
+	id := pgunit.PathID(environment)
+	if _, err := t.q.LockEnvironment(ctx, sqlc.LockEnvironmentParams{TenantID: t.tenant, ID: id}); err != nil {
+		return notFound(err)
+	}
+	// A statement after the lock sees any attachment committed while waiting.
+	row, err := t.q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: t.tenant, ID: id})
+	if err != nil {
+		return notFound(err)
+	}
+	switch {
+	case row.AttachedSessionID.Valid:
+		return sessions.ErrEnvironmentAttached
+	case row.Environment.Status == "failed" || row.Environment.Status == "expired":
+		return sessions.ErrEnvironmentTerminal
+	}
+	t.environment = id
+	if err := t.q.AttachSessionEnvironment(ctx, sqlc.AttachSessionEnvironmentParams{ID: t.session, EnvironmentID: id}); err != nil {
+		return err
+	}
+	// A Runtime that already connected to the Environment serves this Session.
+	device, err := t.q.GetEnvironmentDevice(ctx, sqlc.GetEnvironmentDeviceParams{TenantID: t.tenant, EnvironmentID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = t.q.BindHostedSessionDevice(ctx, sqlc.BindHostedSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: device.ID})
+	return err
+}
+
+// notFound maps a missing row to sessions.ErrNotFound.
+func notFound(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ErrNotFound
+	}
+	return err
+}
+
+// insertEnvironment inserts the Environment with a new ID, which the later
+// preparation steps act on.
+func (t *creationTx) insertEnvironment(ctx context.Context, params sqlc.CreateEnvironmentParams) error {
+	t.environment = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	params.ID, params.TenantID = t.environment, t.tenant
+	return t.q.CreateEnvironment(ctx, params)
 }
 
 func (t *creationTx) PruneChanges(ctx context.Context) error {

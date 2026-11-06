@@ -398,7 +398,15 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 type fakeEnvironmentsReader struct {
 	t                              testing.TB
 	getEnvironment                 func(context.Context, string, string) (sessions.Environment, error)
+	listEnvironments               func(context.Context, string, identity.Subject, string, int, bool) ([]sessions.Environment, bool, error)
 	projectExecutorCredentialState func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
+}
+
+func (f *fakeEnvironmentsReader) ListEnvironments(a0 context.Context, a1 string, a2 identity.Subject, a3 string, a4 int, a5 bool) ([]sessions.Environment, bool, error) {
+	if f.listEnvironments == nil {
+		unexpectedCall(f.t, "ListEnvironments")
+	}
+	return f.listEnvironments(a0, a1, a2, a3, a4, a5)
 }
 
 func (f *fakeEnvironmentsReader) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
@@ -772,8 +780,20 @@ func (f *fakeSessionAdmin) GetManagedSessionArchive(a0 context.Context, a1 strin
 }
 
 type fakeSessionAdmission struct {
-	t             testing.TB
-	createSession func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	t                 testing.TB
+	createSession     func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	createEnvironment func(context.Context, string, sessions.CreateEnvironment) (string, error)
+}
+
+func (f *fakeSessionAdmission) ReplayEnvironment(context.Context, string, identity.Subject, string, json.RawMessage) (string, bool, error) {
+	return "", false, nil
+}
+
+func (f *fakeSessionAdmission) CreateEnvironment(a0 context.Context, a1 string, a2 sessions.CreateEnvironment) (string, error) {
+	if f.createEnvironment == nil {
+		unexpectedCall(f.t, "CreateEnvironment")
+	}
+	return f.createEnvironment(a0, a1, a2)
 }
 
 func (f *fakeSessionAdmission) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {

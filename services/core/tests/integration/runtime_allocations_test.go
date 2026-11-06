@@ -55,7 +55,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	retained, err := deploymentStore(next).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
-	if err != nil || !retained.Reclaimed || retained.ID != owner.ID {
+	if err != nil || !retained.Ended || retained.ID != owner.ID {
 		t.Fatalf("deletion discarded cleanup identity: %+v %v", retained, err)
 	}
 	if _, err := deploymentExecution(t, next).ObserveRunning(t.Context(), owner); !errors.Is(err, sessions.ErrNotFound) {

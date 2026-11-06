@@ -80,10 +80,15 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 
 var errHostedEnvironmentProvisioning = &fieldError{message: "the hosted environment is still provisioning; wait until it is connected before accessing files"}
 
-// environmentFilesAccessible rejects Files operations on an openai_hosted
-// Environment whose first connection has not been observed (HE-18). Callers
-// run it after the tenant-scoped lookup, so foreign Environments stay missing.
+// environmentFilesAccessible rejects Files operations on an Environment no
+// Session is attached to, and on an openai_hosted Environment whose first
+// connection has not been observed (HE-18). Callers run it after the
+// tenant-scoped lookup, so foreign Environments stay missing.
 func environmentFilesAccessible(w http.ResponseWriter, environment sessions.Environment) bool {
+	if environment.AttachedSessionID == "" {
+		writeError(w, http.StatusConflict, "conflict_error", "Attach a session to this environment before using its files.")
+		return false
+	}
 	var configuration struct {
 		Type string `json:"type"`
 	}

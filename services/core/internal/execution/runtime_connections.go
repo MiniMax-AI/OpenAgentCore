@@ -24,16 +24,18 @@ type runtimeConnection struct {
 }
 
 func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner deployment.Allocation) error {
-	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.AttachedSessionID)
-	if errors.Is(err, sessions.ErrNotFound) {
-		r.forgetAwaitingConnection(owner.DeviceID)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
-		return sessions.ErrDeviceBindingConflict
+	if owner.AttachedSessionID != "" {
+		bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.AttachedSessionID)
+		if errors.Is(err, sessions.ErrNotFound) {
+			r.forgetAwaitingConnection(owner.DeviceID)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
+			return sessions.ErrDeviceBindingConflict
+		}
 	}
 	if !owner.CreateSettled || owner.State != "running" {
 		r.forgetAwaitingConnection(owner.DeviceID)
@@ -138,7 +140,7 @@ func (r *runtimeLifecycle) observeAwaitingConnections(parent context.Context) er
 		operation, stop := context.WithTimeout(ctx, 5*time.Second)
 		owner, err := r.reader.EnvironmentAllocation(operation, key)
 		switch {
-		case err == nil && owner.DeviceID == device && owner.ProviderKey == r.config.InstallationID && owner.NodeID == r.nodeID && owner.State == "running" && owner.CreateSettled && !owner.Reclaimed && !owner.Expired && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running"):
+		case err == nil && owner.DeviceID == device && owner.ProviderKey == r.config.InstallationID && owner.NodeID == r.nodeID && owner.State == "running" && owner.CreateSettled && !owner.Ended && !owner.Expired && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running"):
 			err = r.observeConnection(operation, owner)
 		case err == nil || errors.Is(err, deployment.ErrNotFound):
 			r.forgetAwaitingConnection(device)

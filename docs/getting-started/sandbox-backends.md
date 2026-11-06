@@ -14,7 +14,7 @@ The installer selects no backend. One installation uses one backend. To change i
 | Nodes to add | Yes | None | None |
 | You provide | Linux amd64 hosts with systemd and `/dev/kvm` | An E2B API key and a template; a public HTTPS URL for Core | The server's URL and API key and a Runtime image built for it; a Core address its sandboxes reach |
 | Isolation | Each sandbox has its own kernel | E2B's | OpenSandbox's runtime: containers, or a secure container runtime |
-| Idle sandboxes suspend and resume | Yes, with checkpoints | Yes, paused in place by E2B | No; they keep running |
+| Idle sandboxes suspend and resume | Yes, with checkpoints | Yes, paused in place by E2B | No; a sandbox with a Session keeps running |
 | Workspace storage | Required, on NFS | Own disk | Own disk |
 | Disk limits | Root disk and workspace quota | Set by the template | Set by OpenSandbox's runtime |
 

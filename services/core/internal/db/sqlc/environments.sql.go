@@ -26,25 +26,74 @@ func (q *Queries) AttachSessionEnvironment(ctx context.Context, arg AttachSessio
 }
 
 const createEnvironment = `-- name: CreateEnvironment :exec
-INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization)
-VALUES ($1, $2, $3, true, CASE WHEN $4::boolean THEN 'pending' ELSE 'complete' END)
+INSERT INTO environments (id, tenant_id, configuration, session_owned, initialization, idempotency_key, request_hash, creator_kind, creator_id)
+VALUES ($1, $2, $3, $4::text IS NULL,
+        CASE WHEN $5::boolean THEN 'pending' ELSE 'complete' END,
+        $4, $6, $7, $8)
 `
 
 type CreateEnvironmentParams struct {
-	ID            pgtype.UUID `json:"id"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
-	Configuration []byte      `json:"configuration"`
-	Prepared      bool        `json:"prepared"`
+	ID             pgtype.UUID `json:"id"`
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	Configuration  []byte      `json:"configuration"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+	Prepared       bool        `json:"prepared"`
+	RequestHash    pgtype.Text `json:"request_hash"`
+	CreatorKind    pgtype.Text `json:"creator_kind"`
+	CreatorID      pgtype.Text `json:"creator_id"`
 }
 
+// A creation identity makes the Environment standalone; without one a Session owns it.
 func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) error {
 	_, err := q.db.Exec(ctx, createEnvironment,
 		arg.ID,
 		arg.TenantID,
 		arg.Configuration,
+		arg.IdempotencyKey,
 		arg.Prepared,
+		arg.RequestHash,
+		arg.CreatorKind,
+		arg.CreatorID,
 	)
 	return err
+}
+
+const findEnvironmentCreation = `-- name: FindEnvironmentCreation :one
+SELECT id, idempotency_key, request_hash, creator_kind, creator_id
+FROM environments WHERE tenant_id = $1 AND creator_kind = $2 AND creator_id = $3 AND idempotency_key = $4
+`
+
+type FindEnvironmentCreationParams struct {
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	CreatorKind    pgtype.Text `json:"creator_kind"`
+	CreatorID      pgtype.Text `json:"creator_id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+}
+
+type FindEnvironmentCreationRow struct {
+	ID             pgtype.UUID `json:"id"`
+	IdempotencyKey pgtype.Text `json:"idempotency_key"`
+	RequestHash    pgtype.Text `json:"request_hash"`
+	CreatorKind    pgtype.Text `json:"creator_kind"`
+	CreatorID      pgtype.Text `json:"creator_id"`
+}
+
+func (q *Queries) FindEnvironmentCreation(ctx context.Context, arg FindEnvironmentCreationParams) (FindEnvironmentCreationRow, error) {
+	row := q.db.QueryRow(ctx, findEnvironmentCreation,
+		arg.TenantID,
+		arg.CreatorKind,
+		arg.CreatorID,
+		arg.IdempotencyKey,
+	)
+	var i FindEnvironmentCreationRow
+	err := row.Scan(
+		&i.ID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.CreatorKind,
+		&i.CreatorID,
+	)
+	return i, err
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
@@ -156,9 +205,116 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 	return i, err
 }
 
+const getStandaloneEnvironmentCursor = `-- name: GetStandaloneEnvironmentCursor :one
+SELECT created_at, id FROM environments
+WHERE tenant_id = $1 AND id = $2 AND NOT session_owned AND creator_kind = $3 AND creator_id = $4
+`
+
+type GetStandaloneEnvironmentCursorParams struct {
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	ID          pgtype.UUID `json:"id"`
+	CreatorKind pgtype.Text `json:"creator_kind"`
+	CreatorID   pgtype.Text `json:"creator_id"`
+}
+
+type GetStandaloneEnvironmentCursorRow struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) GetStandaloneEnvironmentCursor(ctx context.Context, arg GetStandaloneEnvironmentCursorParams) (GetStandaloneEnvironmentCursorRow, error) {
+	row := q.db.QueryRow(ctx, getStandaloneEnvironmentCursor,
+		arg.TenantID,
+		arg.ID,
+		arg.CreatorKind,
+		arg.CreatorID,
+	)
+	var i GetStandaloneEnvironmentCursorRow
+	err := row.Scan(&i.CreatedAt, &i.ID)
+	return i, err
+}
+
+const listStandaloneEnvironments = `-- name: ListStandaloneEnvironments :many
+SELECT e.id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, e.initialization_steps, e.tenant_id, e.configuration, e.session_owned, e.idempotency_key, e.request_hash, e.creator_kind, e.creator_id, s.id AS attached_session_id,
+       EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
+FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
+WHERE e.tenant_id = $1 AND NOT e.session_owned
+  AND e.creator_kind = $2 AND e.creator_id = $3
+  AND ($4::timestamptz IS NULL
+       OR (NOT $5::boolean AND (e.created_at, e.id) < ($4::timestamptz, $6::uuid))
+       OR ($5::boolean AND (e.created_at, e.id) > ($4::timestamptz, $6::uuid)))
+ORDER BY
+    CASE WHEN $5::boolean THEN e.created_at END ASC,
+    CASE WHEN $5::boolean THEN e.id END ASC,
+    CASE WHEN NOT $5::boolean THEN e.created_at END DESC,
+    CASE WHEN NOT $5::boolean THEN e.id END DESC
+LIMIT $7
+`
+
+type ListStandaloneEnvironmentsParams struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CreatorKind  pgtype.Text        `json:"creator_kind"`
+	CreatorID    pgtype.Text        `json:"creator_id"`
+	AfterCreated pgtype.Timestamptz `json:"after_created"`
+	Ascending    bool               `json:"ascending"`
+	AfterID      pgtype.UUID        `json:"after_id"`
+	PageLimit    int32              `json:"page_limit"`
+}
+
+type ListStandaloneEnvironmentsRow struct {
+	Environment       Environment `json:"environment"`
+	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
+	ExternalWorkspace bool        `json:"external_workspace"`
+}
+
+func (q *Queries) ListStandaloneEnvironments(ctx context.Context, arg ListStandaloneEnvironmentsParams) ([]ListStandaloneEnvironmentsRow, error) {
+	rows, err := q.db.Query(ctx, listStandaloneEnvironments,
+		arg.TenantID,
+		arg.CreatorKind,
+		arg.CreatorID,
+		arg.AfterCreated,
+		arg.Ascending,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStandaloneEnvironmentsRow{}
+	for rows.Next() {
+		var i ListStandaloneEnvironmentsRow
+		if err := rows.Scan(
+			&i.Environment.ID,
+			&i.Environment.Status,
+			&i.Environment.CreatedAt,
+			&i.Environment.FailureReason,
+			&i.Environment.FailedAt,
+			&i.Environment.FailureDetail,
+			&i.Environment.Initialization,
+			&i.Environment.InitializationSteps,
+			&i.Environment.TenantID,
+			&i.Environment.Configuration,
+			&i.Environment.SessionOwned,
+			&i.Environment.IdempotencyKey,
+			&i.Environment.RequestHash,
+			&i.Environment.CreatorKind,
+			&i.Environment.CreatorID,
+			&i.AttachedSessionID,
+			&i.ExternalWorkspace,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnvironment = `-- name: LockEnvironment :one
-SELECT e.session_owned, (SELECT s.id FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL) AS attached_session_id
-FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE
+SELECT e.id FROM environments e WHERE e.tenant_id = $1 AND e.id = $2 FOR UPDATE
 `
 
 type LockEnvironmentParams struct {
@@ -166,14 +322,30 @@ type LockEnvironmentParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-type LockEnvironmentRow struct {
-	SessionOwned      bool        `json:"session_owned"`
-	AttachedSessionID pgtype.UUID `json:"attached_session_id"`
+func (q *Queries) LockEnvironment(ctx context.Context, arg LockEnvironmentParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEnvironment, arg.TenantID, arg.ID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
-func (q *Queries) LockEnvironment(ctx context.Context, arg LockEnvironmentParams) (LockEnvironmentRow, error) {
-	row := q.db.QueryRow(ctx, lockEnvironment, arg.TenantID, arg.ID)
-	var i LockEnvironmentRow
-	err := row.Scan(&i.SessionOwned, &i.AttachedSessionID)
-	return i, err
+const lockEnvironmentCreation = `-- name: LockEnvironmentCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || $2::text || ':' || $3::text || ':' || $4::text, 0))
+`
+
+type LockEnvironmentCreationParams struct {
+	TenantID       string `json:"tenant_id"`
+	CreatorKind    string `json:"creator_kind"`
+	CreatorID      string `json:"creator_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) LockEnvironmentCreation(ctx context.Context, arg LockEnvironmentCreationParams) error {
+	_, err := q.db.Exec(ctx, lockEnvironmentCreation,
+		arg.TenantID,
+		arg.CreatorKind,
+		arg.CreatorID,
+		arg.IdempotencyKey,
+	)
+	return err
 }

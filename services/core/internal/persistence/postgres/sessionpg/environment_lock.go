@@ -49,7 +49,13 @@ func lockEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment p
 			return err
 		}
 	}
-	row, err := q.LockEnvironment(ctx, sqlc.LockEnvironmentParams{TenantID: tenant, ID: environment})
+	if _, err := q.LockEnvironment(ctx, sqlc.LockEnvironmentParams{TenantID: tenant, ID: environment}); err != nil {
+		return err
+	}
+	// Read the attachment in a new statement: the lock statement's snapshot
+	// predates the wait for the lock, so it would miss an attach that committed
+	// meanwhile.
+	row, err := q.GetEnvironmentAttachment(ctx, sqlc.GetEnvironmentAttachmentParams{TenantID: tenant, ID: environment})
 	if err != nil {
 		return err
 	}

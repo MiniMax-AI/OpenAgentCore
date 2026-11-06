@@ -62,9 +62,15 @@ type ExecutionStorage interface {
 	// It commits only when both succeed. A malformed tenant is
 	// ErrInvalidInput; a malformed or missing Session is sessions.ErrNotFound.
 	WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
+	// WithResetEnvironment runs apply in one leased transaction that locks
+	// the Environment and its attached Session, if any.
+	WithResetEnvironment(ctx context.Context, key AllocationKey, apply func(ResetEnvironmentTx) error) error
 	// ClearWake clears the allocation's wake request unless activity newer
 	// than observed arrived. It runs on the lease.
 	ClearWake(ctx context.Context, allocationID string, observed time.Time) error
+	// ReleaseInactivePlacements releases the placements of Environments that
+	// can no longer run work and hold no compute. It runs on the lease.
+	ReleaseInactivePlacements(ctx context.Context) error
 }
 
 // AllocationCleanupStorage runs allocation cleanup, which settles the
@@ -193,9 +199,6 @@ type SessionArchiveTx interface {
 	// Session's active Turn whose cancellation was requested, which the
 	// archived cancellation receipt reports.
 	RequestArchiveCleanup(current Allocation) error
-	// ReleasePlacement releases the node placement of the Session's
-	// Environments that have no allocation.
-	ReleasePlacement() error
 	// RecordArchiveAudit records the administrator audit of the archive with
 	// the source on ctx.
 	RecordArchiveAudit(ctx context.Context) error
@@ -229,10 +232,12 @@ type Reader interface {
 	NodeHistory(ctx context.Context, nodeID string, window coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
 	// ReadNodes runs apply in one read-only snapshot.
 	ReadNodes(ctx context.Context, apply func(NodeReads) error) error
-	// ResetSessions returns up to 32 hosted Sessions after the given Session
-	// ID, in ID order, that still hold or await deployment resources. Without
-	// force it skips Sessions with a running Turn or a pending file write. An
-	// empty after starts at the beginning; a malformed one is ErrInvalidInput.
+	// ResetSessions returns up to 32 hosted Environments after the given
+	// Environment ID, in ID order, that still hold or await deployment
+	// resources: each with its live Session, or unattached and standalone.
+	// Without force it skips those with a running Turn or a pending file
+	// write. An empty after starts at the beginning; a malformed one is
+	// ErrInvalidInput.
 	ResetSessions(ctx context.Context, after string, force bool) ([]ResetSession, error)
 	// AddressBindings counts what is bound to an installation address, read
 	// in one snapshot. publicURL is the address nodes are compared against.

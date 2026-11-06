@@ -16,6 +16,7 @@ import (
 // Project's self_hosted Environments.
 type EnvironmentsReader interface {
 	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
+	ListEnvironments(ctx context.Context, tenant string, creator identity.Subject, after string, limit int, ascending bool) ([]sessions.Environment, bool, error)
 	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 }
 
@@ -45,6 +46,33 @@ func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (h *Handler) listEnvironments(w http.ResponseWriter, r *http.Request) {
+	options, ok := readPage(w, r, "type")
+	if !ok {
+		return
+	}
+	if kind, supplied := r.URL.Query()["type"]; supplied && kind[0] != "openai_hosted" {
+		writeFieldError(w, &fieldError{param: "type", message: "Invalid 'type': unknown value. Supported values are: 'openai_hosted'."})
+		return
+	}
+	page, more, err := h.EnvironmentsReader.ListEnvironments(r.Context(), tenantID(r), sessionCreator(r), options.after, options.limit, options.ascending)
+	if err != nil {
+		writeSessionsError(w, r, err)
+		return
+	}
+	data := make([]v1.EnvironmentInfo, 0, len(page))
+	for _, environment := range page {
+		item, err := environmentResponse(environment)
+		if err != nil {
+			writeSessionsError(w, r, err)
+			return
+		}
+		data = append(data, item)
+	}
+	first, last := listBounds(data, func(value v1.EnvironmentInfo) string { return value.ID })
+	writeJSON(w, http.StatusOK, v1.EnvironmentInfoList{Object: "list", Data: data, HasMore: more, FirstID: first, LastID: last})
+}
+
 func environmentResponse(environment sessions.Environment) (v1.EnvironmentInfo, error) {
 	configuration, err := storedEnvironment(environment.Configuration)
 	if err != nil || (configuration.Type != "self_hosted" && configuration.Type != "openai_hosted") || environment.ID == "" {
@@ -59,6 +87,10 @@ func environmentResponse(environment sessions.Environment) (v1.EnvironmentInfo, 
 	if status == "pending" && configuration.Type == "self_hosted" {
 		// A self_hosted Environment that has never connected reads disconnected.
 		status = "disconnected"
+	}
+	if environment.AttachedSessionID == "" && environment.Initialization == "complete" && (status == "pending" || status == "connected" || status == "disconnected") {
+		// A prepared Environment that no Session is attached to waits for one.
+		status = "ready"
 	}
 	files := configuration.Files
 	if files == nil {

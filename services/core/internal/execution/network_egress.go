@@ -101,6 +101,23 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 	return egress, nil
 }
 
+// egressCovers reports whether an allocation created with the Egress, which
+// names no model endpoint, reaches the model provider at modelBaseURL: a
+// loopback host is the sandbox itself, and any other host needs the Egress to
+// allow it by name or, for a public address, as a public destination.
+func egressCovers(created sandbox.Egress, modelBaseURL string) bool {
+	u, err := url.Parse(modelBaseURL)
+	if err != nil || u.Hostname() == "" {
+		return true
+	}
+	host := strings.ToLower(u.Hostname())
+	if loopbackHost(host) || inCap(created.PrivateDomains, host) || inCap(created.Domains, host) {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return created.Public && (err != nil || sandbox.PublicAddress(ip.Unmap()))
+}
+
 // inCap reports whether the cap lists name exactly or as a subdomain through a
 // "*.suffix" entry; the suffix itself is not covered.
 func inCap(domains []string, name string) bool {

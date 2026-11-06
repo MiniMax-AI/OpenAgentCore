@@ -406,6 +406,9 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
+	if err := deploymentExecution(t, w).ReleaseInactivePlacements(ctx); err != nil {
+		t.Fatal(err)
+	}
 	deleted := read()
 	if !deleted.deleted.Valid || !deleted.released.Valid || deleted.retained != 0 || deleted.reserved != 0 {
 		t.Fatal("allowed deletion kept the placement", deleted)

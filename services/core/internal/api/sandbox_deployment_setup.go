@@ -237,8 +237,8 @@ type SandboxIdlePolicyInput struct {
 	IdleSeconds *int64 `json:"idle_seconds" binding:"required" minimum:"30" maximum:"86400"`
 }
 
-// @Summary Update automatic suspension policy
-// @Description Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires checkpoint support and no active reset. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
+// @Summary Update idle timeout
+// @Description Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires a selected Provider and no active reset. With checkpoint support an idle sandbox suspends; without it an idle unattached standalone Environment expires. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

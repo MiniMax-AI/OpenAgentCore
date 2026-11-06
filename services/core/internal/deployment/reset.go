@@ -17,8 +17,10 @@ type ResetRequest struct {
 	DeadlineSeconds    *int32    `json:"deadline_seconds,omitempty" minimum:"300" maximum:"86400"`
 }
 
-// ResetSession is a hosted Session a reset still has to archive.
-type ResetSession struct{ SessionID, TenantID string }
+// ResetSession is a hosted Environment a reset still has to clear: its live
+// Session to archive, or, with no SessionID, an unattached standalone
+// Environment to expire.
+type ResetSession struct{ SessionID, EnvironmentID, TenantID string }
 
 const (
 	// ResetAuto archives idle Sessions and escalates to ResetForce at the

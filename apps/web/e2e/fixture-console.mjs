@@ -82,11 +82,11 @@ function nodeRollout(previous = 0) {
 }
 
 function unconfiguredDeployment(generation = 0, ownerEpoch = 3) {
-  return { installation_id: INSTALLATION_ID, provider: "", credential_configured: false, core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "", credential_configured: false, core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, idle_seconds: 300, suspension: null };
 }
 
 function configuredDeployment() {
-  return { installation_id: INSTALLATION_ID, provider: "microsandbox", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, network: { public: true, domains: [] } }, specification_digest: "fixture", suspension: { idle_seconds: 300, retention_seconds: 86400 } };
+  return { installation_id: INSTALLATION_ID, provider: "microsandbox", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, network: { public: true, domains: [] } }, specification_digest: "fixture", idle_seconds: 300, suspension: { retention_seconds: 86400 } };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
@@ -382,9 +382,9 @@ async function sandboxRoute(request, response, path, url) {
   }
   if (path === "/deployment" && request.method === "PATCH") {
     const input = await body(request);
-    if (!state.deployment.suspension || state.deployment.reset) return error(response, 409, "Suspension policy is unavailable.", "sandbox_deployment_conflict");
+    if (!state.deployment.provider || state.deployment.reset) return error(response, 409, "Idle policy is unavailable.", "sandbox_deployment_conflict");
     if (!Number.isInteger(input.idle_seconds) || input.idle_seconds < 30 || input.idle_seconds > 86400) return error(response, 400, "Invalid idle seconds.", "invalid_request_error");
-    state.deployment.suspension.idle_seconds = input.idle_seconds;
+    state.deployment.idle_seconds = input.idle_seconds;
     return send(response, 200, state.deployment);
   }
   if (path === "/deployment" && (request.method === "POST" || request.method === "PUT")) {
@@ -428,7 +428,7 @@ async function sandboxRoute(request, response, path, url) {
       rollout: e2b ? { ...noNodeRollout(), previous_generation_sandboxes: held.allocations + held.pending } : nodeRollout(held.allocations + held.pending),
       specification,
       ...(e2b ? { configuration: { template: input.configuration?.template ?? "", api_url: input.configuration?.api_url ?? state.deployment.configuration?.api_url ?? "https://api.e2b.app", domain: input.configuration?.domain ?? state.deployment.configuration?.domain ?? "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } } : { configuration: {}, metadata: {}, credential_configured: false }),
-      suspension: input.provider === "microsandbox" ? { idle_seconds: 300, retention_seconds: 86400 } : null,
+      idle_seconds: previous.idle_seconds, suspension: input.provider === "microsandbox" ? { retention_seconds: 86400 } : null,
     };
     return send(response, 200, state.deployment);
   }

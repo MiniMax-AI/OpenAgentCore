@@ -34,6 +34,7 @@ type fakeCreationTx struct {
 	saveInitialFiles           func() error
 	saveSetup                  func() error
 	createEnvironment          func() (string, error)
+	attachEnvironment          func() error
 	pruneChanges               func() error
 	auditCreation              func() error
 	loadSession                func() (Session, error)
@@ -85,6 +86,11 @@ func (f *fakeCreationTx) SaveSetup(_ context.Context, setup environmentconfig.Se
 	return f.saveSetup()
 }
 
+func (f *fakeCreationTx) AttachEnvironment(_ context.Context, environment string) error {
+	f.record("AttachEnvironment", f.attachEnvironment != nil, environment)
+	return f.attachEnvironment()
+}
+
 func (f *fakeCreationTx) CreateEnvironment(context.Context, json.RawMessage, bool) (string, error) {
 	f.record("CreateEnvironment", f.createEnvironment != nil)
 	return f.createEnvironment()
@@ -122,6 +128,11 @@ func (s *fakeStorage) WithCreation(ctx context.Context, tenant string, apply fun
 func (s *fakeStorage) FindCreation(_ context.Context, tenant, key string) (CreationRecord, error) {
 	s.record("FindCreation", s.findCreation != nil, tenant, key)
 	return s.findCreation()
+}
+
+func (s *fakeStorage) WithEnvironmentCreation(context.Context, string, EnvironmentIdentity, func(context.Context, StandaloneCreationTx) error) error {
+	s.record("WithEnvironmentCreation", false)
+	return nil
 }
 
 // fingerprints is a fake FingerprintProviderKey that keeps keys apart.
@@ -410,8 +421,8 @@ func TestCreateSession(t *testing.T) {
 		if err != nil || !result.Created || result.Cursor != 4 || result.Session.Engine != "loaded" {
 			t.Fatalf("result %+v, %v", result, err)
 		}
-		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "SaveModelExecution https://model.example/v1",
-			"SaveExecutionConfiguration available " + uuid.Nil.String(), "CreateEnvironment", "SaveInitialFiles 1", "SaveSetup skill_a@3",
+		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "CreateEnvironment", "SaveInitialFiles 1", "SaveSetup skill_a@3",
+			"SaveModelExecution https://model.example/v1", "SaveExecutionConfiguration available " + uuid.Nil.String(),
 			"LoadEnvironmentInput", `CreateInputReservation <key> [{"kind":"message","payload":` + hi + `}] initial`, "LoadEnvironmentInput",
 			"PruneChanges", "AuditCreation session:session environment:environment:session", "LoadSession"}
 		if strings.Join(calls, "\n") != strings.Join(want, "\n") {

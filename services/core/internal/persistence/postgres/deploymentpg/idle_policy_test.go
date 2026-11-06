@@ -17,8 +17,8 @@ func TestIdlePolicyChangesCurrentAllocationsWithoutRollout(t *testing.T) {
 	node := f.enroll(t, before, deployment.Capacity{MaxActive: 1, MaxRetained: 4})
 	f.connect(t, node.NodeID)
 	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, before.Generation)
-	if before.Suspension.IdleSeconds != 300 {
-		t.Fatal(before.Suspension)
+	if before.IdleSeconds != 300 {
+		t.Fatal(before.IdleSeconds)
 	}
 	until := time.Now().Add(time.Hour)
 	if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
@@ -32,7 +32,7 @@ func TestIdlePolicyChangesCurrentAllocationsWithoutRollout(t *testing.T) {
 	// A longer saved value is also applied to the existing allocation.
 	for _, seconds := range []int64{86400, 30} {
 		after, err := f.service.UpdateIdleSeconds(admin(t), seconds)
-		if err != nil || after.Suspension.IdleSeconds != seconds || after.Generation != before.Generation || after.SpecificationDigest != before.SpecificationDigest || after.OwnerEpoch != before.OwnerEpoch || after.Suspension.RetentionSeconds != before.Suspension.RetentionSeconds {
+		if err != nil || after.IdleSeconds != seconds || after.Generation != before.Generation || after.SpecificationDigest != before.SpecificationDigest || after.OwnerEpoch != before.OwnerEpoch || after.Suspension.RetentionSeconds != before.Suspension.RetentionSeconds {
 			t.Fatal(after, err)
 		}
 		_, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)

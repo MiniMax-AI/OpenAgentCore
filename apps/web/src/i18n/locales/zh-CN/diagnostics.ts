@@ -63,7 +63,7 @@ export const diagnostics = {
   exitCode: "退出码 {{code}}。",
   httpStatus: "HTTP {{status}}。",
   unreachableHost: "再确认 Session 的沙箱（自托管 Session 则为其主机）能解析并访问该 URL 的主机。",
-  step: { setup: "设置", python: "Python 依赖", npm: "npm 依赖", file: "文件准备", skill: "Skill 准备", harness: "Harness 准备", plugin: "Plugin 准备", configure: "环境配置", finalize: "收尾" },
+  step: { setup: "设置", python: "Python 依赖", npm: "npm 依赖", file: "文件准备", skill: "Skill 准备", plugin: "Plugin 准备", configure: "环境配置", finalize: "收尾" },
   category: {
     timeout: "准备超时。",
     runtime_disconnected: "Runtime 已断开连接。",

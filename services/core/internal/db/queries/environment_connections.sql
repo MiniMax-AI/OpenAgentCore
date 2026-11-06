@@ -27,7 +27,7 @@ DELETE FROM environment_connections WHERE environment_id = $1;
 -- name: ListEnvironmentConnections :many
 SELECT e.id, e.tenant_id
 FROM environments e
-WHERE e.id > $1 AND (NOT e.session_owned OR EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))
+WHERE e.id > $1 AND NOT (SELECT l.ended FROM environment_liveness l WHERE l.id = e.id)
   AND (e.status = 'connected' OR EXISTS (
       SELECT 1 FROM environment_connections c WHERE c.environment_id = e.id
   ))

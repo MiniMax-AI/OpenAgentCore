@@ -386,7 +386,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if owner.ProviderKey != r.config.InstallationID || owner.NodeID != r.nodeID {
 		return sandbox.ErrOwnership
 	}
-	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Ended || owner.Expired || owner.State == "cleanup_pending" {
 		var err error
 		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
@@ -410,6 +410,17 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if owner.ComputePhase != "disabled" {
 		return r.observeCompute(ctx, owner)
 	}
+	if owner.AttachedSessionID == "" && owner.State == "running" && owner.CreateSettled && r.config.Suspension == nil {
+		// Without checkpoints, an idle unattached Environment requests its
+		// compute release at the idle timeout.
+		released, err := r.deployment.ReleaseIdleUnattached(ctx, owner)
+		if err == nil {
+			return r.observe(ctx, released)
+		}
+		if !errors.Is(err, deployment.ErrNotIdle) && !errors.Is(err, deployment.ErrAllocationConflict) {
+			return err
+		}
+	}
 	provider := r.config.Provider
 	if owner.ProviderKey != r.config.InstallationID {
 		return sandbox.ErrInvalid
@@ -418,7 +429,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 		return err
 	}
 	info, err := provider.GetInfo(ctx, runtimeReference(owner))
-	cleanup := owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending"
+	cleanup := owner.Ended || owner.Expired || owner.State == "cleanup_pending"
 	// Resource drift disqualifies execution, not cleanup already authorized by
 	// Core. Kill independently verifies ownership before removing anything.
 	invalidCleanup := cleanup && errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, sandbox.ErrOwnership)
@@ -438,7 +449,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 			return err
 		}
 	}
-	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Ended || owner.Expired || owner.State == "cleanup_pending" {
 		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
 			return err

@@ -1723,12 +1723,9 @@ definitions:
       - RolloutPreparing
   deployment.Suspension:
     properties:
-      idle_seconds:
-        type: integer
       retention_seconds:
         type: integer
     required:
-      - idle_seconds
       - retention_seconds
     type: object
   deployment.View:
@@ -1741,6 +1738,9 @@ definitions:
       credential_configured:
         type: boolean
       generation:
+        type: integer
+      idle_seconds:
+        description: Idle timeout for every Provider. With checkpoint support an idle sandbox suspends; without it an idle unattached standalone Environment expires.
         type: integer
       installation_id:
         type: string
@@ -1767,12 +1767,13 @@ definitions:
       suspension:
         allOf:
           - $ref: '#/definitions/deployment.Suspension'
-        description: Idle suspension policy; null unless the selected Provider declares checkpoint support.
+        description: Snapshot retention; null unless the selected Provider declares checkpoint support.
         x-nullable: true
     required:
       - core_url
       - credential_configured
       - generation
+      - idle_seconds
       - installation_id
       - mode
       - owner_epoch
@@ -7079,7 +7080,7 @@ paths:
     patch:
       consumes:
         - application/json
-      description: Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires checkpoint support and no active reset. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
+      description: Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires a selected Provider and no active reset. With checkpoint support an idle sandbox suspends; without it an idle unattached standalone Environment expires. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
       parameters:
         - description: Idle timeout in seconds
           in: body
@@ -7116,7 +7117,7 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
       security:
         - DeploymentAdminAuth: []
-      summary: Update automatic suspension policy
+      summary: Update idle timeout
       tags:
         - Sandbox Manager
     post:

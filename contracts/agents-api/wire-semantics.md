@@ -23,9 +23,9 @@ The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/Open
 
 ### Unsupported operations
 
-`POST` and `GET /agents/environments` and `GET /agents/sessions/{session_id}/traces` are registered, so they pass the Beta and authentication checks like every pinned route, then answer 404 with code `unsupported_operation` and the message "This API operation is not supported." Environments exist only inside a Session ([ownership](./environments.md#resources-and-states)), and Core has no trace store.
+`GET /agents/sessions/{session_id}/traces` is registered, so it passes the Beta and authentication checks like every pinned route, then answers 404 with code `unsupported_operation` and the message "This API operation is not supported." Core has no trace store.
 
-Creating an Agent, Vault, Credential, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
+Creating an Agent, Vault, Credential, Environment, Environment Template, Environment file or Session returns 201, also for a streamed Session creation. An empty update body on an Agent or Environment Template advances `updated_at` and changes nothing else; timestamps have one-second precision.
 
 ### Headers
 
@@ -124,7 +124,7 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 | Lists | Default | Accepted | Other values |
 | --- | --- | --- | --- |
 | Agents, Sessions, Items, Turn Items, Environment Templates, Automations, Automation invocations, Vaults, Credentials, Subagent Items, Subagent Turn Items | 20 | 1–100 | 0 becomes 1; above 100 becomes 100 |
-| Turns, Subagents, Subagent Turns, Artifacts | 20 | 1–100 | 400 `invalid_request_error`, "limit must be between 1 and 100" |
+| Turns, Environments, Subagents, Subagent Turns, Artifacts | 20 | 1–100 | 400 `invalid_request_error`, "limit must be between 1 and 100" |
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |
 
@@ -136,7 +136,7 @@ A `limit` that is not a decimal integer, including an empty value, returns 400 `
 
 | Lists | Response |
 | --- | --- |
-| Agents, Sessions, Turns, Environment Templates, Vaults, Credentials | 404, type and code `not_found_error`, "Resource not found." |
+| Agents, Sessions, Turns, Environments, Environment Templates, Vaults, Credentials | 404, type and code `not_found_error`, "Resource not found." |
 | Session Items, Turn Items, Subagent Items, Subagent Turn Items | 400 `invalid_request_error`, null param, "Invalid session item ID in `after`" |
 | Subagents, Subagent Turns | 400 `invalid_request_error`, null param, "Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`, null param, "after is not a valid artifact ID" |
@@ -196,11 +196,11 @@ These official fields have no Core meaning. A request that sets one returns 400 
 | Field | Param |
 | --- | --- |
 | Session update `agent.tools` | `agent.tools` |
-| `environment.environment_id` | `environment_id` |
 | `environment.container_size`; responses carry `container_size: null` | `container_size` |
 | `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
 | A nonempty `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` `environment_variable` | `auth.type` |
+| A nonempty `vault_ids` on `POST /agents/environments` (Core's choice, [recorded](./index.md)) | `vault_ids` |
 | The Session input `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
 
 ### Session admission

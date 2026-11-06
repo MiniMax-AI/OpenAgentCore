@@ -98,6 +98,10 @@ func reserveSessionPlacement(t *testing.T, s, w *Store, session sessions.Session
 	if err != nil {
 		return err
 	}
+	// Like the manager's reservation step, release the placements of ended Environments first.
+	if err = deploymentExecution(t, w).ReleaseInactivePlacements(t.Context()); err != nil {
+		return err
+	}
 	_, err = deploymentExecution(t, w).EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: session.Environment.ID}, setup.InstallationID)
 	return err
 }

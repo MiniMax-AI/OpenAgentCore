@@ -26,8 +26,8 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
 	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
-	tenant, session, environment := uuidText(tenantID), uuidText(sessionID), uuidText(environmentID)
-	binding := credentialcrypto.EnvironmentSetupBinding{TenantID: tenant, Resource: "session", OwnerID: session, Field: "initialization"}
+	tenant, environment := uuidText(tenantID), uuidText(environmentID)
+	binding := credentialcrypto.EnvironmentSetupBinding{TenantID: tenant, Resource: "environment", OwnerID: environment, Field: "initialization"}
 	freeze := func(plaintext string, binding credentialcrypto.EnvironmentSetupBinding) []byte {
 		t.Helper()
 		sealed, err := cipher.SealEnvironmentSetup([]byte(plaintext), binding)
@@ -40,7 +40,7 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 	if setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, environment); err != nil || !reflect.DeepEqual(setup, environmentconfig.Setup{}) {
 		t.Fatalf("Session without a frozen setup: %+v, %v", setup, err)
 	}
-	for name, ids := range map[string][2]string{"unknown Session": {tenant, uuid.NewString()}, "other tenant": {uuid.NewString(), session}, "malformed Session": {tenant, "session"}} {
+	for name, ids := range map[string][2]string{"unknown Session": {tenant, uuid.NewString()}, "other tenant": {uuid.NewString(), environment}, "malformed Session": {tenant, "session"}} {
 		if _, err := adapter.ReadEnvironmentSetup(t.Context(), ids[0], ids[1]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -81,9 +81,9 @@ func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
 	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
-	tenant, session, environment := uuidText(tenantID), uuidText(sessionID), uuidText(environmentID)
+	tenant, environment := uuidText(tenantID), uuidText(environmentID)
 	file := uuid.NewString()
-	binding := credentialcrypto.EnvironmentFileBinding{TenantID: tenant, Resource: "session", OwnerID: session, FileID: file}
+	binding := credentialcrypto.EnvironmentFileBinding{TenantID: tenant, Resource: "environment", OwnerID: environment, FileID: file}
 	freeze := func(body string, binding credentialcrypto.EnvironmentFileBinding) []byte {
 		t.Helper()
 		sealed, err := cipher.SealEnvironmentFile([]byte(body), binding)

@@ -45,7 +45,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 		}
 	}
 	setup, err := deploymentService(t, s).Setup(t.Context())
-	if err != nil || setup.Suspension == nil || setup.Suspension.IdleSeconds != 300 || setup.Suspension.RetentionSeconds != 86400 || !sha256Hex(setup.BackendFingerprint) {
+	if err != nil || setup.Suspension == nil || setup.Suspension.RetentionSeconds != 86400 || !sha256Hex(setup.BackendFingerprint) {
 		t.Fatal(setup, err)
 	}
 	var sideEffects int

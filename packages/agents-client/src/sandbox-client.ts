@@ -162,8 +162,8 @@ function projectDeployment(value: unknown): SandboxDeployment {
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, suspensionFields);
   const configured = hasOwn(deployment, "specification");
   valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentModeValues, deployment.mode) &&
-    [deployment.owner_epoch, deployment.generation, resources.allocations, resources.running, resources.pending].every(isNonnegativeInteger) &&
-    (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
+    [deployment.owner_epoch, deployment.generation, deployment.idle_seconds, resources.allocations, resources.running, resources.pending].every(isNonnegativeInteger) &&
+    (suspension === null || isNonnegativeInteger(suspension.retention_seconds)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));
   return {
     ...deployment, rollout: projectRollout(deployment.rollout, deployment.mode, Number(resources.allocations) + Number(resources.pending)), reset: projectReset(deployment.reset, Number(resources.allocations) + Number(resources.pending)), resources: { ...resources } as unknown as SandboxDeployment["resources"], suspension: suspension && { ...suspension } as unknown as SandboxDeployment["suspension"],
@@ -247,7 +247,7 @@ export class SandboxAdminClient {
   updateDeployment(input: UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
     return this.#writeDeployment("PUT", input, options);
   }
-  async updateSuspension(input: SandboxIdlePolicyInput, options?: ReadOptions): Promise<SandboxDeployment> {
+  async updateIdleSeconds(input: SandboxIdlePolicyInput, options?: ReadOptions): Promise<SandboxDeployment> {
     return projectDeployment(await this.#core.json("/deployment", options, "PATCH", input));
   }
   async startReset(input: StartSandboxReset, options?: ReadOptions): Promise<SandboxDeployment> {

@@ -42,6 +42,17 @@ func (q *Queries) ClearActiveWorkspaceConfiguration(ctx context.Context) error {
 	return err
 }
 
+const environmentWorkspaceDeletable = `-- name: EnvironmentWorkspaceDeletable :one
+SELECT EXISTS (SELECT 1 FROM environment_liveness WHERE id = $1 AND ended)::boolean
+`
+
+func (q *Queries) EnvironmentWorkspaceDeletable(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, environmentWorkspaceDeletable, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getActiveWorkspaceConfiguration = `-- name: GetActiveWorkspaceConfiguration :one
 SELECT id, adapter, parameters, active, credential FROM workspace_fs_configurations WHERE active
 `
@@ -189,7 +200,7 @@ FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
 WHERE w.object_id > $1 AND w.state <> 'deleted'
-  AND ((e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)) OR w.state = 'deleting')
+  AND (e.id IN (SELECT id FROM environment_liveness WHERE ended) OR w.state = 'deleting')
   AND NOT EXISTS (
       SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released'
   )

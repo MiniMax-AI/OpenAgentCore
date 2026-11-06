@@ -10,7 +10,7 @@ func TestEnvironmentFileCipherOwnershipAndPurpose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound := EnvironmentFileBinding{TenantID: "tenant", Resource: "session", OwnerID: "session", FileID: "file"}
+	bound := EnvironmentFileBinding{TenantID: "tenant", Resource: "environment", OwnerID: "environment", FileID: "file"}
 	plain := []byte("confidential-file-canary\x00\xff")
 	sealed, err := cipher.SealEnvironmentFile(plain, bound)
 	if err != nil || bytes.Contains(sealed, plain) {

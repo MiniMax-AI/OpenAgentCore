@@ -88,7 +88,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
 		return sandbox.ErrOwnership
 	}
-	if owner.Reclaimed || owner.Expired || owner.State == "cleanup_pending" {
+	if owner.Ended || owner.Expired || owner.State == "cleanup_pending" {
 		return r.cleanupCompute(ctx, p, owner, state)
 	}
 	if err := r.lease.CheckOwnership(ctx); err != nil {
@@ -227,12 +227,15 @@ func (r *runtimeLifecycle) releaseLostCompute(ctx context.Context, p sandbox.San
 	if current.ID != owner.ID || current.State != owner.State || current.ComputePhase != owner.ComputePhase || current.ComputeRevision != owner.ComputeRevision {
 		return deployment.ErrAllocationConflict
 	}
-	retained, err := r.reader.RetainedNativeHistory(ctx, owner.Key())
-	if err != nil {
-		return err
-	}
-	if !retained {
-		return observed
+	// An unattached standalone Environment is never replaced: its confirmed loss expires it.
+	if owner.AttachedSessionID != "" {
+		retained, err := r.reader.RetainedNativeHistory(ctx, owner.Key())
+		if err != nil {
+			return err
+		}
+		if !retained {
+			return observed
+		}
 	}
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err

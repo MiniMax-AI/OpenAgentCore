@@ -138,9 +138,9 @@ func (q *Queries) ListRuntimeSuspensionInFlightNodes(ctx context.Context) ([]pgt
 
 const listWaitingCheckpointRestores = `-- name: ListWaitingCheckpointRestores :many
 SELECT DISTINCT a.node_id, a.deployment_generation, (a.compute_state->'snapshot'->'Compatibility')::jsonb AS checkpoint
-FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.environment_id=e.id AND s.deleted_at IS NULL
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN environment_liveness l ON l.id=e.id AND l.active JOIN sessions s ON s.environment_id=e.id AND s.deleted_at IS NULL
 WHERE a.node_id IS NOT NULL AND a.state='running' AND a.compute_phase='suspended'
- AND a.compute_retained_until>clock_timestamp() AND e.status NOT IN ('failed','expired')
+ AND a.compute_retained_until>clock_timestamp()
  AND a.compute_state->'snapshot'->'Compatibility' IS NOT NULL
  AND (a.compute_wake_requested OR EXISTS(SELECT 1 FROM environment_input_reservations r WHERE r.session_id=s.id AND r.state='pending' AND r.deadline>clock_timestamp()))
 `

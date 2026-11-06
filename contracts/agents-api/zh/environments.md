@@ -1,10 +1,10 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 34671da036d80359e11db48fb32d1613b8b1a290fb9dd16108fcfd6e2681eeaa
+source_hash: 5a65935b1ac297109a14c525de83a05734587fe50593b2500e8c920507d16e87
 ---
 
-Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
+Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及能力。Session 通过其 `environment` 配置创建 Environment，或挂载由 `POST /agents/environments` 预先创建的 Environment（[独立 Environment](#standalone-environments)）。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
 
 相关职责归属：
 
@@ -20,12 +20,12 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 | 资源 | 操作 | 规则 |
 | --- | --- | --- |
-| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | 通过 Session 配置创建。返回 `id`、`type`、`status`，以及 Session 创建时记录的 `files`、`plugins` 和 `skills`。 |
-| Environment 集合 | `POST`、`GET /agents/environments` | 不支持：404 `unsupported_operation`（[不支持的操作](wire-semantics.md#unsupported-operations)）。Environment 只能通过 Session 配置创建。 |
+| [Environment](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | 通过 Session 配置或 `POST /agents/environments` 创建。返回 `id`、`type`、`status`，以及创建时记录的 `files`、`plugins` 和 `skills`。 |
+| Environment 集合 | `POST`、`GET /agents/environments` | 参见[独立 Environment](#standalone-environments)。 |
 | [模板](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [模板](#templates)。 |
 | [Files](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/resources/beta/agents/environments/files.py) | `POST`、`GET /agents/environments/{id}/files` | 请参阅 [Environment files](environment-files.md)。 |
 
-读取 Environment 时，Core 会在调用方的项目范围内与其实时所属的 Session 联查，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
+读取 Environment 时，Core 限定在调用方的项目范围内，隐藏所属 Session 已删除的 Environment，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
 
 [Session environment input](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment_param.py) 与 [output](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/environment.py) 的结构不同：
 
@@ -38,11 +38,16 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [Environment resource](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agents/environment_info.py) | `pending`、`ready`、`connected`、`disconnected`、`suspended`、`expired`、`failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/9b3458a2ef563493111a0a4265d4e9e7e14fe840/src/openai/types/beta/agent_session_environment_state.py) | 相同的七种状态，并带可为 null 的 error |
 
-Core 只在事件中发出 `ready`。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
+Core 在事件中发出 `ready`，资源对已准备好且未挂载 Session 的独立 Environment 读作 `ready`（见[列出和检索](#standalone-environments)）。它从不报告 `suspended`，即使是它已做检查点并停止的空闲 hosted Environment；它也不发出 `agent.session.environment.suspended`、`.expired` 或 `.reset` 事件；保留期结束的 Environment 读作 `expired`，但没有对应事件。资源状态按下图变化，失败或过期的 Environment 不再改变：
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending
+    pending --> ready
+    ready --> connected
+    connected --> ready
+    disconnected --> ready
+    ready --> expired
     pending --> connected
     connected --> disconnected
     disconnected --> connected
@@ -56,9 +61,34 @@ stateDiagram-v2
 
 Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 记录自己持有项目、不可变配置和准备输入，由 Session 引用它；一个 Environment 至多挂载一个存活的 Session。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Session 自有的 Environment。Environment 记录自己持有项目、不可变配置和准备输入，由 Session 引用它；一个 Environment 至多挂载一个存活的 Session。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 自有 Environment 的 Session 删除后，读取会隐藏该 Environment，而 Core 仍保留该记录，用于结算和清理。独立 Environment 的存续长于其 Session。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
+
+## 独立 Environment {#standalone-environments}
+
+`POST /agents/environments` 在任何 Session 存在之前创建并初始化一个 `openai_hosted` Environment，使后续 Session 在已预热的计算上启动。独立 Environment 可复用：同一时刻只有一个 Session 挂载到它，该 Session 被删除后，下一个 Session 即可挂载。Environment 在多个 Session 之间保留其计算、工作区和准备结果。
+
+**创建。** 请求体为 `{environment, vault_ids}`。`environment` 取 [Session 的 `environment`](#placements) 中的 `openai_hosted` 成员，不含 `environment_id`，可以指定模板；Core 解析并应用模板的方式与 Session 相同。`vault_ids` 可以为 null 或 `[]`；非空列表返回 400。`Idempotency-Key` 为 1–256 字节，限定在项目范围内。每个项目密钥都以该项目的身份认证，因此创建者不再增加范围：列出、检索和该键都只涉及项目的 Environment。键和发送的正文都相同的重试返回处于当前状态的 Environment（包括 `pending`），即使所指定的模板此后已被删除；创建在一个事务中完成，因此重试不会遇到未完成的创建；不同正文返回 409 `idempotency_conflict`。Core 校验 hosted Session 为其 Environment 所需的接纳（部署、工作区存储、网络策略），冻结 Skills，封存 setup 和初始文件，并返回 201，Environment 状态为 `pending`。随后开始供给，调用方无需操作。
+
+**列出和检索。** `GET /agents/environments` 列出项目的独立 Environment，包括 `failed` 和 `expired` 的，使用官方分页，以 `type=openai_hosted` 为唯一取值；`limit` 见[页面大小](wire-semantics.md#page-size)。`GET /agents/environments/{id}` 对两种 Environment 都有效。没有挂载 Session 且初始化已完成的 Environment，读作 `ready`，而不是 `pending`、`connected` 或 `disconnected`；挂载 Session 后读作连接状态，`failed` 和 `expired` 始终如实读出。
+
+**挂载。** 带有 `environment: {"type": "openai_hosted", "environment_id": "…"}`（9–256 个字符）的 `POST /agents/sessions` 在该 Environment 上运行 Session，使用其冻结的配置。`environment_id` 旁的其他成员返回 400，`param` 为该成员（`environment.packages` 等），`x_agents_core.environment` 同样如此。Harness、模型和工具来自 Session。Core 的返回如下：
+
+| 情况 | 响应 |
+| --- | --- |
+| 不存在、属于其他项目，或已删除的 Session 自有 Environment | 404 `not_found_error` |
+| 已挂载到存活的 Session | 409 `conflict_error`，“Environment is attached to another session.”，`param` 为 `environment.environment_id` |
+| `failed` 或 `expired` | 409 `conflict_error`，“Environment has failed or expired and cannot take a session.”，`param` 为 `environment.environment_id` |
+| Environment 的网络策略无法到达该 Session 的模型提供方 | 400 `model_provider_unreachable`，`param` 为 `environment.environment_id` |
+
+`pending` 的 Environment 可以挂载：Session 的首个输入像任何 hosted 输入一样等待准备完成，已挂起或已释放的分配会被唤醒。挂载不再重复工作区接纳，并按 Environment 冻结的网络策略检查 Session 的模型提供方（上表最后一行）；同时执行依赖 Session 的检查，例如 Harness 的原生历史要求。部署还必须接纳新的 hosted 工作：重置待定或接纳关闭时，挂载与内联创建一样被拒绝。两个并发挂载有且仅有一个成功。
+
+**卸载。** 删除 Session 是唯一的卸载方式。Environment 立即可再次挂载，并保留其工作区和准备结果。
+
+**文件。** 没有挂载 Session 时的文件路由由 [Environment files](environment-files.md#where-files-work) 规定。
+
+**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于沙箱提供商。支持检查点时，它在部署的空闲超时后挂起，并在快照保留期结束时过期，两者的取值见[挂起策略](sandbox-deployment.md#suspension-policy)。不支持检查点时它无法挂起，因此在空闲超时内没有活动后过期，空闲时间从最近一次活动起算：初始化完成、卸载或之后的活动。失败的 Environment 会立即释放其计算。无论哪种提供商，确认计算丢失后它也会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有任何信息能标识要重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载。已结束（`expired` 或 `failed`）的未挂载 Environment 会释放其放置和工作区。
 
 ## 放置方式 {#placements}
 
@@ -81,7 +111,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 - 省略或传入 null 的 `network` 表示启用；`disabled` 和 `restricted` 需要托管 Environment，且其沙箱 Provider 能限制出站（[网络策略](#restricted-network)）。
 - Core 重启会保留分配、工作区和原生身份，并且绝不重播结果不确定的工作。
 - 终止清理会先在一个事务中撤销权限并结算待处理输入，然后提供商才会回收计算资源。向处于终止状态的 Environment 提交新输入会被拒绝。
-- 删除 Session 会回收其 Environment；删除模板则不会。
+- 删除 Session 会回收 Session 自有的 Environment，但绝不回收独立 Environment；删除模板两者都不回收。
 
 ### 自托管（`self_hosted`） {#self-hosted-self-hosted}
 
@@ -137,7 +167,7 @@ stateDiagram-v2
 - 截止时间在取得 Session 锁后检查。过期和定向取消会保留其终止身份；终止预留的重试不能影响后续预留或 Turn。
 - 初始预留过期时会使 Session 失败；后续预留则会让 Session 回到空闲状态。失败事件会原子地捕获已结算的活动和 Usage。迟到的连接或创建重试不能重置或重播已过期的输入。
 
-当 Runtime 返回 `failed` 结果、带有 `preparation_failed` 且没有 Run 时，会立即以 `runtime_preparation_failed` 结算待处理输入。当当前 `execution_prepare` 在没有 Run 且代码为 `invalid_configuration`、`unsupported_configuration` 或 `unsupported_preparation` 时被拒绝，也同样如此。在任何 Turn 存在之前，Core 会记录安全的 Session 失败并释放输入门控；修复本地原因后即可接受新输入。传输丢失、容量拒绝和未确认的清理在原始期限内保持可重试。Runtime 缺少所挂载 Session 的 Harness 时，会在其 executor 准备阶段以同样方式使该输入失败；初始化不检查 Harness。Core 使用这些通用控制状态，绝不使用 Harness 特定的错误文本。
+当 Runtime 返回 `failed` 结果、带有 `preparation_failed` 且没有 Run 时，会立即以 `runtime_preparation_failed` 结算待处理输入。当当前 `execution_prepare` 在没有 Run 且代码为 `invalid_configuration`、`unsupported_configuration` 或 `unsupported_preparation` 时被拒绝，也同样如此。在任何 Turn 存在之前，Core 会记录安全的 Session 失败并释放输入门控；修复本地原因后即可接受新输入。传输丢失、容量拒绝和未确认的清理在原始期限内保持可重试。Runtime 缺少所挂载 Session 的 Harness 时，会在其 executor 准备阶段以同样方式使该输入失败。Core 使用这些通用控制状态，绝不使用 Harness 特定的错误文本。
 
 ### 活动与必需操作 {#activity-and-required-actions}
 
@@ -232,11 +262,11 @@ stateDiagram-v2
 ```
 
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于提供商维护。
-- 缺少套接字不会消耗一次 pending 尝试。初始化不需要 Harness。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
+- 缺少套接字不会消耗一次 pending 尝试。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
 - 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
-- 每个 `openai_hosted` Environment 都从 `pending` 开始，包括没有文件和初始化设置的 Environment，并在开始初始化的事务中记录 `agent.session.environment.pending`，在完成初始化的事务中记录 `agent.session.environment.ready`，各恰好一次。Core 在观察到 Runtime 连接时记录 `agent.session.environment.connected`，可能在 `pending` 之前或之后。`self_hosted` Environment 不发出 `pending` 和 `ready`，且除非有文件或初始化设置，否则从 `complete` 开始。
+- 每个 `openai_hosted` Environment 都从 `pending` 开始，包括没有文件和初始化设置的 Environment，并在开始初始化的事务中记录 `agent.session.environment.pending`，在完成初始化的事务中记录 `agent.session.environment.ready`，各恰好一次。Core 在观察到 Runtime 连接时记录 `agent.session.environment.connected`，可能在 `pending` 之前或之后。这些都是 Session 事件，只在挂载了 Session 时记录：在挂载前已准备好的 Environment，不会向之后挂载的 Session 发出 `pending` 或 `ready`。`self_hosted` Environment 不发出 `pending` 和 `ready`，且除非有文件或初始化设置，否则从 `complete` 开始。
 
 初始化失败时记录的事件和 Session 状态由 [Environment 初始化失败](sessions-events.md#environment-initialization-failure)定义。原因只指明步骤及其退出状态：
 
@@ -253,7 +283,7 @@ stateDiagram-v2
 
 ## 模板 {#templates}
 
-模板是由项目拥有、供 `openai_hosted` Session 和 `x_agents_core.environment` 使用的配置。它不包含运行中的工作区，也与 E2B 模板等提供商镜像无关。每个引用它的 Session 都会通过与内联配置相同的准备过程获得自己的 Environment。模板解析、存储和解析过程绝不会选择 Harness 或提供商，也不会依赖原生工具名称或 Harness 私有路径，因此新的 Harness 或提供商无需修改模板。
+模板是由项目拥有、供 `openai_hosted` Session、`POST /agents/environments` 和 `x_agents_core.environment` 使用的配置。它不包含运行中的工作区，也与 E2B 模板等提供商镜像无关。每个引用它的 Session 都会通过与内联配置相同的准备过程获得自己的 Environment。模板解析、存储和解析过程绝不会选择 Harness 或提供商，也不会依赖原生工具名称或 Harness 私有路径，因此新的 Harness 或提供商无需修改模板。
 
 ```python
 from openai import OpenAI

@@ -33,10 +33,47 @@ type sessionRequest struct {
 	harnessConfigSource   v1.ExecutionSource
 	resolvedHarnessConfig json.RawMessage
 	v1.CreateSessionRequest
-	Input               json.RawMessage
+	Input json.RawMessage
+	// environmentID names the standalone Environment the Session attaches to.
+	environmentID       string
 	templateID          string
 	templateEnvironment json.RawMessage
 	agentFields         map[string]json.RawMessage
+}
+
+// decodeEnvironment decodes the request's environment object and the
+// preparation input it carries. The Session surface (extension) also accepts
+// self_hosted Templates and x_agents_core.environment.
+func (input *sessionRequest) decodeEnvironment(raw json.RawMessage, extension bool) error {
+	if extension {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) == nil {
+			id, err := attachedEnvironment(fields, input.XAgentsCore)
+			if err != nil || id != "" {
+				// The attached Environment's own configuration replaces this
+				// placeholder when the Session is planned.
+				input.environmentID, input.originalEnvironment, input.Environment = id, raw, &v1.Environment{Type: "openai_hosted"}
+				return err
+			}
+		}
+	}
+	canonicalEnvironment, err := preparationEnvironmentInput(raw, input.XAgentsCore)
+	if err != nil {
+		return err
+	}
+	input.originalEnvironment = raw
+	var environmentFields map[string]json.RawMessage
+	if json.Unmarshal(canonicalEnvironment, &environmentFields) != nil {
+		return sessions.ErrInvalidInput
+	}
+	if input.initialization, err = decodeEnvironmentSetup(environmentFields); err != nil {
+		return err
+	}
+	if input.initialFiles, err = decodeInitialFiles(environmentFields["files"]); err != nil {
+		return err
+	}
+	input.Environment, input.templateID, input.templateEnvironment, err = decodePreparationTemplate(canonicalEnvironment, extension)
+	return err
 }
 
 func (request decodedSessionRequest) validated() (sessionRequest, error) {
@@ -53,25 +90,7 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		input.modelProviderNull = bytes.Equal(bytes.TrimSpace(fields["model_provider"]), []byte("null"))
 	}
 	input.VaultIDs = append([]string{}, request.VaultIDs...)
-	canonicalEnvironment, err := preparationEnvironmentInput(request.Environment, input.XAgentsCore)
-	if err != nil {
-		return input, err
-	}
-	input.originalEnvironment = request.Environment
-	var environmentFields map[string]json.RawMessage
-	if json.Unmarshal(canonicalEnvironment, &environmentFields) != nil {
-		return input, sessions.ErrInvalidInput
-	}
-	input.initialization, err = decodeEnvironmentSetup(environmentFields)
-	if err != nil {
-		return input, err
-	}
-	input.initialFiles, err = decodeInitialFiles(environmentFields["files"])
-	if err != nil {
-		return input, err
-	}
-	input.Environment, input.templateID, input.templateEnvironment, err = decodePreparationTemplate(canonicalEnvironment, true)
-	if err != nil {
+	if err := input.decodeEnvironment(request.Environment, true); err != nil {
 		return input, err
 	}
 	if len(request.Agent) > 0 {

@@ -17,7 +17,7 @@ func TestEnvironmentSetupResourceAndFieldBinding(t *testing.T) {
 	if err != nil || !bytes.Equal(got, plaintext) {
 		t.Fatal("round trip", err)
 	}
-	for _, change := range []func(*EnvironmentSetupBinding){func(b *EnvironmentSetupBinding) { b.TenantID = "other" }, func(b *EnvironmentSetupBinding) { b.Resource = "session" }, func(b *EnvironmentSetupBinding) { b.OwnerID = "other" }, func(b *EnvironmentSetupBinding) { b.Field = "setup_commands" }} {
+	for _, change := range []func(*EnvironmentSetupBinding){func(b *EnvironmentSetupBinding) { b.TenantID = "other" }, func(b *EnvironmentSetupBinding) { b.Resource = "environment" }, func(b *EnvironmentSetupBinding) { b.OwnerID = "other" }, func(b *EnvironmentSetupBinding) { b.Field = "setup_commands" }} {
 		other := binding
 		change(&other)
 		if _, err := c.OpenEnvironmentSetup(encrypted, other); err == nil {

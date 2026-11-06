@@ -170,3 +170,33 @@ func TestResetSessionsAndAddressBindings(t *testing.T) {
 		t.Fatalf("AddressBindings for another address = %+v, %v", bindings, err)
 	}
 }
+
+// A reset expires an unattached standalone Environment and requests its
+// cleanup, so the reset is not held open by it.
+func TestResetExpiresUnattachedStandaloneEnvironment(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "disabled")
+	if err := changes.StartReset(admin(t), installation, deployment.ResetRequest{ExpectedGeneration: view.Generation, Clear: deployment.ResetAuto}); err != nil {
+		t.Fatal(err)
+	}
+	started, err := f.service.View(t.Context())
+	if err != nil || started.Reset == nil {
+		t.Fatal(started, err)
+	}
+	candidates, err := f.adapter.ResetSessions(t.Context(), "", false)
+	if err != nil || len(candidates) != 1 || candidates[0].EnvironmentID != owner.EnvironmentID || candidates[0].SessionID != "" {
+		t.Fatalf("reset candidates = %+v, %v", candidates, err)
+	}
+	if err := changes.ExpireResetEnvironment(t.Context(), owner.Key(), started.Generation, started.Reset.RequestedAt); err != nil {
+		t.Fatal(err)
+	}
+	after, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || after.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "expired" {
+		t.Fatal("reset did not expire the Environment", after, err)
+	}
+	if candidates, err := f.adapter.ResetSessions(t.Context(), "", false); err != nil || len(candidates) != 0 {
+		t.Fatalf("reset candidates after expiry = %+v, %v", candidates, err)
+	}
+}

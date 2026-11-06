@@ -138,7 +138,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		{"SELECT count(*) FROM sessions WHERE tenant_id=$1", 6},
 		{"SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1", 6},
 		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.tenant_id=$1", 6},
-		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.id=f.session_id WHERE s.tenant_id=$1", 8},
+		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.environment_id=f.environment_id WHERE s.tenant_id=$1", 8},
 		{"SELECT count(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.tenant_id=$1", 0},
 		{"SELECT count(*) FROM environment_input_reservations e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 0},
 	}

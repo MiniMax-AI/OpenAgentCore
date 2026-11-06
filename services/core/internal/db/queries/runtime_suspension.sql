@@ -38,6 +38,21 @@ FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE a.id = $1;
 
+-- name: RecordStandaloneActivity :exec
+UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
+FROM environments e
+WHERE e.id = $1 AND NOT e.session_owned AND a.environment_id = e.id AND a.state <> 'released';
+
+-- name: EndUnattachedStandaloneEnvironment :exec
+-- An unattached standalone Environment whose compute is gone or being removed has nothing to resume, so it ends.
+-- One that never had compute is waiting for its first placement and stays.
+UPDATE environments e SET status = 'expired'
+FROM environment_liveness l
+WHERE e.id = $1 AND l.id = e.id AND l.active AND NOT e.session_owned
+  AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
+  AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state IN ('creating', 'running'));
+
 -- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN sessions s ON s.environment_id = a.environment_id
@@ -76,3 +91,6 @@ SET node_id=sqlc.arg(destination)::uuid, compute_phase=sqlc.arg(phase),
     compute_state=sqlc.arg(state)::jsonb, compute_revision=a.compute_revision+1,
     compute_phase_changed_at=CASE WHEN a.compute_phase=sqlc.arg(phase)::text THEN a.compute_phase_changed_at ELSE clock_timestamp() END
 FROM moved WHERE a.id=moved.id RETURNING a.*;
+
+-- name: GetSessionEnvironmentID :one
+SELECT environment_id FROM sessions WHERE id = $1;

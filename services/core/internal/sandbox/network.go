@@ -3,6 +3,7 @@ package sandbox
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -45,6 +46,19 @@ var networkContract = networkRule{maxNetworkDomains, maxDomainLength, domainPatt
 type Network struct {
 	Public  bool     `json:"public" binding:"required"`
 	Domains []string `json:"domains" binding:"required"`
+}
+
+// PrivatePrefixes are the addresses no sandbox may reach. Loopback is not among
+// them: inside the sandbox's network namespace it is the sandbox itself.
+var PrivatePrefixes = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"), netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("169.254.0.0/16"), netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10"),
+}
+
+// PublicAddress reports whether addr is a global unicast address outside every
+// private prefix.
+func PublicAddress(addr netip.Addr) bool {
+	return addr.IsGlobalUnicast() && !slices.ContainsFunc(PrivatePrefixes, func(p netip.Prefix) bool { return p.Contains(addr) })
 }
 
 // DefaultNetwork is the public internet only.

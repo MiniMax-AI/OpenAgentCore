@@ -38,7 +38,8 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	for _, want := range []string{
 		`"specification":{"resources":{"cpus":2,"memory_mib":2048},"network":{"public":true,"domains":[]}}`,
 		`"template_build":{"status":"ready","resources":{"cpus":2,"memory_mib":2048,"root_disk_mib":24063}}`,
-		`"suspension":{"idle_seconds":300,"retention_seconds":86400}`,
+		`"idle_seconds":300`,
+		`"suspension":{"retention_seconds":86400}`,
 	} {
 		if !bytes.Contains(raw, []byte(want)) {
 			t.Fatalf("E2B view lacks %s: %s", want, raw)
@@ -72,7 +73,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 		t.Fatalf("identical PUT did not record the build: %s %v", raw, err)
 	}
 	view, err = resetAndSelect(t, w, id, 1, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"})
-	if err != nil || string(view.Configuration) != "{}" || view.Suspension == nil || view.Suspension.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
+	if err != nil || string(view.Configuration) != "{}" || view.Suspension == nil || view.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
 		t.Fatalf("microsandbox suspension view = %+v %v", view, err)
 	}
 }

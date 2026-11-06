@@ -20,6 +20,7 @@ type sessionPlan struct {
 	revision                    uuid.UUID
 	engine                      string
 	configuration               json.RawMessage
+	environmentID               string
 }
 
 // planSession resolves the environment template and the saved Agent, freezes
@@ -44,6 +45,14 @@ func (h *Handler) planSession(ctx context.Context, tenant, key string, input *se
 		return p, writeAgentsError, err
 	}
 	err = h.prepareSessionModelConfiguration(ctx, input, p.saved, p.inheritedProvider)
+	if err == nil && input.environmentID != "" {
+		// The Session runs in the Environment as prepared; its configuration
+		// replaces the request's placeholder.
+		if err = h.attachableEnvironment(ctx, tenant, input); err != nil {
+			return p, writeSessionsError, err
+		}
+		p.environmentID = input.environmentID
+	}
 	if err == nil {
 		p.configuration, err = resolve(*input, tenant, key, p.saved)
 	}
@@ -76,4 +85,17 @@ func writeSessionConfigurationError(w http.ResponseWriter, r *http.Request, err 
 	case !writeFieldError(w, err):
 		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 	}
+}
+
+// attachableEnvironment loads the standalone Environment the request names and
+// takes its stored configuration as the Session's environment. It checks the
+// Project and existence only.
+func (h *Handler) attachableEnvironment(ctx context.Context, tenant string, input *sessionRequest) error {
+	environment, err := h.EnvironmentsReader.GetEnvironment(ctx, tenant, input.environmentID)
+	if err != nil {
+		return err
+	}
+	// Whether it is attached or ended is decided when the Session is created.
+	input.Environment, err = storedEnvironment(environment.Configuration)
+	return err
 }

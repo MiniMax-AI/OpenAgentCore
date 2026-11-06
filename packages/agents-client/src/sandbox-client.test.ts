@@ -44,12 +44,12 @@ const allocation = {
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
 const unconfigured = {
-  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
+  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, idle_seconds: 300, suspension: null };
 const microsandbox = {
   configuration: {}, metadata: {},
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
   resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 }, network: { public: true, domains: [] } }, specification_digest: "0".repeat(64),
-  suspension: { idle_seconds: 300, retention_seconds: 86400 },
+  idle_seconds: 300, suspension: { retention_seconds: 86400 },
 };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
 const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification, workspace: externalWorkspace } };
@@ -177,16 +177,16 @@ describe("Core sandbox credential boundaries", () => {
   });
 
   it("patches idle policy once through the existing deployment resource", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...microsandbox, suspension: { idle_seconds: 60, retention_seconds: 86400 } }));
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...microsandbox, idle_seconds: 60, suspension: { retention_seconds: 86400 } }));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
-    expect((await admin.updateSuspension({ idle_seconds: 60 })).suspension?.idle_seconds).toBe(60);
+    expect((await admin.updateIdleSeconds({ idle_seconds: 60 })).idle_seconds).toBe(60);
     const [url, init] = fetch.mock.calls[0]!;
     expect(url).toBe("/core/v1/sandbox/deployment");
     expect(init?.method).toBe("PATCH");
     expect(JSON.parse(String(init?.body))).toEqual({ idle_seconds: 60 });
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
     fetch.mockRejectedValue(new TypeError("Network failed"));
-    await expect(admin.updateSuspension({ idle_seconds: 60 })).rejects.toThrow("Network failed");
+    await expect(admin.updateIdleSeconds({ idle_seconds: 60 })).rejects.toThrow("Network failed");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 

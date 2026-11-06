@@ -259,6 +259,10 @@ var (
 		{"stream", shape{kind: booleanValue}},
 		{"x_agents_core", shape{}},
 	}}
+	createAgentEnvironmentParams = shape{kind: objectValue, members: []member{
+		{"environment", shape{kind: openObject, required: true}},
+		{"vault_ids", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+	}}
 	updateAgentSessionParams = shape{kind: objectValue, members: []member{
 		{"review", shape{kind: enumValue, values: []string{"none", "auto_review"}}},
 		{"agent", shape{kind: objectValue, members: []member{

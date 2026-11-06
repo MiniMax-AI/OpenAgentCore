@@ -7,7 +7,7 @@ test("shows each node's retained limit and elapsed phase time without inventing 
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
-    await route.fulfill({ response, json: { ...deployment, provider: "microsandbox", suspension: { idle_seconds: 300, retention_seconds: 86400 }, specification: { ...deployment.specification, resources: { ...deployment.specification.resources, root_disk_mib: 8192 } } } });
+    await route.fulfill({ response, json: { ...deployment, provider: "microsandbox", suspension: { retention_seconds: 86400 }, specification: { ...deployment.specification, resources: { ...deployment.specification.resources, root_disk_mib: 8192 } } } });
   });
   await page.route("**/core/v1/sandbox/nodes", async (route) => {
     const response = await route.fetch();
@@ -43,7 +43,7 @@ test("edits deployment idle time without changing generation", async ({ page, re
   const nodeReads: string[] = [];
   page.on("request", (sent) => { if (new URL(sent.url()).pathname.startsWith("/core/v1/sandbox/nodes")) nodeReads.push(sent.url()); });
   await openConsole(page, request, "settings?id=sandbox");
-  const deployment = await setDeployment(request, { suspension: { idle_seconds: 300, retention_seconds: 86400 } });
+  const deployment = await setDeployment(request, { idle_seconds: 300, suspension: { retention_seconds: 86400 } });
   await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192 } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   const area = page.getByRole("region", { name: "Automatic suspension" });
@@ -57,7 +57,8 @@ test("edits deployment idle time without changing generation", async ({ page, re
   await area.getByRole("button", { name: "Save", exact: true }).click();
   const saved = await (await response).json();
   expect(saved.generation).toBe(deployment.generation);
-  expect(saved.suspension).toEqual({ idle_seconds: 60, retention_seconds: 86400 });
+  expect(saved.idle_seconds).toBe(60);
+  expect(saved.suspension).toEqual({ retention_seconds: 86400 });
   await expect(idle).toHaveValue("60");
   await page.reload();
   await expect(idle).toHaveValue("60");

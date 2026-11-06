@@ -169,6 +169,15 @@ func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allo
 	return e.cleanup(ctx, owner, computeLost)
 }
 
+// ReleaseIdleUnattached requests the cleanup of a standalone Environment's
+// compute at the deployment idle timeout while no Session is attached, once
+// nothing is pending and its initialization is complete. The caller is a
+// Provider that cannot checkpoint; with checkpoints an idle Environment
+// suspends instead. Any other state is ErrNotIdle.
+func (e *ExecutionOperations) ReleaseIdleUnattached(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.cleanup(ctx, owner, idleRelease)
+}
+
 // cleanupEvidence is the provider proof a cleanup commit consumes.
 type cleanupEvidence int
 
@@ -176,6 +185,7 @@ const (
 	cleanupRequested cleanupEvidence = iota
 	creationAbsent
 	computeLost
+	idleRelease
 )
 
 func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
@@ -189,6 +199,11 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		current, err := checkAllocation(tx, owner, lost)
 		if err != nil {
 			return err
+		}
+		if evidence == idleRelease {
+			if err := checkIdleUnattached(ctx, tx, current); err != nil {
+				return err
+			}
 		}
 		if lost && (current.State != "running" || current.ComputePhase != "running" || current.ComputeRevision != owner.ComputeRevision || !current.CreateSettled) {
 			return ErrAllocationConflict
@@ -206,7 +221,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		if err != nil {
 			return err
 		}
-		if revoked.Reclaimed {
+		if revoked.Ended {
 			err = sessions.CancelWork(ctx, tx)
 		} else {
 			retain := false
@@ -219,10 +234,12 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			// Compute retention ends independently of the Session only when its
 			// initialized filesystem and native history can continue on new compute.
 			// Explicit archive/reset makes this locked eligibility check false.
-			if !retain && lost {
+			// Without a Session there is nothing to settle: the cleanup request
+			// itself ends a standalone Environment.
+			if !retain && lost && revoked.AttachedSessionID != "" {
 				return ErrAllocationConflict
 			}
-			if !retain {
+			if !retain && revoked.AttachedSessionID != "" {
 				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
@@ -230,7 +247,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || evidence == cleanupRequested {
+		if err != nil || evidence == cleanupRequested || evidence == idleRelease {
 			result = pending
 			return err
 		}
@@ -245,6 +262,32 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		return Allocation{}, err
 	}
 	return result, nil
+}
+
+func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation) error {
+	if current.State != "running" || current.ComputePhase != "disabled" || current.AttachedSessionID != "" {
+		return ErrNotIdle
+	}
+	environment, err := tx.LoadEnvironment(ctx)
+	if err != nil {
+		return err
+	}
+	if environment.Initialization != "complete" {
+		// The initialization budget fails an unfinished one, which ends it.
+		return ErrNotIdle
+	}
+	activity, err := tx.LoadActivity(current)
+	if err != nil {
+		return err
+	}
+	seconds, err := tx.LoadIdleSeconds()
+	if err != nil {
+		return err
+	}
+	if !activity.ReadyToSuspend(time.Duration(seconds) * time.Second) {
+		return ErrNotIdle
+	}
+	return nil
 }
 
 // SetCompute commits a compute phase before its external effects. The owner's
@@ -406,6 +449,13 @@ func (e *ExecutionOperations) ClearWake(ctx context.Context, owner Allocation, o
 	return e.storage.ClearWake(ctx, id, observed)
 }
 
+// ReleaseInactivePlacements is the one release of node placements: every
+// Environment that can no longer run work gives up the placement it holds
+// without compute, whatever ended it.
+func (e *ExecutionOperations) ReleaseInactivePlacements(ctx context.Context) error {
+	return e.storage.ReleaseInactivePlacements(ctx)
+}
+
 // change runs apply on the owner's allocation in its Session-locked
 // transaction, after checkAllocation.
 func (e *ExecutionOperations) change(ctx context.Context, owner Allocation, live bool, apply func(AllocationTx, Allocation) (Allocation, error)) (Allocation, error) {
@@ -442,7 +492,7 @@ func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, 
 	if !live {
 		return current, nil
 	}
-	if current.Reclaimed {
+	if current.Ended {
 		return Allocation{}, sessions.ErrNotFound
 	}
 	device, bound, err := tx.LoadEnvironmentDevice()

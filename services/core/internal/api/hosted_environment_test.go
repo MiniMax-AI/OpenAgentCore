@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -45,20 +46,53 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 
 // A request naming an existing Environment is rejected by param instead of
 // creating a new Environment, with or without a Template.
-func TestSessionCreationRejectsExistingEnvironmentReference(t *testing.T) {
+// An attach names the Environment and nothing that prepares one: the first
+// member of the pinned `not` constraint in schema order is the param.
+func TestSessionCreationRejectsInvalidEnvironmentReference(t *testing.T) {
 	h, s := validationHandler(t)
-	rejected := `{"error":{"message":"Environment environment_id is not supported.","type":"invalid_request_error","code":"invalid_request_error","param":"environment_id"}}` + "\n"
-	for _, environment := range []string{
-		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}`,
-		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `","environment_template_id":"` + uuid.NewString() + `"}`,
+	id := uuid.NewString()
+	for name, test := range map[string]struct{ environment, extension, param string }{
+		"template":        {`{"type":"openai_hosted","environment_id":"` + id + `","environment_template_id":"` + uuid.NewString() + `"}`, "", "environment.environment_template_id"},
+		"explicit null":   {`{"type":"openai_hosted","environment_id":"` + id + `","network":null}`, "", "environment.network"},
+		"schema order":    {`{"type":"openai_hosted","environment_id":"` + id + `","files":[],"packages":{}}`, "", "environment.packages"},
+		"unknown member":  {`{"type":"openai_hosted","environment_id":"` + id + `","foo":1}`, "", "environment.foo"},
+		"workspace dir":   {`{"type":"openai_hosted","environment_id":"` + id + `","workspace_directory":"/w"}`, "", "environment.workspace_directory"},
+		"short":           {`{"type":"openai_hosted","environment_id":"short"}`, "", "environment.environment_id"},
+		"not hosted":      {`{"type":"self_hosted","environment_id":"` + id + `","workspace_directory":"/w"}`, "", "environment.environment_id"},
+		"preparation":     {`{"type":"openai_hosted","environment_id":"` + id + `"}`, `"x_agents_core":{"environment":{"env":{"A":"b"}}},`, "x_agents_core.environment"},
+		"not a string id": {`{"type":"openai_hosted","environment_id":7}`, "", "environment.environment_id"},
 	} {
-		body := `{"agent":{"model":"m"},"environment":` + environment + `,"input":"hi"}`
-		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != rejected {
-			t.Errorf("%s: %d %s", environment, w.Code, w.Body)
+		body := `{` + test.extension + `"agent":{"model":"m"},"environment":` + test.environment + `,"input":"hi"}`
+		w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body))
+		var response struct{ Error struct{ Param *string } }
+		if json.Unmarshal(w.Body.Bytes(), &response) != nil || w.Code != http.StatusBadRequest || (test.param != "" && (response.Error.Param == nil || *response.Error.Param != test.param)) {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
 		}
 	}
 	if s.writes != 0 {
-		t.Fatalf("an Environment reference reached storage: %d writes", s.writes)
+		t.Fatalf("an invalid Environment reference reached storage: %d writes", s.writes)
+	}
+}
+
+// Standalone create and list reject malformed requests before any write.
+func TestStandaloneEnvironmentRequestValidation(t *testing.T) {
+	h, s := validationHandler(t)
+	for name, test := range map[string]struct{ path, body, param string }{
+		"no environment":   {"/v1/agents/environments", `{}`, "environment"},
+		"vault ids":        {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"vault_ids":["v"]}`, "vault_ids"},
+		"self hosted":      {"/v1/agents/environments", `{"environment":{"type":"self_hosted","workspace_directory":"/w"}}`, ""},
+		"attach on create": {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}}`, "environment.environment_id"},
+		"container size":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted","container_size":null}}`, "environment.container_size"},
+		"unknown member":   {"/v1/agents/environments", `{"environment":{"type":"openai_hosted"},"extra":1}`, ""},
+	} {
+		w := bodyGateRequest(h, test.path, "application/json", []byte(test.body))
+		var response struct{ Error struct{ Param *string } }
+		if json.Unmarshal(w.Body.Bytes(), &response) != nil || w.Code != http.StatusBadRequest || (test.param != "" && (response.Error.Param == nil || *response.Error.Param != test.param)) {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	if s.writes != 0 {
+		t.Fatalf("an invalid Environment request reached storage: %d writes", s.writes)
 	}
 }
 
@@ -139,4 +173,32 @@ type hostedCreationRecorder struct {
 func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
 	return sessions.Creation{}, sessions.ErrInvalidInput
+}
+
+// attachExclusive is checked against the pinned schema's `not` constraint, its
+// one authored definition.
+func TestAttachExclusiveMatchesThePinnedSchema(t *testing.T) {
+	raw, err := os.ReadFile("../../../../contracts/agents-api/upstream/openapi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pin struct {
+		Components struct {
+			Schemas map[string]struct {
+				Not struct {
+					AnyOf []struct{ Required []string } `json:"anyOf"`
+				} `json:"not"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(raw, &pin); err != nil {
+		t.Fatal(err)
+	}
+	var members []string
+	for _, choice := range pin.Components.Schemas["EnvironmentParamOpenaiHosted"].Not.AnyOf {
+		members = append(members, choice.Required...)
+	}
+	if !reflect.DeepEqual(members, attachExclusive) {
+		t.Fatal("the pinned not constraint", members)
+	}
 }

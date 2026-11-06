@@ -117,7 +117,11 @@ func (t *environmentTx) CompleteInitialization(ctx context.Context, environment 
 		return false, err
 	}
 	count, err := t.q.CompleteEnvironmentInitialization(ctx, id)
-	return count == 1, err
+	if err != nil || count != 1 {
+		return false, err
+	}
+	// A standalone Environment's idle clock starts once it is ready.
+	return true, t.q.RecordStandaloneActivity(ctx, id)
 }
 
 func (t *environmentTx) RecordInitializationSteps(ctx context.Context, environment string, steps []sessions.InitializationStep) error {

@@ -4,9 +4,8 @@ SELECT * FROM runtime_deployment WHERE singleton = true FOR UPDATE;
 -- name: CountRuntimeDeploymentResources :one
 SELECT
 (SELECT count(*) FROM runtime_allocations WHERE state <> 'released')::bigint AS allocations,
-((SELECT count(*) FROM environments e LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
- WHERE (s.id IS NOT NULL OR NOT e.session_owned) AND e.status NOT IN ('failed','expired')
- AND ((e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
+((SELECT count(*) FROM environments e JOIN environment_liveness l ON l.id = e.id AND l.active
+ WHERE ((e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
       OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
  AND e.configuration->>'type' = 'openai_hosted'
  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released'))::bigint
