@@ -1,7 +1,7 @@
 ---
 title: "设置工作区存储"
 source: docs/getting-started/workspace-storage.md
-source_hash: 158aa4bffbb61f61f607976f25f568c80e4fc0d0ab916840ee81f79799b1b410
+source_hash: 546021e154c238a05a633d69bd95c3979aa3481b924c351a878c953d83474ac3
 ---
 
 将 Session 工作区保存在沙箱节点之外的 NFS 文件系统上，可选择是否设置每个工作区的配额。microsandbox 的每个 Environment 都运行在此存储上，因此请在配置 microsandbox 后端之前先选择它。
@@ -19,7 +19,7 @@ flowchart LR
 
 ## 准备 NFS 导出 {#prepare-the-nfs-export}
 
-启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出。
+启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出。导出应放在 XFS 上，或放在以 `iversion` 挂载的 ext4 上：缺少版本计数型 change attribute 时，客户端列出目录可能看不到自己刚在其中创建的文件。
 
 > [!WARNING]
 > 不要启用 `no_root_squash` 或放宽权限来使检查通过。

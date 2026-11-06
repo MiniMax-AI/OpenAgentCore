@@ -17,7 +17,7 @@ flowchart LR
 
 ## Prepare the NFS export
 
-Mount the same NFSv4.2 export on the Linux Core host and on every participating node before starting their services, at the same absolute path, for example `/srv/oac-workspaces`. You manage the export, mount availability and service startup ordering. Use a trusted-client AUTH_SYS export with `root_squash`.
+Mount the same NFSv4.2 export on the Linux Core host and on every participating node before starting their services, at the same absolute path, for example `/srv/oac-workspaces`. You manage the export, mount availability and service startup ordering. Use a trusted-client AUTH_SYS export with `root_squash`. Put it on XFS, or on ext4 mounted with `iversion`: without a version-counter change attribute, a client can list a directory without the file it has just created there.
 
 > [!WARNING]
 > Do not enable `no_root_squash` or broaden permissions to make a check pass.
