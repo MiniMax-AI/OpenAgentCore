@@ -40,7 +40,8 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 		return err
 	}
 	// Detaching starts the idle clock of a standalone Environment's compute, and
-	// ends an Environment whose compute was released while the Session held it.
+	// ends an Environment whose compute was released or is being removed while the
+	// Session held it.
 	environment, err := t.q.GetSessionEnvironmentID(ctx, t.session)
 	if err != nil {
 		return err
@@ -51,10 +52,10 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {
 		return err
 	}
-	if err := t.q.ExpireUncomputedStandaloneEnvironment(ctx, environment); err != nil {
+	if err := t.q.EndUnattachedStandaloneEnvironment(ctx, environment); err != nil {
 		return err
 	}
-	return t.q.ReleaseUnallocatedRuntimePlacement(ctx, t.session)
+	return t.q.ReleaseInactiveRuntimePlacement(ctx, environment)
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {

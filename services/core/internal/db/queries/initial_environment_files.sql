@@ -7,8 +7,9 @@ UPDATE environments SET configuration = jsonb_set(configuration, '{files}', $2::
 WHERE id = $1;
 
 -- name: GetInitialEnvironmentFile :one
-SELECT f.*, (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
+SELECT f.*, l.ended::boolean AS ended
 FROM initial_environment_files f JOIN environments e ON e.id = f.environment_id
+JOIN environment_liveness l ON l.id = e.id
 WHERE e.tenant_id = $1 AND f.environment_id = $2 AND f.position = $3;
 
 -- name: GetSessionInitializationReady :one

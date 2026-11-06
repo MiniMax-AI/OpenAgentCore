@@ -33,9 +33,10 @@ SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a
     JOIN devices d ON d.id = a.device_id AND d.environment_id = a.environment_id
     JOIN environments e ON e.id = a.environment_id
+    JOIN environment_liveness l ON l.id = e.id AND l.active
     JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
     JOIN environment_workspaces w ON w.environment_id = e.id AND w.state = 'ready'
-    WHERE a.id = $1 AND e.status NOT IN ('failed','expired')
+    WHERE a.id = $1
       AND e.initialization = 'complete'
       AND e.configuration->>'type' = 'openai_hosted'
       AND d.supported_agent_kinds @> jsonb_build_array(jsonb_build_object(
@@ -98,9 +99,10 @@ func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntime
 }
 
 const getLatestRuntimeAllocation = `-- name: GetLatestRuntimeAllocation :one
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, l.ended::boolean AS ended, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
+JOIN environment_liveness l ON l.id = e.id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE e.tenant_id = $1 AND a.environment_id = $2
 ORDER BY a.created_at DESC, a.id DESC LIMIT 1
@@ -115,7 +117,7 @@ type GetLatestRuntimeAllocationRow struct {
 	RuntimeAllocation RuntimeAllocation `json:"runtime_allocation"`
 	AttachedSessionID pgtype.UUID       `json:"attached_session_id"`
 	TenantID          pgtype.UUID       `json:"tenant_id"`
-	Reclaimed         bool              `json:"reclaimed"`
+	Ended             bool              `json:"ended"`
 	Expired           bool              `json:"expired"`
 }
 
@@ -143,16 +145,17 @@ func (q *Queries) GetLatestRuntimeAllocation(ctx context.Context, arg GetLatestR
 		&i.RuntimeAllocation.DeploymentGeneration,
 		&i.AttachedSessionID,
 		&i.TenantID,
-		&i.Reclaimed,
+		&i.Ended,
 		&i.Expired,
 	)
 	return i, err
 }
 
 const listRuntimeAllocations = `-- name: ListRuntimeAllocations :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, l.ended::boolean AS ended, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
+JOIN environment_liveness l ON l.id = e.id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE a.id > $1 AND a.state <> 'released'
 ORDER BY a.id LIMIT 32
@@ -162,7 +165,7 @@ type ListRuntimeAllocationsRow struct {
 	RuntimeAllocation RuntimeAllocation `json:"runtime_allocation"`
 	AttachedSessionID pgtype.UUID       `json:"attached_session_id"`
 	TenantID          pgtype.UUID       `json:"tenant_id"`
-	Reclaimed         bool              `json:"reclaimed"`
+	Ended             bool              `json:"ended"`
 	Expired           bool              `json:"expired"`
 }
 
@@ -196,7 +199,7 @@ func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([
 			&i.RuntimeAllocation.DeploymentGeneration,
 			&i.AttachedSessionID,
 			&i.TenantID,
-			&i.Reclaimed,
+			&i.Ended,
 			&i.Expired,
 		); err != nil {
 			return nil, err

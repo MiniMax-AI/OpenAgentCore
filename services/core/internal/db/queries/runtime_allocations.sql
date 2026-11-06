@@ -3,17 +3,19 @@ INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, no
 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: GetLatestRuntimeAllocation :one
-SELECT sqlc.embed(a), s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT sqlc.embed(a), s.id AS attached_session_id, e.tenant_id, l.ended::boolean AS ended, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
+JOIN environment_liveness l ON l.id = e.id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE e.tenant_id = $1 AND a.environment_id = $2
 ORDER BY a.created_at DESC, a.id DESC LIMIT 1;
 
 -- name: ListRuntimeAllocations :many
-SELECT sqlc.embed(a), s.id AS attached_session_id, e.tenant_id, (e.session_owned AND s.id IS NULL)::boolean AS reclaimed, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
+SELECT sqlc.embed(a), s.id AS attached_session_id, e.tenant_id, l.ended::boolean AS ended, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
+JOIN environment_liveness l ON l.id = e.id
 LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
 WHERE a.id > $1 AND a.state <> 'released'
 ORDER BY a.id LIMIT 32;
@@ -61,9 +63,10 @@ SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a
     JOIN devices d ON d.id = a.device_id AND d.environment_id = a.environment_id
     JOIN environments e ON e.id = a.environment_id
+    JOIN environment_liveness l ON l.id = e.id AND l.active
     JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
     JOIN environment_workspaces w ON w.environment_id = e.id AND w.state = 'ready'
-    WHERE a.id = $1 AND e.status NOT IN ('failed','expired')
+    WHERE a.id = $1
       AND e.initialization = 'complete'
       AND e.configuration->>'type' = 'openai_hosted'
       AND d.supported_agent_kinds @> jsonb_build_array(jsonb_build_object(

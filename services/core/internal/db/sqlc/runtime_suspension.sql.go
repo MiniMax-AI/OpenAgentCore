@@ -27,17 +27,18 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
-const expireUncomputedStandaloneEnvironment = `-- name: ExpireUncomputedStandaloneEnvironment :exec
+const endUnattachedStandaloneEnvironment = `-- name: EndUnattachedStandaloneEnvironment :exec
 UPDATE environments e SET status = 'expired'
 WHERE e.id = $1 AND NOT e.session_owned AND e.status NOT IN ('failed', 'expired')
   AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
   AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
-  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state IN ('creating', 'running'))
 `
 
-// An unattached standalone Environment whose compute is all released has nothing to resume, so it ends.
-func (q *Queries) ExpireUncomputedStandaloneEnvironment(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, expireUncomputedStandaloneEnvironment, id)
+// An unattached standalone Environment whose compute is gone or being removed has nothing to resume, so it ends.
+// One that never had compute is waiting for its first placement and stays.
+func (q *Queries) EndUnattachedStandaloneEnvironment(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, endUnattachedStandaloneEnvironment, id)
 	return err
 }
 

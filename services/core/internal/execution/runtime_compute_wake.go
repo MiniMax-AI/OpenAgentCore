@@ -159,7 +159,7 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 		if err != nil {
 			return err
 		}
-		if owner.Reclaimed {
+		if owner.Ended {
 			return ErrExecutionUnavailable
 		}
 		if owner.State == "released" || owner.State == "cleanup_pending" || owner.Expired {

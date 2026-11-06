@@ -41,5 +41,5 @@ func (t *resetEnvironmentTx) RequestCleanup(current deployment.Allocation) error
 }
 
 func (t *resetEnvironmentTx) ReleasePlacement() error {
-	return t.cleanupTx.q.ReleaseEnvironmentRuntimePlacement(t.cleanupTx.ctx, t.cleanupTx.environment)
+	return t.cleanupTx.q.ReleaseInactiveRuntimePlacement(t.cleanupTx.ctx, t.cleanupTx.environment)
 }

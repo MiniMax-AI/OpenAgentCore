@@ -437,7 +437,7 @@ func TestAllocationChangesCheckTheOwner(t *testing.T) {
 		t.Fatal("a replaced allocation settled", err)
 	}
 	deleted := owner
-	deleted.Reclaimed = true
+	deleted.Ended = true
 	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(deleted)}).CheckRunning(t.Context(), owner); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("a deleted Session kept its allocation", err)
 	}
@@ -518,7 +518,7 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 			var calls []string
 			stored := owner
 			stored.AttachedSessionID = "session"
-			stored.Reclaimed, stored.Expired = test.deleted, !test.deleted
+			stored.Ended, stored.Expired = test.deleted, !test.deleted
 			change := func(name string, apply func(*Allocation)) func(Allocation) (Allocation, error) {
 				return func(current Allocation) (Allocation, error) {
 					calls = append(calls, name)
@@ -576,7 +576,7 @@ func TestExpiredQualifiedFilesystemCleanupPreservesSessionWork(t *testing.T) {
 	for _, deleted := range []bool{false, true} {
 		t.Run(fmt.Sprint("deleted=", deleted), func(t *testing.T) {
 			current := owner
-			current.Reclaimed = deleted
+			current.Ended = deleted
 			checked, cancelled, revoked := false, false, false
 			tx := &fakeCleanupTx{fakeAllocationTx: &fakeAllocationTx{t: t, loadAllocation: func() (Allocation, error) { return current, nil }},
 				canRetainEnvironment: func(Allocation) (bool, error) {

@@ -467,17 +467,6 @@ func (q *Queries) LockRuntimeNodePresence(ctx context.Context, id pgtype.UUID) (
 	return id, err
 }
 
-const releaseEnvironmentRuntimePlacement = `-- name: ReleaseEnvironmentRuntimePlacement :exec
-UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE runtime_placements.environment_id=$1
-AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
-`
-
-func (q *Queries) ReleaseEnvironmentRuntimePlacement(ctx context.Context, environmentID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, releaseEnvironmentRuntimePlacement, environmentID)
-	return err
-}
-
 const releaseFailedRuntimePlacement = `-- name: ReleaseFailedRuntimePlacement :exec
 UPDATE runtime_placements SET released_at = clock_timestamp()
 WHERE runtime_placements.environment_id = $1 AND runtime_placements.node_id = $2 AND runtime_placements.deployment_generation = $3 AND runtime_placements.released_at IS NULL
@@ -495,25 +484,25 @@ func (q *Queries) ReleaseFailedRuntimePlacement(ctx context.Context, arg Release
 	return err
 }
 
+const releaseInactiveRuntimePlacement = `-- name: ReleaseInactiveRuntimePlacement :exec
+UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
+WHERE runtime_placements.environment_id=$1
+AND EXISTS(SELECT 1 FROM environment_liveness l WHERE l.id=runtime_placements.environment_id AND NOT l.active)
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
+`
+
+// An Environment that can no longer run work gives up a placement it holds without compute.
+func (q *Queries) ReleaseInactiveRuntimePlacement(ctx context.Context, environmentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, releaseInactiveRuntimePlacement, environmentID)
+	return err
+}
+
 const releaseRuntimePlacement = `-- name: ReleaseRuntimePlacement :exec
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp()) WHERE environment_id=$1
 `
 
 func (q *Queries) ReleaseRuntimePlacement(ctx context.Context, environmentID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, releaseRuntimePlacement, environmentID)
-	return err
-}
-
-const releaseUnallocatedRuntimePlacement = `-- name: ReleaseUnallocatedRuntimePlacement :exec
-UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE environment_id IN(SELECT s.environment_id FROM sessions s JOIN environments e ON e.id=s.environment_id WHERE s.id=$1 AND (e.session_owned OR e.status IN ('failed','expired')))
-AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
-`
-
-// The deleted Session's Environment gives up a placement it holds without
-// compute when it is reclaimed with the Session or has ended.
-func (q *Queries) ReleaseUnallocatedRuntimePlacement(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, releaseUnallocatedRuntimePlacement, id)
 	return err
 }
 

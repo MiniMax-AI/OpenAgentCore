@@ -65,19 +65,19 @@ func TestUnattachedEnvironmentExpiresAtTheIdleTimeout(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	owner := reserveStandalone(t, f, changes, installation, "disabled")
-	if owner.AttachedSessionID != "" || owner.Reclaimed {
-		t.Fatal("standalone allocation reads attached or reclaimed", owner)
+	if owner.AttachedSessionID != "" || owner.Ended {
+		t.Fatal("standalone allocation reads attached or ended", owner)
 	}
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp(), compute_phase_changed_at=clock_timestamp(), created_at=clock_timestamp() WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := changes.ReleaseIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired before the idle timeout", err)
 	}
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp() - interval '1 day', compute_phase_changed_at=clock_timestamp() - interval '1 day', created_at=clock_timestamp() - interval '1 day' WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	expired, err := changes.ExpireIdleUnattached(t.Context(), owner, true)
+	expired, err := changes.ReleaseIdleUnattached(t.Context(), owner)
 	if err != nil || expired.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "expired" {
 		t.Fatal("idle Environment did not expire", expired, err)
 	}
@@ -145,7 +145,7 @@ func TestDetachStartsTheIdleClock(t *testing.T) {
 		t.Fatal(err)
 	}
 	deleteSession(t, f, owner.Key(), attachSession(t, f, owner.Key()))
-	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := changes.ReleaseIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired right after the detach", err)
 	}
 }
@@ -208,7 +208,11 @@ func TestFailedUnattachedEnvironmentReleasesItsCompute(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET status='failed' WHERE id=$1`, owner.Key().EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	released, err := changes.ExpireIdleUnattached(t.Context(), owner, false)
+	failed, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || !failed.Ended {
+		t.Fatal("a failed unattached Environment has not ended", failed, err)
+	}
+	released, err := changes.RequestCleanup(t.Context(), failed)
 	if err != nil || released.State != "cleanup_pending" || environmentStatus(t, f, owner.Key()) != "failed" {
 		t.Fatal("failed Environment kept its compute", released, err)
 	}
@@ -234,7 +238,7 @@ func TestInitializationStartsTheIdleClock(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := changes.ExpireIdleUnattached(t.Context(), owner, true); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := changes.ReleaseIdleUnattached(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("expired as soon as it was ready", err)
 	}
 }
@@ -262,5 +266,22 @@ func TestDetachReleasesTheHeldPlacementOfAnEndedEnvironment(t *testing.T) {
 	var held int
 	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_placements WHERE environment_id=$1 AND released_at IS NULL`, key.EnvironmentID).Scan(&held); err != nil || held != 0 || environmentStatus(t, f, key) != "expired" {
 		t.Fatal("the ended Environment kept its placement", held, err)
+	}
+}
+
+// Compute that is being removed when the Session detaches counts as gone: the
+// Environment ends and is never replaced.
+func TestDetachWhileComputeIsBeingRemovedExpiresTheEnvironment(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, _ := f.initialize(t, changes, setupE2BSelection())
+	owner := reserveStandalone(t, f, changes, installation, "disabled")
+	session := attachSession(t, f, owner.Key())
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET state='cleanup_pending' WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleteSession(t, f, owner.Key(), session)
+	if status := environmentStatus(t, f, owner.Key()); status != "expired" {
+		t.Fatal("the Environment kept its removed compute", status)
 	}
 }

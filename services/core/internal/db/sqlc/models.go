@@ -67,10 +67,6 @@ type AutomationInvocation struct {
 	AttemptedAt        pgtype.Timestamptz `json:"attempted_at"`
 }
 
-type DeletableEnvironment struct {
-	ID pgtype.UUID `json:"id"`
-}
-
 type DeploymentModelProvider struct {
 	Harness         string             `json:"harness"`
 	Protocol        string             `json:"protocol"`
@@ -161,6 +157,12 @@ type EnvironmentInputReservation struct {
 	IsInitial      bool               `json:"is_initial"`
 	FailureCode    pgtype.Text        `json:"failure_code"`
 	Settings       []byte             `json:"settings"`
+}
+
+type EnvironmentLiveness struct {
+	ID     pgtype.UUID `json:"id"`
+	Ended  pgtype.Bool `json:"ended"`
+	Active pgtype.Bool `json:"active"`
 }
 
 type EnvironmentSetup struct {

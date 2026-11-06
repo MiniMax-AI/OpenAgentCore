@@ -230,7 +230,7 @@ func TestAwaitingConnectionPassDropsStaleAndCoalescedWatches(t *testing.T) {
 			owner := deployment.Allocation{DeviceID: "device", NodeID: "node", ProviderKey: "provider", State: "running", CreateSettled: true, ComputePhase: "running"}
 			switch change {
 			case "deleted":
-				owner.Reclaimed = true
+				owner.Ended = true
 			case "expired":
 				owner.Expired = true
 			case "unsettled":

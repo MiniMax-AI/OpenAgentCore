@@ -140,7 +140,7 @@ func (r *runtimeLifecycle) observeAwaitingConnections(parent context.Context) er
 		operation, stop := context.WithTimeout(ctx, 5*time.Second)
 		owner, err := r.reader.EnvironmentAllocation(operation, key)
 		switch {
-		case err == nil && owner.DeviceID == device && owner.ProviderKey == r.config.InstallationID && owner.NodeID == r.nodeID && owner.State == "running" && owner.CreateSettled && !owner.Reclaimed && !owner.Expired && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running"):
+		case err == nil && owner.DeviceID == device && owner.ProviderKey == r.config.InstallationID && owner.NodeID == r.nodeID && owner.State == "running" && owner.CreateSettled && !owner.Ended && !owner.Expired && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running"):
 			err = r.observeConnection(operation, owner)
 		case err == nil || errors.Is(err, deployment.ErrNotFound):
 			r.forgetAwaitingConnection(device)

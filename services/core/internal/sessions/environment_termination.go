@@ -158,13 +158,6 @@ func TerminateEnvironment(ctx context.Context, tx EnvironmentTerminationTx, comp
 		}
 		return FailEnvironment(ctx, tx, environment, reason, detail)
 	}
-	if environment.AttachedSessionID == "" {
-		// A standalone Environment has no input or work to settle.
-		if termination == terminationExpires {
-			return tx.ExpireEnvironment(ctx, environment.ID)
-		}
-		return nil
-	}
 	return TrackInputActivity(ctx, tx, func(ctx context.Context) error {
 		if termination == terminationExpires {
 			if err := tx.ExpireEnvironment(ctx, environment.ID); err != nil {

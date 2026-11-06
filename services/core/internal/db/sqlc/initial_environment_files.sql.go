@@ -38,8 +38,9 @@ func (q *Queries) CreateInitialEnvironmentFile(ctx context.Context, arg CreateIn
 }
 
 const getInitialEnvironmentFile = `-- name: GetInitialEnvironmentFile :one
-SELECT f.id, f.environment_id, f.position, f.path, f.size_bytes, f.contents, (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
+SELECT f.id, f.environment_id, f.position, f.path, f.size_bytes, f.contents, l.ended::boolean AS ended
 FROM initial_environment_files f JOIN environments e ON e.id = f.environment_id
+JOIN environment_liveness l ON l.id = e.id
 WHERE e.tenant_id = $1 AND f.environment_id = $2 AND f.position = $3
 `
 
@@ -56,7 +57,7 @@ type GetInitialEnvironmentFileRow struct {
 	Path          string      `json:"path"`
 	SizeBytes     int64       `json:"size_bytes"`
 	Contents      []byte      `json:"contents"`
-	Reclaimed     bool        `json:"reclaimed"`
+	Ended         bool        `json:"ended"`
 }
 
 func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialEnvironmentFileParams) (GetInitialEnvironmentFileRow, error) {
@@ -69,7 +70,7 @@ func (q *Queries) GetInitialEnvironmentFile(ctx context.Context, arg GetInitialE
 		&i.Path,
 		&i.SizeBytes,
 		&i.Contents,
-		&i.Reclaimed,
+		&i.Ended,
 	)
 	return i, err
 }

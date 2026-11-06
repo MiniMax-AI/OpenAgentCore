@@ -31,7 +31,7 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) 
 	}
 	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(lookup, deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: environment.ID})
 	if err != nil || owner.ProviderKey != config.InstallationID || owner.State != "running" ||
-		!owner.CreateSettled || owner.Reclaimed || owner.Expired {
+		!owner.CreateSettled || owner.Ended || owner.Expired {
 		return
 	}
 	switch owner.ComputePhase {

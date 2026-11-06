@@ -15,8 +15,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// ReadEnvironmentSetup opens the setup frozen for the Environment. A reclaimed
-// Environment, whose owning Session was deleted, is sessions.ErrNotFound.
+// ReadEnvironmentSetup opens the setup frozen for the Environment. An ended
+// Environment is sessions.ErrNotFound.
 // Frozen data that does not open, decode or validate is corrupt stored data,
 // never the caller's input, so it is an internal error.
 func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, environment string) (environmentconfig.Setup, error) {
@@ -25,7 +25,7 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, environment st
 		return environmentconfig.Setup{}, sessions.ErrNotFound
 	}
 	row, err := s.units.Queries().GetEnvironmentSetup(ctx, sqlc.GetEnvironmentSetupParams{TenantID: lookup.TenantID, ID: lookup.ID})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.Reclaimed) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.Ended) {
 		return environmentconfig.Setup{}, sessions.ErrNotFound
 	}
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, environm
 		return environmentconfig.InitialFileMetadata{}, nil, err
 	}
 	row, err := s.units.Queries().GetInitialEnvironmentFile(ctx, sqlc.GetInitialEnvironmentFileParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID, Position: int32(position)})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.Reclaimed) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.Ended) {
 		return environmentconfig.InitialFileMetadata{}, nil, sessions.ErrNotFound
 	}
 	if err != nil {

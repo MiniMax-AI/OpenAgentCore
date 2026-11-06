@@ -169,17 +169,13 @@ func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allo
 	return e.cleanup(ctx, owner, computeLost)
 }
 
-// ExpireIdleUnattached ends a standalone Environment's compute while no
-// Session is attached: at once when the Environment failed or expired, and,
-// when idle is set because its Provider cannot checkpoint, at the deployment
-// idle timeout once nothing is pending and its initialization is complete.
-// It revokes the device and expires the Environment in one commit; the allocation then
-// awaits ordinary cleanup. Any other state is ErrNotIdle.
-func (e *ExecutionOperations) ExpireIdleUnattached(ctx context.Context, owner Allocation, idle bool) (Allocation, error) {
-	if idle {
-		return e.cleanup(ctx, owner, idleExpiry)
-	}
-	return e.cleanup(ctx, owner, endedRelease)
+// ReleaseIdleUnattached requests the cleanup of a standalone Environment's
+// compute at the deployment idle timeout while no Session is attached, once
+// nothing is pending and its initialization is complete. The caller is a
+// Provider that cannot checkpoint; with checkpoints an idle Environment
+// suspends instead. Any other state is ErrNotIdle.
+func (e *ExecutionOperations) ReleaseIdleUnattached(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.cleanup(ctx, owner, idleRelease)
 }
 
 // cleanupEvidence is the provider proof a cleanup commit consumes.
@@ -189,8 +185,7 @@ const (
 	cleanupRequested cleanupEvidence = iota
 	creationAbsent
 	computeLost
-	idleExpiry
-	endedRelease
+	idleRelease
 )
 
 func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
@@ -199,15 +194,14 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		return Allocation{}, err
 	}
 	lost := evidence == computeLost
-	unattached := evidence == idleExpiry || evidence == endedRelease
 	var result Allocation
 	err = e.storage.WithAllocationCleanup(ctx, key, func(tx AllocationCleanupTx) error {
 		current, err := checkAllocation(tx, owner, lost)
 		if err != nil {
 			return err
 		}
-		if unattached {
-			if err := checkIdleUnattached(ctx, tx, current, evidence == idleExpiry); err != nil {
+		if evidence == idleRelease {
+			if err := checkIdleUnattached(ctx, tx, current); err != nil {
 				return err
 			}
 		}
@@ -227,7 +221,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		if err != nil {
 			return err
 		}
-		if revoked.Reclaimed {
+		if revoked.Ended {
 			err = sessions.CancelWork(ctx, tx)
 		} else {
 			retain := false
@@ -240,20 +234,20 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			// Compute retention ends independently of the Session only when its
 			// initialized filesystem and native history can continue on new compute.
 			// Explicit archive/reset makes this locked eligibility check false.
-			// A standalone Environment is replaced on new compute only while a
-			// Session is attached; unattached, its end expires it.
+			// Without a Session there is nothing to settle: the cleanup request
+			// itself ends a standalone Environment.
 			if !retain && lost && revoked.AttachedSessionID != "" {
 				return ErrAllocationConflict
 			}
-			if !retain {
-				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost || unattached, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
+			if !retain && revoked.AttachedSessionID != "" {
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
 		if err != nil {
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || evidence == cleanupRequested || unattached {
+		if err != nil || evidence == cleanupRequested || evidence == idleRelease {
 			result = pending
 			return err
 		}
@@ -270,21 +264,16 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 	return result, nil
 }
 
-func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation, idle bool) error {
-	if current.State != "running" || current.ComputePhase != "disabled" || current.AttachedSessionID != "" || current.Reclaimed {
+func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation) error {
+	if current.State != "running" || current.ComputePhase != "disabled" || current.AttachedSessionID != "" {
 		return ErrNotIdle
 	}
 	environment, err := tx.LoadEnvironment(ctx)
 	if err != nil {
 		return err
 	}
-	if environment.Status == "failed" || environment.Status == "expired" {
-		// Nothing can use this compute again: release it without waiting.
-		return nil
-	}
-	if !idle || environment.Initialization != "complete" {
-		// With checkpoints an idle Environment suspends instead. The
-		// initialization budget fails an unfinished one, which ends it here.
+	if environment.Initialization != "complete" {
+		// The initialization budget fails an unfinished one, which ends it.
 		return ErrNotIdle
 	}
 	activity, err := tx.LoadActivity(current)
@@ -496,7 +485,7 @@ func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, 
 	if !live {
 		return current, nil
 	}
-	if current.Reclaimed {
+	if current.Ended {
 		return Allocation{}, sessions.ErrNotFound
 	}
 	device, bound, err := tx.LoadEnvironmentDevice()

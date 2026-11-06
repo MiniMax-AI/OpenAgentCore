@@ -77,7 +77,11 @@ func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {
 }
 
 func (t *archiveTx) ReleasePlacement() error {
-	return t.q.ReleaseUnallocatedRuntimePlacement(t.ctx, t.session)
+	environment, err := t.q.GetSessionEnvironmentID(t.ctx, t.session)
+	if err != nil {
+		return err
+	}
+	return t.q.ReleaseInactiveRuntimePlacement(t.ctx, environment)
 }
 
 func (t *archiveTx) RecordArchiveAudit(ctx context.Context) error {

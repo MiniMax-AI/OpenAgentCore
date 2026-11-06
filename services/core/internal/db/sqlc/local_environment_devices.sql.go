@@ -51,7 +51,7 @@ SELECT $1, e.tenant_id, $2, $3, e.id
 FROM environments e
 WHERE e.tenant_id = $4 AND e.id = $5
 AND e.configuration->>'type' = 'openai_hosted'
-AND (NOT e.session_owned OR EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))
+AND EXISTS (SELECT 1 FROM environment_liveness l WHERE l.id = e.id AND l.active)
 AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
 AND NOT EXISTS (SELECT 1 FROM devices previous WHERE previous.environment_id = e.id AND (previous.revoked_at IS NULL OR previous.executor_key_id IS NOT NULL))
 ON CONFLICT (environment_id) WHERE revoked_at IS NULL OR executor_key_id IS NOT NULL DO NOTHING

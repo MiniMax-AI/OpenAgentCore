@@ -259,7 +259,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	deleted, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
-	if err != nil || !deleted.Reclaimed || deleted.ComputeWakeRequested {
+	if err != nil || !deleted.Ended || deleted.ComputeWakeRequested {
 		t.Fatal("deleted session was woken", deleted, err)
 	}
 	if _, err := deploymentExecution(t, w).BeginRestore(t.Context(), deleted, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{}`)); !errors.Is(err, sessions.ErrNotFound) {

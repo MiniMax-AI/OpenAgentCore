@@ -26,8 +26,8 @@ func (q *Queries) CreateEnvironmentSetup(ctx context.Context, arg CreateEnvironm
 }
 
 const getEnvironmentSetup = `-- name: GetEnvironmentSetup :one
-SELECT f.contents, (e.session_owned AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL))::boolean AS reclaimed
-FROM environments e LEFT JOIN environment_setups f ON f.environment_id = e.id
+SELECT f.contents, l.ended::boolean AS ended
+FROM environments e JOIN environment_liveness l ON l.id = e.id LEFT JOIN environment_setups f ON f.environment_id = e.id
 WHERE e.tenant_id = $1 AND e.id = $2
 `
 
@@ -37,14 +37,14 @@ type GetEnvironmentSetupParams struct {
 }
 
 type GetEnvironmentSetupRow struct {
-	Contents  []byte `json:"contents"`
-	Reclaimed bool   `json:"reclaimed"`
+	Contents []byte `json:"contents"`
+	Ended    bool   `json:"ended"`
 }
 
 func (q *Queries) GetEnvironmentSetup(ctx context.Context, arg GetEnvironmentSetupParams) (GetEnvironmentSetupRow, error) {
 	row := q.db.QueryRow(ctx, getEnvironmentSetup, arg.TenantID, arg.ID)
 	var i GetEnvironmentSetupRow
-	err := row.Scan(&i.Contents, &i.Reclaimed)
+	err := row.Scan(&i.Contents, &i.Ended)
 	return i, err
 }
 
