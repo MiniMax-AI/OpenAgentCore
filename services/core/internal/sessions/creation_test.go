@@ -218,8 +218,8 @@ func TestPrepareCreation(t *testing.T) {
 	}{
 		"invalid creator": {func(input *CreateSession) { input.Creator = identity.Subject{} }, fingerprints, ErrInvalidInput},
 		"invalid engine":  {func(input *CreateSession) { input.Engine = "Codex" }, fingerprints, ErrInvalidInput},
-		"blank key":       {func(input *CreateSession) { input.IdempotencyKey = " " }, fingerprints, ErrInvalidInput},
-		"long key":        {func(input *CreateSession) { input.IdempotencyKey = strings.Repeat("k", 129) }, fingerprints, ErrInvalidInput},
+		"empty key":       {func(input *CreateSession) { input.IdempotencyKey = "" }, fingerprints, ErrInvalidInput},
+		"long key":        {func(input *CreateSession) { input.IdempotencyKey = strings.Repeat("k", 257) }, fingerprints, ErrInvalidInput},
 		"configuration over 512K": {func(input *CreateSession) {
 			input.Configuration = json.RawMessage(`"` + strings.Repeat("x", 512*1024) + `"`)
 		}, fingerprints, ErrInvalidInput},
@@ -604,7 +604,7 @@ func TestFindSessionCreation(t *testing.T) {
 		{"missing creation", "create", request, creator, fingerprints, func() (CreationRecord, error) { return CreationRecord{}, ErrNotFound }, ErrNotFound, []string{"FindCreation tenant create"}},
 		{"another creator", "create", request, identity.Subject{Kind: "user", ID: "stranger"}, fingerprints, found, ErrIdempotencyConflict, []string{"FindCreation tenant create"}},
 		{"no intent", "create", nil, creator, nil, nil, ErrInvalidInput, nil},
-		{"invalid key", " ", request, creator, nil, nil, ErrInvalidInput, nil},
+		{"invalid key", "", request, creator, nil, nil, ErrInvalidInput, nil},
 		{"invalid creator", "create", request, identity.Subject{}, nil, nil, ErrInvalidInput, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -326,11 +326,19 @@ func TestSubmitInputs(t *testing.T) {
 	})
 	t.Run("an invalid request touches no storage", func(t *testing.T) {
 		service := deviceService(t, &fakeStorage{t: t})
-		if _, err := service.SubmitInputs(t.Context(), testTenant, testSession, " ", inputs); !errors.Is(err, ErrInvalidInput) {
+		if _, err := service.SubmitInputs(t.Context(), testTenant, testSession, "", inputs); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal(err)
 		}
 		if _, err := service.SubmitInputs(t.Context(), testTenant, testSession, inputKey, nil); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestIdempotencyKeyIsOneTo256Bytes(t *testing.T) {
+	for key, valid := range map[string]bool{"": false, "k": true, strings.Repeat("k", 256): true, strings.Repeat("k", 257): false} {
+		if (ValidateIdempotencyKey(key) == nil) != valid {
+			t.Error("key length", len(key))
+		}
+	}
 }

@@ -37,7 +37,7 @@ func joinsActiveTurn(turn Turn, active bool) bool {
 // passed, or the receipts the batch was admitted with. The checks of
 // SubmitInputs apply, and a failed or expired Environment rejects new input.
 func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, key string, inputs []Input) (EnvironmentInputReservation, error) {
-	if err := ValidateInputKey(key); err != nil {
+	if err := ValidateIdempotencyKey(key); err != nil {
 		return EnvironmentInputReservation{}, err
 	}
 	batch, encoded, err := validateMessageInputs(inputs)

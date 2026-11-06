@@ -239,7 +239,7 @@ Creation validates the body and metadata types, the request fields and initial i
 
 ### Creation retries
 
-Send an `Idempotency-Key` of 1–128 bytes that is not only whitespace; a longer or whitespace-only key returns 400 `invalid_request`. An empty header counts as no key. Without a key, every request creates a new Session. The official service creates a new Session for each request even with the same key; Core returns the original one.
+Send an `Idempotency-Key` of 1–256 bytes; a longer key returns 400 `invalid_request`. An empty header counts as no key. Without a key, every request creates a new Session. The official service creates a new Session for each request even with the same key; Core returns the original one.
 
 | Case | Response |
 | --- | --- |

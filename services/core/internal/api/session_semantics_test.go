@@ -60,7 +60,7 @@ func TestEmptyEventBatchAuthorizesWithoutExecutionEffects(t *testing.T) {
 				}
 			}
 			reads := sessions.reads
-			for _, key := range []string{" ", strings.Repeat("x", 129)} {
+			for _, key := range []string{"", strings.Repeat("x", 257)} {
 				if w := request("owned", "test-api-key", key); w.Code != http.StatusBadRequest || sessions.reads != reads {
 					t.Fatalf("invalid identity reached resource: %d %s", w.Code, w.Body)
 				}

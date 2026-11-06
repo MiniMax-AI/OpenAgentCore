@@ -332,7 +332,7 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 		return NewSession{}, nil, nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	engine := strings.TrimSpace(input.Engine)
-	if !ValidEngine(engine) || !validCreationKey(input.IdempotencyKey) {
+	if !ValidEngine(engine) || ValidateIdempotencyKey(input.IdempotencyKey) != nil {
 		return NewSession{}, nil, nil, fmt.Errorf("%w: engine and idempotency key are required", ErrInvalidInput)
 	}
 	labels := input.Metadata
@@ -415,10 +415,6 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 		Key: input.IdempotencyKey, Creator: input.Creator, Engine: engine, Metadata: encodedMetadata,
 		Configuration: configuration, RequestHash: hex.EncodeToString(hash[:]), IntentHash: intent,
 	}, batch, encodedInput, nil
-}
-
-func validCreationKey(key string) bool {
-	return strings.TrimSpace(key) != "" && len(key) <= 128
 }
 
 // fingerprintedProvider replaces a bundle's key with its keyed fingerprint.
@@ -505,8 +501,8 @@ func (s *Service) FindSessionCreation(ctx context.Context, tenant, key string, r
 	if err := creator.Validate(); err != nil {
 		return Creation{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	if !validCreationKey(key) {
-		return Creation{}, ErrInvalidInput
+	if err := ValidateIdempotencyKey(key); err != nil {
+		return Creation{}, err
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)
 	if err != nil {

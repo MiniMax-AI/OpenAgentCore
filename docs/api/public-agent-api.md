@@ -109,7 +109,7 @@ Two lists differ: `GET /files` returns up to 10,000 files at once, and workspace
 
 ### Idempotency
 
-Send an `Idempotency-Key` (up to 128 bytes) when creating a Session or sending input. A retry with the same key and body returns the original result instead of doing the work twice. The same key with a different body fails with 409 `idempotency_conflict`.
+Send an `Idempotency-Key` (1–256 bytes) when creating a Session or sending input. A retry with the same key and body returns the original result instead of doing the work twice. The same key with a different body fails with 409 `idempotency_conflict`.
 
 ```python
 import uuid

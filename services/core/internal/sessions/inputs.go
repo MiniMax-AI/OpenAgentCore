@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
@@ -31,10 +30,11 @@ type TurnInput struct {
 	CreatedAt time.Time
 }
 
-// ValidateInputKey enforces the shared request identity limit, including no-op requests.
-func ValidateInputKey(key string) error {
-	if strings.TrimSpace(key) == "" || len(key) > 128 {
-		return fmt.Errorf("%w: idempotency key is required and limited to 128 bytes", ErrInvalidInput)
+// ValidateIdempotencyKey enforces the pinned Idempotency-Key bound of 1 to 256
+// bytes on every request identity, including no-op requests.
+func ValidateIdempotencyKey(key string) error {
+	if key == "" || len(key) > 256 {
+		return fmt.Errorf("%w: idempotency key must be 1 to 256 bytes", ErrInvalidInput)
 	}
 	return nil
 }
@@ -331,7 +331,7 @@ type InputReader interface {
 // (ErrInputPending). Internal receipts are not the response body of the
 // public events endpoint.
 func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []Input) ([]InputReceipt, error) {
-	if err := ValidateInputKey(key); err != nil {
+	if err := ValidateIdempotencyKey(key); err != nil {
 		return nil, err
 	}
 	batch, encoded, err := ValidateInputs(inputs)

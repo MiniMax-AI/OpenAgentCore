@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 1db2045ded2e2bf523dd94a3db08c5ac6078bf76489f7cb09de092164e89aa8c
+source_hash: bd942f9e71b26493c6d1c3b0dc6fd57e6781a34a6d8597d8559acfdc6c7b8a2a
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -111,7 +111,7 @@ agents "/agents/sessions?limit=100&after=$LAST_ID"
 
 ### 幂等性 {#idempotency}
 
-创建 Session 或发送输入时，请发送 `Idempotency-Key`（最长 128 字节）。使用相同密钥和正文重试时，会返回原始结果，而不会重复执行工作。相同密钥搭配不同正文会失败，并返回 409 `idempotency_conflict`。
+创建 Session 或发送输入时，请发送 `Idempotency-Key`（1–256 字节）。使用相同密钥和正文重试时，会返回原始结果，而不会重复执行工作。相同密钥搭配不同正文会失败，并返回 409 `idempotency_conflict`。
 
 ```python
 import uuid
