@@ -101,10 +101,6 @@ func (e *ExecutionOperations) archiveSession(ctx context.Context, tenantID, sess
 			if err := tx.RequestArchiveCleanup(current); err != nil {
 				return err
 			}
-		} else {
-			if err := tx.ReleasePlacement(); err != nil {
-				return err
-			}
 		}
 		if err := tx.RecordArchiveAudit(ctx); err != nil {
 			return err

@@ -502,6 +502,8 @@ func (f *fakeExecutionStorage) WithSessionArchive(ctx context.Context, tenantID,
 	return f.withSessionArchive(ctx, tenantID, sessionID, apply)
 }
 
+func (f *fakeExecutionStorage) ReleaseInactivePlacements(context.Context) error { return nil }
+
 func (f *fakeExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
 	if f.clearWake == nil {
 		unexpected(f.t, "ClearWake")

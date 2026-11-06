@@ -52,10 +52,7 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {
 		return err
 	}
-	if err := t.q.EndUnattachedStandaloneEnvironment(ctx, environment); err != nil {
-		return err
-	}
-	return t.q.ReleaseInactiveRuntimePlacement(ctx, environment)
+	return t.q.EndUnattachedStandaloneEnvironment(ctx, environment)
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {

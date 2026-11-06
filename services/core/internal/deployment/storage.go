@@ -68,6 +68,9 @@ type ExecutionStorage interface {
 	// ClearWake clears the allocation's wake request unless activity newer
 	// than observed arrived. It runs on the lease.
 	ClearWake(ctx context.Context, allocationID string, observed time.Time) error
+	// ReleaseInactivePlacements releases the placements of Environments that
+	// can no longer run work and hold no compute. It runs on the lease.
+	ReleaseInactivePlacements(ctx context.Context) error
 }
 
 // AllocationCleanupStorage runs allocation cleanup, which settles the
@@ -196,9 +199,6 @@ type SessionArchiveTx interface {
 	// Session's active Turn whose cancellation was requested, which the
 	// archived cancellation receipt reports.
 	RequestArchiveCleanup(current Allocation) error
-	// ReleasePlacement releases the node placement of the Session's
-	// Environments that have no allocation.
-	ReleasePlacement() error
 	// RecordArchiveAudit records the administrator audit of the archive with
 	// the source on ctx.
 	RecordArchiveAudit(ctx context.Context) error

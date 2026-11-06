@@ -65,12 +65,12 @@ LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state
 -- name: ReleaseRuntimePlacement :exec
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp()) WHERE environment_id=$1;
 
--- name: ReleaseInactiveRuntimePlacement :exec
--- An Environment that can no longer run work gives up a placement it holds without compute.
-UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE runtime_placements.environment_id=$1
-AND EXISTS(SELECT 1 FROM environment_liveness l WHERE l.id=runtime_placements.environment_id AND NOT l.active)
-AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released');
+-- name: ReleaseInactiveRuntimePlacements :exec
+-- Environments that can no longer run work give up the placements they hold without compute.
+UPDATE runtime_placements p SET released_at=clock_timestamp()
+FROM environment_liveness l
+WHERE p.released_at IS NULL AND l.id=p.environment_id AND NOT l.active
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=p.environment_id AND a.state<>'released');
 
 -- name: ListNodeRuntimeAllocations :many
 SELECT a.id,a.node_id,a.deployment_generation,a.observation_error,a.state,a.compute_phase,a.compute_phase_changed_at,e.initialization,a.created_at,a.environment_id,s.id AS attached_session_id,e.tenant_id

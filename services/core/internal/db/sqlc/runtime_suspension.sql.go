@@ -29,7 +29,8 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 
 const endUnattachedStandaloneEnvironment = `-- name: EndUnattachedStandaloneEnvironment :exec
 UPDATE environments e SET status = 'expired'
-WHERE e.id = $1 AND NOT e.session_owned AND e.status NOT IN ('failed', 'expired')
+FROM environment_liveness l
+WHERE e.id = $1 AND l.id = e.id AND l.active AND NOT e.session_owned
   AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = e.id AND s.deleted_at IS NULL)
   AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
   AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state IN ('creating', 'running'))

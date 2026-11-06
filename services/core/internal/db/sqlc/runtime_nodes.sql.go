@@ -484,16 +484,16 @@ func (q *Queries) ReleaseFailedRuntimePlacement(ctx context.Context, arg Release
 	return err
 }
 
-const releaseInactiveRuntimePlacement = `-- name: ReleaseInactiveRuntimePlacement :exec
-UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
-WHERE runtime_placements.environment_id=$1
-AND EXISTS(SELECT 1 FROM environment_liveness l WHERE l.id=runtime_placements.environment_id AND NOT l.active)
-AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
+const releaseInactiveRuntimePlacements = `-- name: ReleaseInactiveRuntimePlacements :exec
+UPDATE runtime_placements p SET released_at=clock_timestamp()
+FROM environment_liveness l
+WHERE p.released_at IS NULL AND l.id=p.environment_id AND NOT l.active
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=p.environment_id AND a.state<>'released')
 `
 
-// An Environment that can no longer run work gives up a placement it holds without compute.
-func (q *Queries) ReleaseInactiveRuntimePlacement(ctx context.Context, environmentID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, releaseInactiveRuntimePlacement, environmentID)
+// Environments that can no longer run work give up the placements they hold without compute.
+func (q *Queries) ReleaseInactiveRuntimePlacements(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, releaseInactiveRuntimePlacements)
 	return err
 }
 

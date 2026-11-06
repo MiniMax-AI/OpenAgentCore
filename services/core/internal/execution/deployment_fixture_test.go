@@ -272,6 +272,10 @@ func (s *strictExecutionStorage) WithSessionArchive(context.Context, string, str
 	return unexpectedDeploymentCall(s.t, "WithSessionArchive")
 }
 
+func (s *strictExecutionStorage) ReleaseInactivePlacements(context.Context) error {
+	return nil
+}
+
 func (s *strictExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
 	if s.clearWake == nil {
 		return unexpectedDeploymentCall(s.t, "ClearWake")

@@ -66,6 +66,14 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 	}
 	operation, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	// The one release of placements: an Environment that can no longer run work
+	// gives up the placement it holds without compute, freeing the slot for demand.
+	if err := m.deployment.ReleaseInactivePlacements(operation); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return m.lease.CheckOwnership(ctx)
+		}
+		return err
+	}
 	rows, next, err := m.deploymentReader.PlacementDemand(operation, m.placementCursor)
 	if err != nil {
 		// A bounded inventory read may time out while the execution owner is

@@ -17,8 +17,6 @@ type ResetEnvironmentTx interface {
 	ExpireEnvironment(ctx context.Context, environment string) error
 	// RequestCleanup revokes the allocation's device and requests its cleanup.
 	RequestCleanup(current Allocation) error
-	// ReleasePlacement releases a reservation that has no allocation.
-	ReleasePlacement() error
 }
 
 // ExpireResetEnvironment ends an unattached standalone Environment for the
@@ -62,6 +60,6 @@ func (e *ExecutionOperations) ExpireResetEnvironment(ctx context.Context, key Al
 		if live {
 			return tx.RequestCleanup(current)
 		}
-		return tx.ReleasePlacement()
+		return nil
 	})
 }

@@ -136,11 +136,6 @@ func (f *fakeArchiveTx) RequestArchiveCleanup(current Allocation) error {
 	return nil
 }
 
-func (f *fakeArchiveTx) ReleasePlacement() error {
-	f.record("ReleasePlacement")
-	return nil
-}
-
 func (f *fakeArchiveTx) RecordArchiveAudit(ctx context.Context) error {
 	f.record("RecordArchiveAudit")
 	if source, ok := adminaudit.FromContext(ctx); ok {
@@ -250,9 +245,9 @@ func TestArchiveSession(t *testing.T) {
 	}{
 		{"live allocation", sessions.LockedSession{}, hosted, live, nil,
 			join(head, expire, []string{"RequestArchiveCleanup device allocation", "RecordArchiveAudit", "LoadArchive"})},
-		{"no allocation", sessions.LockedSession{}, hosted, nil, nil, join(head, expire, []string{"ReleasePlacement", "RecordArchiveAudit", "LoadArchive"})},
+		{"no allocation", sessions.LockedSession{}, hosted, nil, nil, join(head, expire, []string{"RecordArchiveAudit", "LoadArchive"})},
 		{"released allocation", sessions.LockedSession{}, hosted, &Allocation{ID: "allocation", ProviderKey: "previous", State: "released"}, nil,
-			join(head, expire, []string{"ReleasePlacement", "RecordArchiveAudit", "LoadArchive"})},
+			join(head, expire, []string{"RecordArchiveAudit", "LoadArchive"})},
 		{"ended Environment", sessions.LockedSession{}, expired, live, nil,
 			join(head, settle, []string{"RequestArchiveCleanup device allocation", "RecordArchiveAudit", "LoadArchive"})},
 		{"allocation of another installation", sessions.LockedSession{}, hosted, &Allocation{ID: "allocation", ProviderKey: "previous", State: "running"}, ErrConflict, head},
@@ -296,10 +291,10 @@ func TestArchiveResetSession(t *testing.T) {
 		calls       []string
 	}{
 		{"idle Session", resetting(ResetAuto), hosted, false, requested, nil,
-			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "ReleasePlacement", "RecordArchiveAudit", "LoadArchive"}},
+			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
 		{"busy Session", resetting(ResetAuto), hosted, true, requested, ErrSandboxResetSessionBusy, []string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy"}},
 		{"forced busy Session", resetting(ResetForce), hosted, true, requested, nil,
-			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "ReleasePlacement", "RecordArchiveAudit", "LoadArchive"}},
+			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
 		{"ended Environment", resetting(ResetAuto), failed, false, requested, nil, []string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadArchive"}},
 		{"another reset", resetting(ResetAuto), hosted, false, requested.Add(time.Second), ErrConflict, []string{"LoadDeployment", "LoadEnvironment"}},
 	} {

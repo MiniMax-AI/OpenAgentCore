@@ -449,6 +449,13 @@ func (e *ExecutionOperations) ClearWake(ctx context.Context, owner Allocation, o
 	return e.storage.ClearWake(ctx, id, observed)
 }
 
+// ReleaseInactivePlacements is the one release of node placements: every
+// Environment that can no longer run work gives up the placement it holds
+// without compute, whatever ended it.
+func (e *ExecutionOperations) ReleaseInactivePlacements(ctx context.Context) error {
+	return e.storage.ReleaseInactivePlacements(ctx)
+}
+
 // change runs apply on the owner's allocation in its Session-locked
 // transaction, after checkAllocation.
 func (e *ExecutionOperations) change(ctx context.Context, owner Allocation, live bool, apply func(AllocationTx, Allocation) (Allocation, error)) (Allocation, error) {

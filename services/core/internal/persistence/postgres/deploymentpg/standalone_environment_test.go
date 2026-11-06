@@ -263,9 +263,42 @@ func TestDetachReleasesTheHeldPlacementOfAnEndedEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	deleteSession(t, f, key, attachSession(t, f, key))
-	var held int
-	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_placements WHERE environment_id=$1 AND released_at IS NULL`, key.EnvironmentID).Scan(&held); err != nil || held != 0 || environmentStatus(t, f, key) != "expired" {
-		t.Fatal("the ended Environment kept its placement", held, err)
+	if err := changes.ReleaseInactivePlacements(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if held := heldPlacements(t, f, key); held != 0 || environmentStatus(t, f, key) != "expired" {
+		t.Fatal("the ended Environment kept its placement", held)
+	}
+}
+
+func heldPlacements(t *testing.T, f fixture, key deployment.AllocationKey) (held int) {
+	t.Helper()
+	if err := f.pool.QueryRow(t.Context(), `SELECT count(*) FROM runtime_placements WHERE environment_id=$1 AND released_at IS NULL`, key.EnvironmentID).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	return held
+}
+
+// An Environment that fails while holding a placement and no compute gives the
+// placement up, and an active one keeps it.
+func TestFailedEnvironmentWithoutComputeReleasesItsPlacement(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	f.connect(t, node.NodeID)
+	key := standaloneEnvironment(t, f)
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, key.EnvironmentID, node.NodeID, view.Generation); err != nil {
+		t.Fatal(err)
+	}
+	if err := changes.ReleaseInactivePlacements(t.Context()); err != nil || heldPlacements(t, f, key) != 1 {
+		t.Fatal("an active Environment lost its placement", err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET status='failed' WHERE id=$1`, key.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	if err := changes.ReleaseInactivePlacements(t.Context()); err != nil || heldPlacements(t, f, key) != 0 {
+		t.Fatal("the failed Environment kept its placement", err)
 	}
 }
 

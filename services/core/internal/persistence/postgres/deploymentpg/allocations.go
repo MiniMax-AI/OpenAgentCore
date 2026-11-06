@@ -109,6 +109,12 @@ func (e *Execution) withAllocation(ctx context.Context, key deployment.Allocatio
 	}))
 }
 
+func (e *Execution) ReleaseInactivePlacements(ctx context.Context) error {
+	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		return sqlc.New(tx).ReleaseInactiveRuntimePlacements(ctx)
+	})
+}
+
 func (e *Execution) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
 	id, err := parseID(allocationID)
 	if err != nil {

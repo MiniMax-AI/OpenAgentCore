@@ -76,14 +76,6 @@ func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {
 	return err
 }
 
-func (t *archiveTx) ReleasePlacement() error {
-	environment, err := t.q.GetSessionEnvironmentID(t.ctx, t.session)
-	if err != nil {
-		return err
-	}
-	return t.q.ReleaseInactiveRuntimePlacement(t.ctx, environment)
-}
-
 func (t *archiveTx) RecordArchiveAudit(ctx context.Context) error {
 	return auditpg.RecordAdminMutation(ctx, t.q, t.tenantID, "archive", "session", uuidString(t.session))
 }
