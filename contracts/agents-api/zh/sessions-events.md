@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 180e08dbdd9c85ae85005cc202f73316f2b1b04828cca67df13b804206f49f02
+source_hash: 1c6e57bbd212f7155906d68bbbcb2e976170512a2aca907e024104667419d720
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -50,7 +50,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - **限制。** 请求正文最多为 1 MiB，单次请求存储的输入最多为 512 KiB。
 - **空值批次。** 将 `events` 显式设为 `null` 无效。
 - **空批次。** `{"events": []}` 会检查 Session 是否存在并返回 202。它不会创建 Turn、Item 或重试标识。
-- **重试。** 最长 128 字节的 `Idempotency-Key` 标识整个有序批次。相同密钥和批次会再次返回 202，而不会重复接纳任何内容；相同密钥搭配另一个批次会返回 409 `idempotency_conflict`。不带密钥的请求始终是新请求。
+- **重试。** 1–256 字节的 `Idempotency-Key` 标识整个有序批次；空键或更长的键返回 400。相同密钥和批次会再次返回 202，而不会重复接纳任何内容；相同密钥搭配另一个批次会返回 409 `idempotency_conflict`。不带密钥的请求始终是新请求。
 - **消息。** 在空闲 Session 上，消息批次会启动一个排队的 Turn。Turn 运行时，消息会加入其中（引导）；它们绝不会启动并行 Turn。每条消息都保留为独立的用户 Item，即使 Harness 将多条消息作为同一个提示接收。
 - **取消。** 排队的 Turn 无需活动 Runtime 即可取消。正在运行的 Turn 只有在 Runtime 确认后才会取消；完成操作可能赢得该竞争。读取到 `cancelled` 时才表示该 Turn 已停止，而不是请求返回时。正在等待函数结果的 Turn 在此之前会让 Session 保持 `requires_action` 及其 `required_actions`，且该请求不会发出 Session 事件。在没有待处理输入的情况下，对空闲 Session 执行的取消会被接受且不产生任何效果；而在输入预留待处理期间，取消会返回 409。
 - **函数结果。** `turn_id`、`call_id` 和 `success` 为必填项；`output` 和 `error` 为可选项且可为空（[内容规则](message-content.md#function-results)）。重复提交完全相同的结果会返回 202，不会再次应用或发出事件。Harness 应用结果时才会出现结果 Item；如果取消操作导致结果无法应用，结果仍会存储，但不会产生 Item。

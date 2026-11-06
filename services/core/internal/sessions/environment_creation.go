@@ -153,8 +153,8 @@ func (s *Service) environmentIdentity(key string, creator identity.Subject, requ
 	if err := creator.Validate(); err != nil {
 		return EnvironmentIdentity{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	if key == "" || len(key) > 256 {
-		return EnvironmentIdentity{}, ErrInvalidInput
+	if err := ValidateIdempotencyKey(key); err != nil {
+		return EnvironmentIdentity{}, err
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)
 	if err != nil {

@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 29a928dc41487b9e5a11cdeff7305d2f006040822caf66b299e504cb8eab9662
+source_hash: abb76393a7bc5669970b2fd7156f6293143b12949f0517fc8061737f51c73d32
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -241,7 +241,7 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 ### 创建重试 {#creation-retries}
 
-发送一个 1–128 字节且不只包含空白字符的 `Idempotency-Key`；更长或仅包含空白字符的键会返回 400 `invalid_request`。空标头视为未提供键。没有键时，每个请求都会创建一个新的 Session。官方服务即使收到相同的键，也会为每个请求创建新的 Session；Core 则返回原有 Session。
+发送一个 1–256 字节的 `Idempotency-Key`；更长的键会返回 400 `invalid_request`。空标头视为未提供键。没有键时，每个请求都会创建一个新的 Session。官方服务即使收到相同的键，也会为每个请求创建新的 Session；Core 则返回原有 Session。
 
 | 情况 | 响应 |
 | --- | --- |

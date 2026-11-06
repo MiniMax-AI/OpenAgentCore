@@ -29,10 +29,10 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(raw, &request)
 	key := r.Header.Get("Idempotency-Key")
-	if key == "" {
+	if len(r.Header.Values("Idempotency-Key")) == 0 {
 		key = uuid.NewString()
 	}
-	if err := sessions.ValidateInputKey(key); err != nil {
+	if err := sessions.ValidateIdempotencyKey(key); err != nil {
 		writeSessionsError(w, r, err)
 		return
 	}
