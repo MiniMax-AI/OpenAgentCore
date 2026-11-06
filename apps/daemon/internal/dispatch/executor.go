@@ -215,7 +215,7 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	}
 	r.mu.Lock()
 	owner.native, owner.preparing = native, false
-	r.log.Info("executor native_prepare", "executor_id", owner.id, "session_id", owner.sessionID, "duration_ms", time.Since(started).Milliseconds(), "success", err == nil && native != nil)
+	r.log.Info("executor native_prepare", "executor_id", owner.id, "session_id", owner.sessionID, "duration_ms", time.Since(started).Milliseconds(), "success", err == nil && native != nil, "err", err)
 	ready := native != nil && err == nil && !owner.invalid && !r.closed && r.suspension == nil && p.status.State == "preparing" && p.ctx.Err() == nil
 	p.busy = false
 	if ready {
