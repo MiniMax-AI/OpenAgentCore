@@ -200,7 +200,7 @@ These official fields have no Core meaning. A request that sets one returns 400 
 | `desktop.enabled: true`; responses carry `desktop: {"enabled": false}` | `desktop.enabled` |
 | A nonempty `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` `environment_variable` | `auth.type` |
-| A nonempty `vault_ids` on `POST /agents/environments` | `vault_ids` |
+| A nonempty `vault_ids` on `POST /agents/environments` (Core's choice, [recorded](./index.md)) | `vault_ids` |
 | The Session input `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
 
 ### Session admission

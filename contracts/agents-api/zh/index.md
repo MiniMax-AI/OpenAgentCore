@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: dd437c362f6357eabf9a2b82bc872228138a11b57cce9b557e7e1593fcb760b5
+source_hash: 40aa4ceb297c0866fa75cbc20a6c0d7d9b1f2d64aba7d009446b08d0ec299ded
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -69,10 +69,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **独立 Environment**（[独立 Environment](environments.md#standalone-environments)）
 
 - Core 没有预热 beta 的门控；官方的创建和列出需要该 beta 的访问权限。
-- `vault_ids` 必须为 null 或 `[]`；非空列表返回 400。Credential 只能通过 Session 到达 Environment。
+- 独立 Environment 不接受 `vault_ids`（见[创建](environments.md#standalone-environments)）；Credential 只能通过 Session 到达 Environment。
 - 独立 Environment 以自己的网络策略创建，不会为后续 Session 放宽。若该策略无法到达模型提供方，挂载返回 400 `model_provider_unreachable`；官方服务没有此错误。
-- `POST /agents/environments` 的 `Idempotency-Key` 永不过期，而官方服务在组织、项目和创建者范围内去重 24 小时。Core 将它限定在项目和创建者范围内。同一个键搭配不同参数时返回 409，与 pin 一致；只有错误码 `idempotency_conflict` 尚未与官方服务核实。
+- `POST /agents/environments` 的 `Idempotency-Key` 永不过期，而官方服务在组织、项目和创建者范围内去重 24 小时。Core 将它限定在项目范围内。同一个键搭配不同参数时返回 409，与 pin 一致；只有错误码 `idempotency_conflict` 尚未与官方服务核实。
 - pin 规定未完成的 hosted 创建返回 409。Core 在一个事务中完成创建，因此使用相同键和正文的重试会返回处于当前状态的 Environment，包括 `pending`。
+- Environment 列表的 `limit` 范围和对无法解析的 `after` 返回的 404（[页面大小](wire-semantics.md#page-size)、[游标](wire-semantics.md#cursors)）是 Core 自己的行为，没有官方样本。
 - 过期的未挂载 [Environment](environments.md#standalone-environments) 绝不会在新计算上被替换。
 
 **列表**（[lists](wire-semantics.md#lists)）
@@ -211,7 +212,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
-- 独立 Environment：`environment.environment_id` 的 `not` 约束按 schema 顺序报告第一个违规成员，其消息文本没有样本；schema 未列出的成员返回未知参数错误。Core 对未挂载且初始化已完成的 Environment 读作 `ready`，在此之前创建后读作 `pending`。列表显示调用方创建的 Environment，检索和挂载则接受项目内的任何调用方。官方服务如何处理对仍为 `pending` 的 Environment 的挂载、是否列出 `failed` 和 `expired` 的 Environment，以及挂载前的文件路由（Core 返回 409），均没有官方样本。
+- 独立 Environment：`environment.environment_id` 的 `not` 约束按 schema 顺序报告第一个违规成员，其消息文本没有样本；schema 未列出的成员返回未知参数错误。Core 对未挂载且初始化已完成的 Environment 读作 `ready`，在此之前读作连接状态：创建后为 `pending`，Runtime 连接后为 `connected` 或 `disconnected`。Core 只在挂载了 Session 时记录 Session 的 Environment 事件，因此挂载到已经 `ready` 的 Environment 的 Session 看不到 `pending` 或 `ready`；官方在这种情况下的事件未经核实。官方服务如何处理对仍为 `pending` 的 Environment 的挂载、是否列出 `failed` 和 `expired` 的 Environment，以及挂载前的文件路由（Core 返回 409），均没有官方样本。
 - Session 更新何时绑定到排队中的 Turn：Core 在接受创建根 Turn 的输入时绑定该 Turn 的设置，因此更新之前已排队的 Turn 保持原有取值。
 - Session 响应中“automatic review is not enabled”的含义：除 `auto_review` 外，Core 省略 `review`。
 - Automations 中固定版本来源未说明的部分（[Automations](automations.md)）：

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 32ae503b0901fb4f102eb2be757682bd680647c220f904f1615eced4bf428ade
+source_hash: 1db2045ded2e2bf523dd94a3db08c5ac6078bf76489f7cb09de092164e89aa8c
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -580,12 +580,13 @@ session = client.beta.agents.sessions.create(
 ```
 
 ```sh [curl]
-agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
+agents /agents/environments -d "{\"environment\": {\"type\": \"openai_hosted\", \"environment_template_id\": \"$TEMPLATE_ID\"}}"
+agents /agents/sessions -d "{\"environment\": {\"type\": \"openai_hosted\", \"environment_id\": \"$ENVIRONMENT_ID\"}, \"agent_id\": \"$AGENT_ID\", \"input\": \"Summarize the data in /workspace.\"}"
 ```
 
 :::
 
-没有 Session 且初始化已完成的 Environment 读作 `ready`。`environment_id` 不接受 `environment` 的其他成员。挂载 Session 之前文件不可用。空闲的 Environment 会过期，因此应在使用前不久预热。详细信息请参阅[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
+未挂载的 Environment 会过期，因此应在使用前不久预热。状态、文件和生命周期见[独立 Environment](../../../contracts/agents-api/zh/environments.md#standalone-environments)。
 
 ## Automations {#automations}
 

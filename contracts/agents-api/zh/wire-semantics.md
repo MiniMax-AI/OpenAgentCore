@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 1a7981877fca9c2d546118389e8e0ff21c4530196c520700f871c9b62b13c22f
+source_hash: 29a928dc41487b9e5a11cdeff7305d2f006040822caf66b299e504cb8eab9662
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -202,7 +202,7 @@ Session 创建和更新、Vault 创建、Credential 创建和更新、Environmen
 | `desktop.enabled: true`；响应携带 `desktop: {"enabled": false}` | `desktop.enabled` |
 | 非空的 `network.blocked_domains` | `network.blocked_domains` |
 | Credential `auth.type` 为 `environment_variable` | `auth.type` |
-| `POST /agents/environments` 的非空 `vault_ids` | `vault_ids` |
+| `POST /agents/environments` 的非空 `vault_ids`（Core 的选择，[已记录](index.md)） | `vault_ids` |
 | Session 输入 `agent.session.input.computer_use_approval_request_result` | `events[N].type` |
 
 ### Session 准入 {#session-admission}

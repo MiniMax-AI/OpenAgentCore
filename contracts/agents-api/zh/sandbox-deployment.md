@@ -140,7 +140,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 支持 checkpoint 时，空闲超时触发[挂起](../../../docs/zh/sandbox-provider.md#suspension)。不支持时，Session 持有的分配继续运行；超时对未挂载 Environment 的作用见[无 Session 时的生命周期](environments.md#standalone-environments)。
 
-变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配，并在 retained slot 已满时[提前结束符合条件的检查点的保留期](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级设置，提供商不支持 checkpoint 时为 **空闲时间**；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
+变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配，并在 retained slot 已满时[提前结束符合条件的检查点的保留期](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级设置，提供商不支持 checkpoint 时为 **空闲超时**；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
 
 ## 代次所有权与推出 {#generation-ownership-and-rollout}
 

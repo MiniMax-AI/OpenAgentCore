@@ -578,12 +578,13 @@ session = client.beta.agents.sessions.create(
 ```
 
 ```sh [curl]
-agents /agents/environments -d '{"environment": {"type": "openai_hosted"}}'
+agents /agents/environments -d "{\"environment\": {\"type\": \"openai_hosted\", \"environment_template_id\": \"$TEMPLATE_ID\"}}"
+agents /agents/sessions -d "{\"environment\": {\"type\": \"openai_hosted\", \"environment_id\": \"$ENVIRONMENT_ID\"}, \"agent_id\": \"$AGENT_ID\", \"input\": \"Summarize the data in /workspace.\"}"
 ```
 
 :::
 
-An Environment with no Session and complete initialization reads `ready`. `environment_id` accepts no other `environment` member. Files stay unavailable until a Session is attached. An idle Environment expires, so prewarm shortly before use. Details: [Standalone Environments](../../contracts/agents-api/environments.md#standalone-environments).
+An unattached Environment expires, so prewarm shortly before use. [Standalone Environments](../../contracts/agents-api/environments.md#standalone-environments) owns its status, files and lifetime.
 
 ## Automations
 

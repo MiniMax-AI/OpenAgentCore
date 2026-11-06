@@ -24,7 +24,7 @@ export const sandbox = {
   "Automatic suspension": "自动挂起",
   "Idle timeout": "空闲超时",
   "Idle before expiry (seconds)": "空闲多久后过期（秒）",
-  "Deployment-wide: 30–86,400 seconds. This Provider does not suspend sandboxes. A standalone Environment with no Session attached expires after this idle time; sandboxes with a Session keep running.": "整个部署统一生效：30–86,400 秒。此 Provider 不挂起沙箱；没有挂载 Session 的独立 Environment 空闲超过该时间后过期，有 Session 的沙箱继续运行。",
+  "Deployment-wide: 30–86,400 seconds. This Provider does not suspend sandboxes. A standalone Environment with no Session attached expires after this idle time; sandboxes with a Session keep running.": "整个部署统一生效：30–86,400 秒。此提供商不挂起沙箱；没有挂载 Session 的独立 Environment 空闲超过该时间后过期，有 Session 的沙箱继续运行。",
   "Current policy for new suspensions, not a countdown for existing snapshots. The next Turn requests a resume.": "这是新挂起任务采用的当前策略，不是现有快照的到期倒计时。下一轮 Turn 会请求恢复。",
   "The idle policy applies to the whole deployment.": "空闲策略对整个部署生效。",
   "Snapshot retention": "快照保留期",
