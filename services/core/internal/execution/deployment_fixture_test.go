@@ -130,6 +130,7 @@ type strictExecutionStorage struct {
 	withAllocation        func(context.Context, deployment.AllocationKey, func(deployment.AllocationTx) error) error
 	withAllocationCleanup func(context.Context, deployment.AllocationKey, func(deployment.AllocationCleanupTx) error) error
 	clearWake             func(context.Context, string, time.Time) error
+	releasedInactive      int
 }
 
 func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(deployment.DeploymentTx) error) error {
@@ -273,6 +274,7 @@ func (s *strictExecutionStorage) WithSessionArchive(context.Context, string, str
 }
 
 func (s *strictExecutionStorage) ReleaseInactivePlacements(context.Context) error {
+	s.releasedInactive++
 	return nil
 }
 

@@ -67,7 +67,7 @@ func TestStandaloneEnvironmentOfficialClientPostgres(t *testing.T) {
 }
 
 // publicPoster returns a request function for the public API under one Project key.
-func publicPoster(t *testing.T, s *Store, tenant, subject string) func(method, path, key, body string) (int, string) {
+func publicPoster(t *testing.T, s *Store, tenant, subject string) func(method, path, body string, headers ...string) (int, string) {
 	t.Helper()
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: subject, TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
@@ -75,13 +75,13 @@ func publicPoster(t *testing.T, s *Store, tenant, subject string) func(method, p
 	if err != nil {
 		t.Fatal(err)
 	}
-	return func(method, path, key, body string) (int, string) {
+	return func(method, path, body string, headers ...string) (int, string) {
 		request := httptest.NewRequest(method, "/v1"+path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+token)
 		request.Header.Set("OpenAI-Beta", "agents=v1")
 		request.Header.Set("Content-Type", "application/json")
-		if key != "" {
-			request.Header.Set("Idempotency-Key", key)
+		for i := 0; i+1 < len(headers); i += 2 {
+			request.Header.Set(headers[i], headers[i+1])
 		}
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, request)
@@ -89,9 +89,9 @@ func publicPoster(t *testing.T, s *Store, tenant, subject string) func(method, p
 	}
 }
 
-func createStandalone(t *testing.T, request func(method, path, key, body string) (int, string)) string {
+func createStandalone(t *testing.T, request func(method, path, body string, headers ...string) (int, string)) string {
 	t.Helper()
-	code, body := request("POST", "/agents/environments", "", `{"environment":{"type":"openai_hosted"}}`)
+	code, body := request("POST", "/agents/environments", `{"environment":{"type":"openai_hosted"}}`)
 	var environment struct {
 		ID string `json:"id"`
 	}
@@ -111,7 +111,7 @@ func TestConcurrentAttachHasOneWinnerPostgres(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range codes {
 		wg.Go(func() {
-			codes[i], bodies[i] = request("POST", "/agents/sessions", "", `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted","environment_id":"`+environment+`"}}`)
+			codes[i], bodies[i] = request("POST", "/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted","environment_id":"`+environment+`"}}`)
 		})
 	}
 	wg.Wait()
@@ -146,7 +146,7 @@ func TestAttachWaitsForTheEnvironmentBeforeTheDeploymentPostgres(t *testing.T) {
 	}
 	done := make(chan int, 1)
 	go func() {
-		code, _ := request("POST", "/agents/sessions", "", `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted","environment_id":"`+environment+`"}}`)
+		code, _ := request("POST", "/agents/sessions", `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted","environment_id":"`+environment+`"}}`)
 		done <- code
 	}()
 	for deadline, waiting := time.Now().Add(10*time.Second), 0; waiting == 0; time.Sleep(10 * time.Millisecond) {
@@ -178,8 +178,8 @@ func TestStandaloneEnvironmentListIsScopedToItsCreatorPostgres(t *testing.T) {
 	tenant := uuid.NewString()
 	owner, other := publicPoster(t, s, tenant, "list-owner"), publicPoster(t, s, tenant, "list-other")
 	environment := createStandalone(t, owner)
-	list := func(request func(method, path, key, body string) (int, string)) []string {
-		code, body := request("GET", "/agents/environments", "", "")
+	list := func(request func(method, path, body string, headers ...string) (int, string)) []string {
+		code, body := request("GET", "/agents/environments", "")
 		var page struct {
 			Data []struct {
 				ID string `json:"id"`
@@ -214,7 +214,7 @@ func TestConcurrentCreatesWithOneKeyMakeOneEnvironmentPostgres(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range ids {
 		wg.Go(func() {
-			code, body := request("POST", "/agents/environments", "one-key", `{"environment":{"type":"openai_hosted"}}`)
+			code, body := request("POST", "/agents/environments", `{"environment":{"type":"openai_hosted"}}`, "Idempotency-Key", "one-key")
 			var environment struct {
 				ID string `json:"id"`
 			}
@@ -232,6 +232,12 @@ func TestConcurrentCreatesWithOneKeyMakeOneEnvironmentPostgres(t *testing.T) {
 	for _, id := range ids {
 		if id != ids[0] {
 			t.Fatal("creates returned different Environments", ids)
+		}
+	}
+	// The pinned Idempotency-Key is 1 to 256 bytes.
+	for _, key := range []string{"", strings.Repeat("k", 257)} {
+		if code, body := request("POST", "/agents/environments", `{"environment":{"type":"openai_hosted"}}`, "Idempotency-Key", key); code != 400 {
+			t.Error("invalid key", len(key), code, body)
 		}
 	}
 }

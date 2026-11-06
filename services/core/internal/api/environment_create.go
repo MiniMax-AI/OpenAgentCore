@@ -47,7 +47,7 @@ func (h *Handler) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	key := r.Header.Get("Idempotency-Key")
-	if key == "" {
+	if len(r.Header.Values("Idempotency-Key")) == 0 {
 		key = uuid.NewString()
 	} else if id, found, err := h.Execution.SessionAdmission.ReplayEnvironment(r.Context(), tenantID(r), sessionCreator(r), key, raw); err != nil {
 		writeOperationError(w, r, err)

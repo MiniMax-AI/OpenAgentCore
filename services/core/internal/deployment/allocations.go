@@ -240,7 +240,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 				return ErrAllocationConflict
 			}
 			if !retain && revoked.AttachedSessionID != "" {
-				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired || lost, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
 		if err != nil {

@@ -183,3 +183,20 @@ func TestFreedSlotWakesPlacement(t *testing.T) {
 		t.Fatal("freed slot did not wake placement")
 	}
 }
+
+// Placement reservation first releases the placements of inactive
+// Environments, so their slots serve the demand it reads next.
+func TestPlacementReservationReleasesInactivePlacementsFirst(t *testing.T) {
+	m := testRuntimeManager(t)
+	storage := &strictExecutionStorage{t: t}
+	_, m.deployment = deploymentOperations(t, &strictDeploymentStorage{t: t}, &strictDeploymentReader{t: t}, storage)
+	m.deploymentReader = &strictDeploymentReader{t: t, placementDemand: func(context.Context, deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {
+		if storage.releasedInactive != 1 {
+			t.Fatal("demand read before the release", storage.releasedInactive)
+		}
+		return nil, deployment.PlacementDemandCursor{}, nil
+	}}
+	if err := m.reservePlacements(t.Context()); err != nil || storage.releasedInactive != 1 {
+		t.Fatal("inactive placements not released", storage.releasedInactive, err)
+	}
+}
