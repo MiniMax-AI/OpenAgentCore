@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 0bb4f94a1520a4f03901d206b9f60458ea8725f52b960dcfd31861325d81f83e
+source_hash: b4a7da9ff24dd556a34b2a32c51b534b0dbac8464f840c493f019748fae3792f
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
@@ -173,7 +173,7 @@ adapter 不实现这些行为，但依赖它们。代码层面的机制见 [Core
 - Core 在调用 `Create` 之前提交 allocation、其 daemon 凭据摘要和 Session 绑定。只有新的 allocation receipt 才允许 `Create`；重试和 Core 重启只观察同一个 `Reference`，不重放 `Create`，也不轮换凭据。
 - 每个 node 有一个串行 lifecycle worker，同一 node 的调用从不并发；direct 提供商的 allocation 共用一个 worker。某个 node 上卡住的提供商不会阻塞其他 node。
 - Core 从不根据引擎或提供商名称推断引导完成；由 adapter 通过 `Info.BootstrapComplete` 声明。
-- Core 只在撤销 device 权限、结清待处理 input 并请求取消之后才调用 `Kill`。临时提供商故障、未知的 `Create` 结果和已停止的计算资源都不证明永久失败。
+- Core 只在撤销 device 权限、结清待处理 input 并请求取消之后才调用 `Kill`。临时提供商故障、未知的 `Create` 结果和已停止的计算资源都不证明永久失败。[超时与限制](#timeouts-and-limits)中的启动期限限定了等待从未进入运行状态的计算资源的时间：它结束该 Environment，但并不声明 `Create` 已失败。
 - Core 只有在确认清理 allocation 的计算资源与 volume，并证明原始 `Create` 已结算后才释放 allocation。在此之前它保留清理归属，包括观察到资源不存在之后，有界扫描继续捕获迟到的资源，不再次 `Create`。公开删除 Session 之后同样适用。
 - Core 从不在离线 node、超时或空读取时释放 allocation，也不对不[在线](../../contracts/agents-api/zh/node-generation-protocol.md#connection)的 node 执行 lifecycle 操作。保留的归属需要精确的提供商证据：socket 路径、实例缺失或空列表都不证明已清理，也不授权替代。
 - Placement 是自动的，调用方不能选择 node。活动 allocation 即使离线也保留原 node。确认释放后，符合条件的保留 Session 可以再次预约兼容容量，包括在其他 node 上。释放 active 容量前必须确认 source 已拆除，未知操作保留其预约。等待、排序和 generation 选择由[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)负责。
@@ -310,6 +310,7 @@ Core 在释放 allocation 和 placement 归属前，确认原始创建已结算�
 | 快照保留期 | 支持检查点的 allocation，由[暂停策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)设定 | 保留期结束时 Core 清理快照，并对符合条件的 Session 通过[冷替换](#cold-replacement-after-checkpoint-retention)替换计算资源 |
 | 15 s | 空闲 node allocation 在容量压力暂停之前的无活动时间 | 存在兼容的等待需求时，Core 可以早于空闲超时暂停它 |
 | 2 min | 所在 node 没有空闲 active slot 但有空闲 retained slot 时，空闲 allocation 的无活动时间 | Core 可以早于空闲超时、在没有等待需求时暂停它，让下一个 Session 找到空闲 slot |
+| 10 min | 从 allocation 创建到 Core 观测到其计算运行且引导完成的时间 | Core 使 Environment 失败，然后像任何清理一样调用 `Kill` 并释放 allocation。未结算的 `Create` 在结算之前保留清理归属 |
 | 50 MiB 加 32 字节（`MaxCommandInputBytes`） | `Command.Stdin` | 命令无效 |
 
 在线窗口和其他节点计时器见[沙箱节点协议](../../contracts/agents-api/zh/node-generation-protocol.md#timeouts-and-limits)。

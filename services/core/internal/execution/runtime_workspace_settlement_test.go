@@ -224,13 +224,10 @@ func TestDeletedUnknownWorkspaceCreationRequiresOwnedSettlementReceipt(t *testin
 			t.Fatal(err)
 		}
 		observeErr := lifecycle.observe(ctx, allocation)
-		if observation == "unknown" && !errors.Is(observeErr, sandbox.ErrComputeUnconfirmed) {
-			t.Fatal("unknown observation changed semantics", observeErr)
-		}
 		if observation == "foreign" && !errors.Is(observeErr, sandbox.ErrOwnership) {
 			t.Fatal("foreign settlement accepted", observeErr)
 		}
-		if (observation == "absent" || observation == "settled") && observeErr != nil {
+		if observation != "foreign" && observeErr != nil {
 			t.Fatal(observeErr)
 		}
 		if _, err = lifecycle.workspaces.DeleteBatch(ctx, ""); err != nil {

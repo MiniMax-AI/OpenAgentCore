@@ -78,7 +78,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 		{name: "unknown creation stays retained", loseCreate: true, inspectionError: sandbox.ErrInvalid, wantKill: true},
 		{name: "foreign settlement rejected", loseCreate: true, settleInspection: true, foreign: true, inspectionError: sandbox.ErrInvalid},
 		{name: "foreign ownership rejected", loseCreate: true, inspectionError: sandbox.ErrOwnership},
-		{name: "unavailable observation stays retained", loseCreate: true, inspectionError: sandbox.ErrComputeUnconfirmed},
+		{name: "unavailable observation stays retained", loseCreate: true, inspectionError: sandbox.ErrComputeUnconfirmed, wantKill: true},
 		{name: "kill ownership rejection stays retained", inspectionError: sandbox.ErrInvalid, killError: sandbox.ErrOwnership, wantSettled: true, wantKill: true},
 		{name: "kill unavailable stays retained", inspectionError: sandbox.ErrInvalid, killError: sandbox.ErrComputeUnconfirmed, wantSettled: true, wantKill: true},
 	} {

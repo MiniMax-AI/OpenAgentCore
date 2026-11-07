@@ -178,6 +178,18 @@ func (e *ExecutionOperations) ReleaseIdleUnattached(ctx context.Context, owner A
 	return e.cleanup(ctx, owner, idleRelease)
 }
 
+// ReleaseUnstarted requests the cleanup of an allocation whose compute has not
+// reached running with a completed bootstrap within ComputeStartDeadline of
+// its creation, by the database clock. It fails the Environment, standalone or
+// Session-owned. Any other allocation is ErrAllocationConflict.
+func (e *ExecutionOperations) ReleaseUnstarted(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.cleanup(ctx, owner, startDeadline)
+}
+
+// ComputeStartDeadline bounds the wait for compute to start, because a Provider
+// can leave it pending or failed forever and nothing else ends the allocation.
+const ComputeStartDeadline = 10 * time.Minute
+
 // cleanupEvidence is the provider proof a cleanup commit consumes.
 type cleanupEvidence int
 
@@ -186,6 +198,7 @@ const (
 	creationAbsent
 	computeLost
 	idleRelease
+	startDeadline
 )
 
 func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
@@ -202,6 +215,11 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		}
 		if evidence == idleRelease {
 			if err := checkIdleUnattached(ctx, tx, current); err != nil {
+				return err
+			}
+		}
+		if evidence == startDeadline {
+			if err := checkStartDeadline(tx, current); err != nil {
 				return err
 			}
 		}
@@ -239,7 +257,9 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			if !retain && lost && revoked.AttachedSessionID != "" {
 				return ErrAllocationConflict
 			}
-			if !retain && revoked.AttachedSessionID != "" {
+			// A standalone Environment fails only at the start deadline; its other
+			// cleanups end it in RequestCleanup.
+			if !retain && (revoked.AttachedSessionID != "" || evidence == startDeadline) {
 				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
@@ -247,7 +267,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || evidence == cleanupRequested || evidence == idleRelease {
+		if err != nil || evidence == cleanupRequested || evidence == idleRelease || evidence == startDeadline {
 			result = pending
 			return err
 		}
@@ -262,6 +282,23 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 		return Allocation{}, err
 	}
 	return result, nil
+}
+
+// checkStartDeadline admits only an allocation that never reached running:
+// ObserveRunning is the only writer of the running state, and a suspended or
+// restored allocation keeps it.
+func checkStartDeadline(tx AllocationCleanupTx, current Allocation) error {
+	if current.State != "creating" {
+		return ErrAllocationConflict
+	}
+	activity, err := tx.LoadActivity(current)
+	if err != nil {
+		return err
+	}
+	if activity.ObservedAt.Sub(current.CreatedAt) < ComputeStartDeadline {
+		return ErrAllocationConflict
+	}
+	return nil
 }
 
 func checkIdleUnattached(ctx context.Context, tx AllocationCleanupTx, current Allocation) error {

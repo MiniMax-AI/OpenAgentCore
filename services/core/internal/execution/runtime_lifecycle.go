@@ -428,14 +428,27 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
+	// The start deadline bounds the wait whatever the Provider reports; the
+	// database clock decides, and a refusal leaves the allocation as is.
+	if owner.State == "creating" && time.Since(owner.CreatedAt) >= deployment.ComputeStartDeadline {
+		released, err := r.deployment.ReleaseUnstarted(ctx, owner)
+		if err == nil {
+			return r.observe(ctx, released)
+		}
+		if !errors.Is(err, deployment.ErrAllocationConflict) {
+			return err
+		}
+	}
 	info, err := provider.GetInfo(ctx, runtimeReference(owner))
 	cleanup := owner.Ended || owner.Expired || owner.State == "cleanup_pending"
-	// Resource drift disqualifies execution, not cleanup already authorized by
-	// Core. Kill independently verifies ownership before removing anything.
-	invalidCleanup := cleanup && errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, sandbox.ErrOwnership)
-	if err != nil && !errors.Is(err, sandbox.ErrNotFound) && !invalidCleanup {
+	// An unreadable or drifted Provider state disqualifies execution, not
+	// cleanup already authorized by Core: Kill independently verifies
+	// ownership before removing anything.
+	if err != nil && !errors.Is(err, sandbox.ErrNotFound) && (!cleanup || errors.Is(err, sandbox.ErrOwnership)) {
 		return err
 	}
+	// A configuration rejection still reports the Reference and settlement.
+	invalidCleanup := cleanup && errors.Is(err, sandbox.ErrInvalid)
 	running := err == nil && info.Reference == runtimeReference(owner) && info.ProviderID != "" && info.State == "running"
 	if (err == nil || invalidCleanup && info.CreateSettled) && info.Reference != runtimeReference(owner) {
 		return sandbox.ErrOwnership
