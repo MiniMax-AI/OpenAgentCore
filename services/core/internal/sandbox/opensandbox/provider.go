@@ -64,10 +64,13 @@ func newProvider(c sandbox.DirectConfig) (*Provider, error) {
 		return nil, errors.New("OpenSandbox deployment configuration is unavailable")
 	}
 	scheme, _, _ := strings.Cut(deployment.APIURL, "://")
+	// Every call reaches the same server, so one transport keeps its connections
+	// alive; without it the SDK builds a new transport per connected sandbox.
+	client := &http.Client{Transport: osdk.DefaultTransport()}
 	return &Provider{
 		installation: c.InstallationID, image: deployment.Image, resources: c.Selection.Resources,
-		connection: osdk.ConnectionConfig{Domain: deployment.APIURL, Protocol: scheme, APIKey: deployment.APIKey, UseServerProxy: true},
-		lifecycle:  osdk.NewLifecycleClient(deployment.APIURL+"/"+osdk.APIVersion, deployment.APIKey),
+		connection: osdk.ConnectionConfig{Domain: deployment.APIURL, Protocol: scheme, APIKey: deployment.APIKey, UseServerProxy: true, HTTPClient: client},
+		lifecycle:  osdk.NewLifecycleClient(deployment.APIURL+"/"+osdk.APIVersion, deployment.APIKey, osdk.WithHTTPClient(client)),
 		resolve: func(ctx context.Context, host string) ([]netip.Addr, error) {
 			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 		},
