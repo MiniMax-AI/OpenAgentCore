@@ -119,6 +119,10 @@ type AllocationTx interface {
 	// CanRetainEnvironment checks the ready retained filesystem, completed
 	// initialization and selected Harness's qualified history under the Session lock.
 	CanRetainEnvironment(current Allocation) (bool, error)
+	// CanReleaseCheckpoint checks under the Environment lock that capacity
+	// pressure may end the allocation's retention: CanRetainEnvironment holds,
+	// or no Session is attached and the standalone Environment ends with it.
+	CanReleaseCheckpoint(current Allocation) (bool, error)
 
 	// LoadAllocation returns the Environment's allocation.
 	LoadAllocation() (Allocation, error)
@@ -130,7 +134,7 @@ type AllocationTx interface {
 	// LoadSuspensionDemand locks the deployment and reads demand and capacity.
 	LoadSuspensionDemand(current Allocation) (SuspensionDemand, error)
 	// OldestIdleCheckpoint reports whether current has the earliest retention
-	// deadline among its node's idle suspended allocations that can be retained.
+	// deadline among its node's idle suspended allocations that can be released.
 	OldestIdleCheckpoint(current Allocation) (bool, error)
 	// ExpireCheckpoint ends the retention of a suspended or restoring allocation now.
 	ExpireCheckpoint(current Allocation) (Allocation, error)

@@ -84,6 +84,38 @@ func TestRetentionPressureReleasesOldestRetainableCheckpoint(t *testing.T) {
 	}
 }
 
+// detachEnvironment turns $1's Environment into an unattached standalone one.
+const detachEnvironment = `WITH a AS (SELECT environment_id FROM runtime_allocations WHERE id=$1),
+	e AS (UPDATE environments SET session_owned=false,idempotency_key='key',request_hash=repeat('0',64),creator_kind='user',creator_id=gen_random_uuid() WHERE id=(SELECT environment_id FROM a))
+	UPDATE sessions SET deleted_at=clock_timestamp() WHERE environment_id=(SELECT environment_id FROM a)`
+
+func TestRetentionPressureExpiresIdleUnattachedEnvironment(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	f.connect(t, node.NodeID)
+	owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
+	if _, err := f.pool.Exec(t.Context(), detachEnvironment, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	pendingPressureDemand(t, f)
+	if err := changes.ExpireCheckpointForDemand(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	current, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || !current.Expired {
+		t.Fatal("checkpoint not expired", current, err)
+	}
+	if _, err = changes.RequestCleanup(t.Context(), current); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	if err = f.pool.QueryRow(t.Context(), `SELECT status FROM environments WHERE id=$1`, owner.EnvironmentID).Scan(&status); err != nil || status != "expired" {
+		t.Fatal("unattached Environment not expired", status, err)
+	}
+}
+
 func TestRetentionPressureKeepsIneligibleCheckpoints(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -130,6 +162,7 @@ func TestPressureSuspendsReleasableOwnerWhenRetainedSlotsAreFull(t *testing.T) {
 	}{
 		{"releasable", "", true},
 		{"no retained native history", `UPDATE devices SET supported_agent_kinds='[]' WHERE id=(SELECT device_id FROM runtime_allocations WHERE id=$1)`, false},
+		{"unattached", detachEnvironment, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)

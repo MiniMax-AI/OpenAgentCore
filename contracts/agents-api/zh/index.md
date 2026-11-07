@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 40aa4ceb297c0866fa75cbc20a6c0d7d9b1f2d64aba7d009446b08d0ec299ded
+source_hash: daa785e87ebf76a48a1ec28194e333c64343771bd6d32060a3f8bce127e973db
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -75,6 +75,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - pin 规定未完成的 hosted 创建返回 409。Core 在一个事务中完成创建，因此使用相同键和正文的重试会返回处于当前状态的 Environment，包括 `pending`。
 - Environment 列表的 `limit` 范围和对无法解析的 `after` 返回的 404（[页面大小](wire-semantics.md#page-size)、[游标](wire-semantics.md#cursors)）是 Core 自己的行为，没有官方样本。
 - 过期的未挂载 [Environment](environments.md#standalone-environments) 绝不会在新计算上被替换。
+- 节点的 retained slot 已满并阻塞等待中的放置时，Core 可以在快照保留期结束前让空闲的未挂载 Environment 提前过期（[容量压力](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)）；固定版本的 API 未规定提前过期。
 
 **列表**（[lists](wire-semantics.md#lists)）
 
