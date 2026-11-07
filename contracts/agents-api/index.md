@@ -72,6 +72,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - The pin says an incomplete hosted creation returns 409. Core completes a creation in one transaction, so a retry with the same key and body returns the Environment in its current state, `pending` included.
 - The Environment list's `limit` bounds and its 404 for an unresolved `after` ([Page size](./wire-semantics.md#page-size), [Cursors](./wire-semantics.md#cursors)) are Core's behavior and have no official sample.
 - An unattached Environment that [expires](./environments.md#standalone-environments) is never replaced on new compute.
+- When a node's full retained slots block waiting placement, Core can expire an idle unattached Environment before its snapshot retention ends ([capacity pressure](../../docs/sandbox-provider.md#cold-replacement-after-checkpoint-retention)); the pin specifies no early expiry.
 
 **Lists** ([lists](./wire-semantics.md#lists))
 

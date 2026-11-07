@@ -98,7 +98,7 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, pressure Susp
 	if source.Retained >= int64(source.MaxRetained) {
 		// A full node frees a retained slot only by releasing a checkpoint
 		// after this suspension, so the owner must itself be releasable.
-		if retain, err := tx.CanRetainEnvironment(owner); err != nil || !retain {
+		if releasable, err := tx.CanReleaseCheckpoint(owner); err != nil || !releasable {
 			return false, err
 		}
 		release = func(n *placement.Node) { n.Active--; n.Retained-- }
@@ -109,9 +109,10 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, pressure Susp
 // ExpireCheckpointForDemand ends the retention of an idle suspended
 // allocation, exactly as if its deadline had passed, when compatible waiting
 // demand is blocked only by the node's retained slots. It acts only on the
-// node's oldest allocation whose Session can continue on new compute, so the
-// ordinary expiry cleanup keeps files and native history. A refusal is
-// ErrNotIdle.
+// node's oldest releasable allocation: one whose Session continues on new
+// compute, where the ordinary expiry cleanup keeps files and native history,
+// or one with no Session attached, whose standalone Environment then ends. A
+// refusal is ErrNotIdle.
 func (e *ExecutionOperations) ExpireCheckpointForDemand(ctx context.Context, owner Allocation) error {
 	_, err := e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {
 		if current.State != "running" || current.ComputePhase != "suspended" || current.Expired || current.ComputeRevision != owner.ComputeRevision || current.NodeID == "" {
@@ -124,11 +125,11 @@ func (e *ExecutionOperations) ExpireCheckpointForDemand(ctx context.Context, own
 		if activity.Busy || activity.WakeRequested {
 			return Allocation{}, ErrNotIdle
 		}
-		retain, err := tx.CanRetainEnvironment(current)
+		releasable, err := tx.CanReleaseCheckpoint(current)
 		if err != nil {
 			return Allocation{}, err
 		}
-		if !retain {
+		if !releasable {
 			return Allocation{}, ErrNotIdle
 		}
 		oldest, err := tx.OldestIdleCheckpoint(current)

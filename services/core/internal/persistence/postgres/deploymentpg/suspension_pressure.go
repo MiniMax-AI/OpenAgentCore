@@ -81,13 +81,30 @@ func (t *allocationTx) OldestIdleCheckpoint(current deployment.Allocation) (bool
 		if uuidString(id) == current.ID {
 			return true, nil
 		}
-		// An older peer that can be retained is released first. Its own Session
+		// An older peer that can be released is released first. Its own Session
 		// lock rechecks this when it is chosen.
-		if retained, err := t.q.CanRetainRuntimeEnvironment(t.ctx, id); err != nil || retained {
+		if releasable, err := canReleaseCheckpoint(t.ctx, t.q, id); err != nil || releasable {
 			return false, err
 		}
 	}
 	return false, nil
+}
+
+func (t *allocationTx) CanReleaseCheckpoint(current deployment.Allocation) (bool, error) {
+	id, err := parseID(current.ID)
+	if err != nil {
+		return false, err
+	}
+	return canReleaseCheckpoint(t.ctx, t.q, id)
+}
+
+// canReleaseCheckpoint holds when the Session continues on new compute or no
+// Session is attached, so the standalone Environment ends with the checkpoint.
+func canReleaseCheckpoint(ctx context.Context, q *sqlc.Queries, id pgtype.UUID) (bool, error) {
+	if unattached, err := q.IsUnattachedRuntimeEnvironment(ctx, id); err != nil || unattached {
+		return unattached, err
+	}
+	return q.CanRetainRuntimeEnvironment(ctx, id)
 }
 
 func (t *allocationTx) ExpireCheckpoint(current deployment.Allocation) (deployment.Allocation, error) {

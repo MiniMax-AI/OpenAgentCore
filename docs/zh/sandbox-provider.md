@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: b68b8050088b7f46038b70af6c4db4a70cf9560846aae838512ce691b41a0ff2
+source_hash: 0bb4f94a1520a4f03901d206b9f60458ea8725f52b960dcfd31861325d81f83e
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox、E2B 和 OpenSandbox 实现了该协议。
@@ -289,7 +289,7 @@ E2B adapter 的 checkpoint 行为见 [E2B provider 指南](https://github.com/Mi
 
 不可用的检查点（恢复中的 allocation 的 `Resume` 报告 `ErrCheckpointUnusable`）会立即结束保留，如同其 deadline 已到。Core 通过正常的到期清理删除 target 与快照；符合条件的 Session 按下文继续，不符合条件的则如正常到期一样结束。
 
-仅当等待中的放置需求被节点已满的 retained slot 阻塞时，容量压力才会提前结束保留期，且只针对该节点上最早挂起、空闲并满足上述条件的 allocation。Core 将其视为已过期，每个被阻塞的需求只释放一个；其他已挂起的 allocation 在配置的期限到达前保留快照并继续占用 retained slot。恢复时缺少容量或兼容节点的检查点不会因此被冷替换。等待请求保持原有的输入期限。常规 expiry cleanup 必须确认资源已删除，其他 allocation 才能预留该 slot；文件与已验证的原生历史继续保留。
+仅当等待中的放置需求被节点已满的 retained slot 阻塞时，容量压力才会提前结束保留期，且只针对该节点上最早挂起、空闲，并满足上述条件或属于未挂载 Session 的独立 Environment 的 allocation。Core 将其视为已过期，每个被阻塞的需求只释放一个；其他已挂起的 allocation 在配置的期限到达前保留快照并继续占用 retained slot。恢复时缺少容量或兼容节点的检查点不会因此被冷替换。等待请求保持原有的输入期限。常规 expiry cleanup 必须确认资源已删除，其他 allocation 才能预留该 slot；已验证的 Session 保留文件与原生历史，未挂载的 Environment 则像到期时一样过期。
 
 Core 在释放 allocation 和 placement 归属前，确认原始创建已结算且所属计算资源与快照均已清理。替代计算资源准入前撤销旧 device 的权限。Create、Kill 或 DeleteSnapshot 的结果尚未确认时，Core 保留归属，不准入替代写入方。可恢复的 Session 与 Environment 保持断连，保留同一文件系统对象和初始化结果。归档、重置和删除优先，唤醒请求不能撤销它们。
 

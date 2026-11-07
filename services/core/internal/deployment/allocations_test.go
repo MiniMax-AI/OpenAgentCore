@@ -742,6 +742,8 @@ func (f *fakeAllocationTx) CanRetainEnvironment(current Allocation) (bool, error
 	return f.canRetainEnvironment(current)
 }
 
+func (f *fakeAllocationTx) CanReleaseCheckpoint(Allocation) (bool, error) { return false, nil }
+
 func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
 	until := time.Now().Add(time.Hour)
 	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running", ComputePhase: "suspended", ComputeRetainedUntil: &until}

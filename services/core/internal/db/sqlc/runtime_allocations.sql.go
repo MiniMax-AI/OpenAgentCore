@@ -151,6 +151,24 @@ func (q *Queries) GetLatestRuntimeAllocation(ctx context.Context, arg GetLatestR
 	return i, err
 }
 
+const isUnattachedRuntimeEnvironment = `-- name: IsUnattachedRuntimeEnvironment :one
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a
+    JOIN environment_liveness l ON l.id = a.environment_id AND l.active
+    WHERE a.id = $1
+      AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = a.environment_id AND s.deleted_at IS NULL)
+)::boolean
+`
+
+// An active Environment without a live Session is an unattached standalone one:
+// a Session-owned Environment has ended once its Session is gone.
+func (q *Queries) IsUnattachedRuntimeEnvironment(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isUnattachedRuntimeEnvironment, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listRuntimeAllocations = `-- name: ListRuntimeAllocations :many
 SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, s.id AS attached_session_id, e.tenant_id, l.ended::boolean AS ended, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a

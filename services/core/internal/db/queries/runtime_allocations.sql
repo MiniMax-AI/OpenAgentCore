@@ -72,3 +72,13 @@ SELECT EXISTS (
       AND d.supported_agent_kinds @> jsonb_build_array(jsonb_build_object(
         'kind', s.engine, 'available', true, 'capabilities', jsonb_build_object('retained_native_history', true)))
 )::boolean;
+
+-- name: IsUnattachedRuntimeEnvironment :one
+-- An active Environment without a live Session is an unattached standalone one:
+-- a Session-owned Environment has ended once its Session is gone.
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a
+    JOIN environment_liveness l ON l.id = a.environment_id AND l.active
+    WHERE a.id = $1
+      AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.environment_id = a.environment_id AND s.deleted_at IS NULL)
+)::boolean;

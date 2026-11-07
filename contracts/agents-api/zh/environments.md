@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 5a65935b1ac297109a14c525de83a05734587fe50593b2500e8c920507d16e87
+source_hash: effa1e3ba384fbb3272d26c5c1d56c9d7e2116f7f2bfa2ecce6cfe1a2a266552
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及能力。Session 通过其 `environment` 配置创建 Environment，或挂载由 `POST /agents/environments` 预先创建的 Environment（[独立 Environment](#standalone-environments)）。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -88,7 +88,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 **文件。** 没有挂载 Session 时的文件路由由 [Environment files](environment-files.md#where-files-work) 规定。
 
-**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于沙箱提供商。支持检查点时，它在部署的空闲超时后挂起，并在快照保留期结束时过期，两者的取值见[挂起策略](sandbox-deployment.md#suspension-policy)。不支持检查点时它无法挂起，因此在空闲超时内没有活动后过期，空闲时间从最近一次活动起算：初始化完成、卸载或之后的活动。失败的 Environment 会立即释放其计算。无论哪种提供商，确认计算丢失后它也会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有任何信息能标识要重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载。已结束（`expired` 或 `failed`）的未挂载 Environment 会释放其放置和工作区。
+**无 Session 时的生命周期。** 未挂载的 Environment 无需 Harness 即可供给和初始化，其存续时间取决于沙箱提供商。支持检查点时，它在部署的空闲超时后挂起，并在快照保留期结束时过期，两者的取值见[挂起策略](sandbox-deployment.md#suspension-policy)。节点的 retained slot 已满并阻塞等待中的放置时，[容量压力](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)可以让已挂起的空闲 Environment 提前过期。不支持检查点时它无法挂起，因此在空闲超时内没有活动后过期，空闲时间从最近一次活动起算：初始化完成、卸载或之后的活动。失败的 Environment 会立即释放其计算。无论哪种提供商，确认计算丢失后它也会过期（包括 Session 持有期间被释放的计算，在该 Session 被删除后），因为 Core 从不在新计算上替换它：没有任何信息能标识要重放的工作。[沙箱重置](sandbox-deployment.md#reset)同样会让它过期。已过期的 Environment 不能挂载。已结束（`expired` 或 `failed`）的未挂载 Environment 会释放其放置和工作区。
 
 ## 放置方式 {#placements}
 
