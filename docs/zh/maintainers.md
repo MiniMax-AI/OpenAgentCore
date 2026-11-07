@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: af77ec1c4a27d4742497068cee88195f07e9fb38e48bed89b9120e21e1a726b4
+source_hash: f398cbc404cb012621eb6483715015114175d671c2dfbfd03b2ad52c773bd4d2
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -183,7 +183,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 | `hygiene` | 仓库链接、随包文档完整性以及 CI 计划器/门禁测试；每次变更都会运行 |
 | `distribution` | Harness 目录和安装程序模式、安装/应用/恢复/清理测试、Compose 解析和初始化固定数据、发布/下载和捆绑包契约、Go 控制台测试与构建；模板解析需要 Docker Compose，不需要 pnpm install 或浏览器 |
 | `compose` | 使用从当前检出构建的镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装程序，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器；需要 Docker、Go 和网络访问，不需要模型凭据 |
-| `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 集成测试包的三个 `integration` 分片 |
+| `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 集成测试包的三个 `integration` 分片（使用固定版本的官方客户端运行） |
 | `harness` | Claude Code adapter 测试和打包、MiniMax 配套脚本 |
 | `example` | 可选的应用程序类型检查、测试、构建和隔离的浏览器验收 |
 | `web` | TypeScript、Web/客户端测试和 Web 构建 |

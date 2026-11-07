@@ -138,8 +138,12 @@ jobs:
       - name: Build standalone Core and test services and clients
         if: matrix.part == 'core'
         run: make build-core check-core-packages
+      - uses: ./.github/actions/official-sdk
+        if: matrix.part == 'integration'
       - name: Test Core integration shard ${{ matrix.shard }}
         if: matrix.part == 'integration'
+        env:
+          OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: make check-core-integration OAC_CORE_INTEGRATION_SHARD=${{ matrix.shard }}
 
   distribution:
