@@ -23,6 +23,7 @@ CI_INPUTS = {
     ".github/actions/node/action.yml": (*NODE_JOBS, "lint"),
     ".github/actions/mcode-companion/action.yml": ("native", "lint"),
     ".github/actions/e2b-provider/action.yml": ("api", "lint"),
+    ".github/actions/official-sdk/action.yml": ("backend", "api", "lint"),
     ".github/workflows/cache-warm.yml": ("lint",),
     "scripts/ci_plan.py": JOBS,
     "scripts/ci_plan_test.py": ("hygiene",),

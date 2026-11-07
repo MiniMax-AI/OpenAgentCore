@@ -185,7 +185,6 @@ def main():
             missing = copy.deepcopy(base)
             missing["environment"]["environment_template_id"] = "00000000-0000-0000-0000-000000000001"
             assert reject(missing, 404, settings["foreign"]) == denied
-            reject({**base, "environment": {**base["environment"], "network": {"access": "restricted", "allowed_domains": ["example.com"]}}}, 400)
             reject({**base, "environment": {**base["environment"], "skills": [{"type": "skill_reference", "skill_id": foreign_skill.id}]}}, 404)
             reject({**base, "environment": {**base["environment"], "capability_directories": ["/outside"]}}, 400)
             malformed = copy.deepcopy(plugin)
@@ -194,8 +193,7 @@ def main():
             disabled = {"access": "disabled", "allowed_domains": []}
             api.update(template_id, network={"access": "disabled"})
             assert api.update(template_id, name="network omission preserves").network.to_dict() == disabled
-            reject(base, 400)
-            reject({**base, "environment": {**base["environment"], "network": None}}, 400)
+            create("inherit-disabled", {**base, "environment": {**base["environment"], "network": None}}, {**default, "network": disabled})
             reject({**base, "environment": {**base["environment"], "network": {"access": "enabled"}}}, 400)
             enabled = {"access": "enabled", "allowed_domains": []}
             assert api.update(template_id, network=None).network.to_dict() == enabled

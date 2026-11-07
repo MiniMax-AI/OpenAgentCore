@@ -80,7 +80,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 			}
 		}
 	})
-	if len(receipt.Sessions) != 9 || len(receipt.Expected) != 9 || len(receipt.RejectedKeys) != 10 {
+	if len(receipt.Sessions) != 10 || len(receipt.Expected) != 10 || len(receipt.RejectedKeys) != 7 {
 		t.Fatalf("incomplete acceptance receipt: sessions=%d expectations=%d rejections=%d", len(receipt.Sessions), len(receipt.Expected), len(receipt.RejectedKeys))
 	}
 	for label, id := range receipt.Sessions {
@@ -136,10 +136,10 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		query string
 		want  int
 	}{
-		{"SELECT count(*) FROM sessions WHERE tenant_id=$1", 9},
-		{"SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1", 9},
-		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.tenant_id=$1", 9},
-		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.environment_id=f.environment_id WHERE s.tenant_id=$1", 9},
+		{"SELECT count(*) FROM sessions WHERE tenant_id=$1", 10},
+		{"SELECT count(*) FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE s.tenant_id=$1", 10},
+		{"SELECT count(*) FROM environment_setups e JOIN sessions s ON s.environment_id=e.environment_id WHERE s.tenant_id=$1", 10},
+		{"SELECT count(*) FROM initial_environment_files f JOIN sessions s ON s.environment_id=f.environment_id WHERE s.tenant_id=$1", 10},
 		{"SELECT count(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.tenant_id=$1", 0},
 		{"SELECT count(*) FROM environment_input_reservations e JOIN sessions s ON s.id=e.session_id WHERE s.tenant_id=$1", 0},
 	} {
@@ -154,5 +154,5 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 			t.Fatalf("rejected creation persisted: %d %v", count, err)
 		}
 	}
-	t.Log("nine supported selection cases and rejected network restrictions passed SDK/raw HTTP, frozen encrypted bytes, tenant isolation, atomic rejection and reopened retries; no Runtime or model execution")
+	t.Log("ten supported selection cases and rejected widenings passed SDK/raw HTTP, frozen encrypted bytes, tenant isolation, atomic rejection and reopened retries; no Runtime or model execution")
 }

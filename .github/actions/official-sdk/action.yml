@@ -1,0 +1,17 @@
+name: Pinned official client
+description: Install the official Python SDK that contracts/agents-api/upstream.json pins.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - name: Install pinned official client
+      shell: bash
+      run: |
+        python - <<'PY'
+        import json, subprocess, sys
+        pin = json.load(open('contracts/agents-api/upstream.json'))
+        subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', 'services/core/tests/requirements.txt',
+                        'openai @ git+https://github.com/openai/openai-python@' + pin['commit']], check=True)
+        PY
