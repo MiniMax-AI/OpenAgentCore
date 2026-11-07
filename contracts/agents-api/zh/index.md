@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: daa785e87ebf76a48a1ec28194e333c64343771bd6d32060a3f8bce127e973db
+source_hash: 999a54f6ce39363218b3ec312cec6180b15a6659292be41c03a15a03ece56dd0
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -97,7 +97,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `agent.model` 为空或只含空白时，Session 创建和更新返回 400；固定版本 schema 允许这样的值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
-- Codex 的 `review: auto_review` 只审查 Codex 自己升级的操作，例如强制 `rm` 或需要审批的 MCP 工具调用；Codex 在沙箱内拥有完整的文件系统权限，其他命令和文件修改不经审查。其原生 reviewer 通过 Session 的模型提供方调用 `codex-auto-review` 模型，不提供该模型的提供方会以自己的错误拒绝每个升级的操作。
+- Codex 的 `review: auto_review` 只审查 Codex 自己升级的操作，例如强制 `rm` 或需要审批的 MCP 工具调用；Codex 在沙箱内拥有完整的文件系统权限，其他命令和文件修改不经审查。其原生 reviewer 通过 Session 的模型提供方调用 `codex-auto-review` 模型，不提供该模型的提供方会以自己的错误拒绝每个升级的操作。被拒绝操作的 Item 为 `failed`，不带 reviewer 的理由，因为固定版本的 Item 没有对应字段。
 - Codex 不启用原生 goals（`create_goal`、`get_goal` 和 `update_goal`），因为处于活动状态的 goal 会在 Turn 结束后自行启动新的 turn（[Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)）。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
