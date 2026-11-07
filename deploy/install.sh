@@ -24,14 +24,16 @@ chmod 700 "$cache"
 trap 'echo "Interrupted; rerun the installer to continue." >&2; exit 130' INT
 # Resume after resets, fail only when a download stalls (no total time cap), and give up after five attempts.
 download() {
-  local name="$1" file="$2" progress="$3" attempt code
+  local name="$1" file="$2" progress="$3" attempt code error
   for attempt in 1 2 3 4 5; do
     if code="$(curl --fail "$progress" --location --proto '=https' --proto-redir '=https' --connect-timeout 15 \
       --speed-limit 1024 --speed-time 60 --continue-at - --write-out '%{http_code}' \
-      --output "$cache/$file" "$base/$name")"; then return 0; fi
+      --output "$cache/$file" "$base/$name")"; then return 0; else error=$?; fi
     [[ "$code" != 404 ]] || { echo "Release $version not found." >&2; exit 1; }
     # The partial file already holds the whole download; the checksum decides.
     [[ "$code" != 416 ]] || return 0
+    # The server cannot resume; start the file again.
+    [[ "$error" != 33 ]] || rm -f "$cache/$file"
     if (( attempt < 5 )); then echo "Download interrupted; retrying ($((attempt + 1))/5)..." >&2; sleep 3; fi
   done
   echo "Could not download $name from GitHub. Check the network (set HTTPS_PROXY if a proxy is required) and rerun the installer." >&2
