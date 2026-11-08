@@ -521,5 +521,7 @@
   "请先在飞书接入中给这个 Agent 绑定机器人": "Bind a bot to this Agent under Feishu first",
   "变量名称不能重复": "Variable names must be unique",
   "文件不能为空。": "The file is empty.",
-  "文件不能超过 50 MiB。": "Files can be at most 50 MiB."
+  "文件不能超过 50 MiB。": "Files can be at most 50 MiB.",
+  "向用户提问": "Ask the user",
+  "无": "None"
 }

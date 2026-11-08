@@ -973,6 +973,9 @@ test("Agent engine options narrow to the selected Harness and reach new conversa
   expect(sent.reasoning).toMatchObject({ effort: "high", summary: "auto" });
   await page.getByRole("button", { name: "会话详情" }).click();
   await expect(page.getByRole("dialog")).toContainText("网页搜索实时搜索");
+  await page.goto("/#/agents");
+  for (const part of ["未绑定", "开发沙箱", "code-review", "网页搜索", "文档服务"])
+    await expect(page.getByRole("article")).toContainText(part);
 });
 
 test("chat previews authorization QR and artifact images, downloads files and keeps unsafe images out", async ({ page }) => {
