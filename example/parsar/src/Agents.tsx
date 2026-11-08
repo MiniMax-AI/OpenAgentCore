@@ -1,5 +1,6 @@
 import { tr } from "./lib/i18n";
 import { useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import { Blocks, Plug, Plus, Search, Send, Server } from "lucide-react";
 import {
   useAgents,
@@ -33,7 +34,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-sm",
+        "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-sm",
         muted ? "text-fg-subtle ring-1 ring-line" : "bg-surface-muted text-fg-muted",
       )}
     >
@@ -140,12 +141,38 @@ function Part({
         <Icon strokeWidth={1.7} className="h-4 w-4 shrink-0 text-fg-subtle" />
         {label}
       </span>
-      <div className="flex min-h-7 min-w-0 flex-1 flex-wrap items-center gap-1.5">{children}</div>
+      <div className="flex min-h-7 min-w-0 flex-1 items-center gap-1.5">{children}</div>
     </div>
   );
 }
 
-const shownSkills = 8;
+// Shows the first item and folds the rest behind "+N", listed in full on click.
+function Folded({ items }: { items: string[] }) {
+  if (!items.length) return <Chip muted>{tr("无")}</Chip>;
+  return (
+    <>
+      <Chip>{items[0]}</Chip>
+      {items.length > 1 && (
+        <Popover.Root>
+          <Popover.Trigger className="relative shrink-0 rounded-full px-3 py-1 text-sm text-fg-muted ring-1 ring-line hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40">
+            +{items.length - 1}
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              align="start"
+              sideOffset={6}
+              className="app-shadow-floating z-50 flex max-w-xs flex-wrap gap-1.5 rounded-xl border border-line bg-surface p-3 animate-pop-in data-[state=closed]:animate-pop-out"
+            >
+              {items.map((name) => (
+                <Chip key={name}>{name}</Chip>
+              ))}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      )}
+    </>
+  );
+}
 
 function AgentCard({
   agent,
@@ -163,7 +190,6 @@ function AgentCard({
   capabilities: string[];
 }) {
   const disabled = agent.enabled === false;
-  const packages = [...(runtime?.packages?.npm || []), ...(runtime?.packages?.python || [])];
   return (
     <article className="group relative flex flex-col rounded-2xl border border-line bg-surface p-6 app-shadow-card transition-colors hover:border-line-strong">
       <div className="flex items-start gap-4">
@@ -201,36 +227,16 @@ function AgentCard({
         </Part>
         <Part icon={Server} label={tr("环境模板")}>
           {runtime ? (
-            <>
-              <span className="mr-1 truncate text-sm font-medium">{runtime.name}</span>
-              {packages.map((name) => (
-                <Chip key={name}>{name}</Chip>
-              ))}
-            </>
+            <span className="truncate text-sm font-medium">{runtime.name}</span>
           ) : (
             <Chip muted>{tr("未选择环境")}</Chip>
           )}
         </Part>
         <Part icon={Blocks} label="Skills">
-          {skills.length ? (
-            <>
-              {skills.slice(0, shownSkills).map((name) => (
-                <Chip key={name}>{name}</Chip>
-              ))}
-              {skills.length > shownSkills && (
-                <Chip muted>+{skills.length - shownSkills}</Chip>
-              )}
-            </>
-          ) : (
-            <Chip muted>{tr("无")}</Chip>
-          )}
+          <Folded items={skills} />
         </Part>
         <Part icon={Plug} label={tr("能力")}>
-          {capabilities.length ? (
-            capabilities.map((name) => <Chip key={name}>{name}</Chip>)
-          ) : (
-            <Chip muted>{tr("无")}</Chip>
-          )}
+          <Folded items={capabilities} />
         </Part>
       </div>
       <div className="relative mt-6 flex gap-2 border-t border-line-muted pt-5">
