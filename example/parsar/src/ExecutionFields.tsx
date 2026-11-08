@@ -67,9 +67,6 @@ export function engineSummary(agent: Execution, models: ModelProfile[] = []) {
       tr("推理{{value0}}", {
         value0: optionValue("reasoning_effort", agent.reasoning_effort),
       }),
-    agent.web_search &&
-      agent.web_search !== "disabled" &&
-      optionValue("web_search", agent.web_search),
   ]
     .filter(Boolean)
     .join(" · ");
