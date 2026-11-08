@@ -47,11 +47,13 @@ export function LedgerRow({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   const style: CSSProperties = { gridTemplateColumns: useContext(Columns) };
+  // Cells take their width from the columns, never from their content, so long text truncates
+  // instead of widening the row past the header.
   return (
     <div
       style={style}
       className={cn(
-        "group grid min-w-max min-h-14 items-center gap-4 border-b border-line-muted px-6 py-3 text-sm transition-colors last:border-b-0 hover:bg-surface-subtle/70 [&>span]:min-w-0 [&>span]:truncate",
+        "group grid min-w-max min-h-14 items-center gap-4 border-b border-line-muted px-6 py-3 text-sm transition-colors last:border-b-0 hover:bg-surface-subtle/70 [&>*]:[contain:inline-size] [&>span]:truncate",
         className,
       )}
       {...props}
