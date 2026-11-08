@@ -974,8 +974,11 @@ test("Agent engine options narrow to the selected Harness and reach new conversa
   await page.getByRole("button", { name: "会话详情" }).click();
   await expect(page.getByRole("dialog")).toContainText("网页搜索实时搜索");
   await page.goto("/#/agents");
-  for (const part of ["未绑定", "开发沙箱", "code-review", "网页搜索", "文档服务"])
-    await expect(page.getByRole("article")).toContainText(part);
+  const card = page.getByRole("article");
+  for (const part of ["未绑定", "开发沙箱", "code-review", "网页搜索"])
+    await expect(card).toContainText(part);
+  await card.getByRole("button", { name: /^\+\d+$/ }).click();
+  await expect(page.getByRole("dialog")).toContainText("文档服务");
 });
 
 test("chat previews authorization QR and artifact images, downloads files and keeps unsafe images out", async ({ page }) => {
