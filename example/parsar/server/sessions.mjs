@@ -26,6 +26,8 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
   const model = store.get("models", agent.model_id);
   const bound = contributions(store, agent);
   const bot = boundBot(store, agent);
+  if (bound.needs_bot && !bot)
+    throw new AppError(400, `「${bound.needs_bot}」需要飞书机器人身份，请先在飞书接入中给这个 Agent 绑定机器人。`);
   const provider = store.get("providers", model.provider_id);
   if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
     throw new AppError(

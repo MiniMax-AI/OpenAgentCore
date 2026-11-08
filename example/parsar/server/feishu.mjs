@@ -20,18 +20,15 @@ export const publicFeishu = ({ app_secret, ...record }) => ({
 export function feishuAPI(store, fetchImpl = fetch) {
   return async (method, path, body) => {
     const retryMatch = path.match(
-      /^\/app\/feishu\/deliveries\/(inbound|outbound)\/([a-f0-9-]{36})$/,
+      /^\/app\/feishu\/deliveries\/outbound\/([a-f0-9-]{36})$/,
     );
-    if (retryMatch && method === "PUT" && uuid.test(retryMatch[2])) {
-      const kind = `feishu_${retryMatch[1]}`,
-        row = store.get(kind, retryMatch[2]);
+    if (retryMatch && method === "PUT" && uuid.test(retryMatch[1])) {
+      const kind = "feishu_outbound",
+        row = store.get(kind, retryMatch[1]);
       if (!row) throw new AppError(404, "投递记录不存在。");
       if (row.state !== "failed")
         throw new AppError(409, "此记录不需要手动重试。");
-      if (
-        kind === "feishu_outbound" &&
-        sendExpired(row)
-      )
+      if (sendExpired(row))
         throw new AppError(
           409,
           "飞书去重窗口已过。请人工检查原话题，不能安全自动重发。",
@@ -1482,6 +1479,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   const retry = (kind, row, error) => {
     const attempts = row.attempts + 1;
     const definite = !transientError(error);
+    // A refused message is final, so the chat goes on with the next one.
+    if (kind === "feishu_inbound" && definite)
+      return reject(store.get(kind, row.id), error.message || "消息处理失败。");
     store.put(kind, {
       ...store.get(kind, row.id),
       attempts,
@@ -1495,15 +1495,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           ? 10000
           : Math.min(300000, 1000 * 2 ** attempts)),
     });
-    if (kind === "feishu_inbound" && definite) {
-      const thread = store.get("feishu_threads", row.thread_id);
-      if (thread)
-        queueReply(
-          stableId(`${row.id}:failed`),
-          thread,
-          `执行失败\n\n消息处理未完成（${error.message || "服务不可用"}），请重新发送消息重试。`,
-        );
-    }
   };
   const deliver = async (current) => {
     for (const row of store.list("feishu_outbound").reverse()) {
@@ -1623,9 +1614,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         ["queued", "submitting"].includes(row.state)
       )
         cancellations.set(row.thread_id, row);
-    const blocked = new Set(
-      rows.filter((row) => row.state === "failed").map((row) => row.thread_id),
-    );
+    const blocked = new Set();
     for (const row of cancellations.values()) {
       if (!current()) return;
       if (!allowed(row.app_id, row.chat_type)) continue;

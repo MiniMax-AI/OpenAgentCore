@@ -714,9 +714,8 @@ test("a bound Feishu bot's identity reaches every conversation, and what declare
     env: { LARKSUITE_CLI_DEFAULT_AS: "bot" },
     credentials: ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
   });
-  // A template that declares the bot's identity needs an Agent with a bot.
-  await assert.rejects(put("agents", { ...agent, runtime_id: runtime.id }, agent.id), /需要飞书机器人身份/);
-  store.put("agents", { ...store.get("agents", agent.id), runtime_id: runtime.id });
+  // The Agent saves before its bot is bound; a conversation needs the bot.
+  await put("agents", { ...agent, runtime_id: runtime.id }, agent.id);
   await assert.rejects(put("sessions", input), /需要飞书机器人身份/);
   const botId = randomUUID();
   await api("PUT", `/app/feishu/bots/${botId}`, {
@@ -1200,6 +1199,8 @@ test("model tests make one tiny generation and environment trials report a real 
   assert.equal(passed.state, "succeeded");
   assert.equal(typeof passed.seconds, "number");
   assert.equal(fake.sessions.size, 0, "trial Sessions are deleted");
+  await api("PUT", `/app/runtimes/${runtime.id}`, { ...runtime, name: "Edited" });
+  assert.equal(await api("GET", `/app/runtimes/${runtime.id}/trial`), null, "an edit clears the result");
   store.put("agents", { ...store.list("agents")[0], runtime_id: randomUUID() });
   await assert.rejects(api("POST", `/app/runtimes/${runtime.id}/trial`, {}), /先把这个环境模板绑定到一个 Agent/);
 });
