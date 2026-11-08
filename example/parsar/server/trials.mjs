@@ -11,6 +11,8 @@ const prompt = "只回复 OK，不要调用任何工具。";
 export function trialAPI(store, core, resources) {
   const get = (runtimeId) => {
     const trial = store.get("runtime_trials", runtimeId);
+    // A result describes the template as it was tried; an edit clears it.
+    if (trial && trial.runtime_revision !== store.get("runtimes", runtimeId)?.revision) return null;
     if (trial?.state === "running" && Date.now() - trial.started_at > limitMs + 30_000)
       return { ...trial, state: "failed", failure: "试运行被中断，请重新开始。" };
     return trial || null;

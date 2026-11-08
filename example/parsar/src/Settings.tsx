@@ -87,19 +87,6 @@ export function Settings() {
             change={setTheme}
           />
         </Section>
-        <Section title={tr("记录")}>
-          <div className="flex flex-wrap gap-2.5">
-            {[
-              ["/runs", tr("运行")],
-              ["/usage", tr("用量")],
-              ["/audit", tr("审计日志")],
-            ].map(([href, label]) => (
-              <Button key={href} asChild variant="outline">
-                <a href={`#${href}`}>{label}</a>
-              </Button>
-            ))}
-          </div>
-        </Section>
       </div>
     </>
   );

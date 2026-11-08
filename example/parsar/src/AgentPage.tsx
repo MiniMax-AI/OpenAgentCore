@@ -244,11 +244,7 @@ function AgentEditor({
                 {bot ? bot.name : tr("未绑定")}
               </span>
             </span>
-            {creating ? (
-              <span className="shrink-0 text-sm text-fg-muted">
-                {tr("保存后可绑定")}
-              </span>
-            ) : (
+            {!creating && (
               <a
                 href="#/feishu"
                 className="shrink-0 text-sm font-medium text-fg underline-offset-4 hover:underline"

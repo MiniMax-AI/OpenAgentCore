@@ -124,7 +124,8 @@ function needers(store, agent) {
 
 // What an Agent's bindings add to its Core Agent and to each of its Sessions.
 // A bound bot's identity reaches every conversation; any other variable comes
-// from the secret the Agent chose for it.
+// from the secret the Agent chose for it. A bot can be bound only to a saved
+// Agent, so a missing one is reported in needs_bot, not here.
 export function contributions(store, agent) {
   const out = {
     agent: { tools: [], instructions: [] },
@@ -137,7 +138,7 @@ export function contributions(store, agent) {
     for (const name of entry.credentials || []) {
       const label = entry.name || entry.skill_id;
       if (Object.hasOwn(botVariables, name)) {
-        if (!bot) throw new AppError(400, `「${label}」需要飞书机器人身份，请先在飞书接入中给这个 Agent 绑定机器人。`);
+        out.needs_bot ||= label;
         continue;
       }
       const secret = store.get("secrets", agent.credentials?.[name] || "");

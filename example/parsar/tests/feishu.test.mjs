@@ -410,27 +410,21 @@ test("official Feishu dispatcher awaits persistence and propagates a failed comm
   await transport.disconnect();
 });
 
-test("unresolved Feishu receipts remain discoverable after more than 100 newer deliveries", async (t) => {
+test("a refused Feishu message is final and the chat goes on with the next one", async (t) => {
   const f = await feishu(t),
     w = f.create();
   w.receive("cli_0123456789abcdef", f.message);
   f.setReject(true);
   await w.tick();
-  const failed = f.store.list("feishu_inbound")[0];
-  assert.equal(failed.state, "failed");
-  for (let i = 0; i < 110; i++)
-    f.store.put("feishu_outbound", {
-      id: randomUUID(),
-      state: "delivered",
-      thread_id: failed.thread_id,
-      created_at: failed.created_at + i + 1,
-    });
-  const visible = await f.api("GET", "/app/feishu/deliveries");
-  assert.ok(visible.some((row) => row.id === failed.id));
+  const refused = f.store.list("feishu_inbound")[0];
+  assert.equal(refused.state, "rejected");
+  assert.equal(refused.error, "invalid");
   f.setReject(false);
-  await f.api("PUT", `/app/feishu/deliveries/inbound/${failed.id}`, {});
+  w.receive("cli_0123456789abcdef", { ...f.message, messageId: "om_again", rootId: "om_first" });
   await w.tick();
-  assert.equal(f.store.get("feishu_inbound", failed.id).state, "delivered");
+  const next = f.store.list("feishu_inbound").find((row) => row.id !== refused.id);
+  assert.equal(next.thread_id, refused.thread_id);
+  assert.equal(next.state, "delivered");
 });
 
 test("busy Core input retries past eight attempts and queued replies precede Core reads", async (t) => {
@@ -511,7 +505,7 @@ test("terminal public API conflicts preserve their code and stop automatic Feish
   });
   await w.tick();
   const receipt = f.store.list("feishu_inbound")[0];
-  assert.equal(receipt.state, "failed");
+  assert.equal(receipt.state, "rejected");
   assert.equal(receipt.error, "Environment unavailable");
 });
 
