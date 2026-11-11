@@ -125,7 +125,7 @@ Paths are relative to `/core/v1/projects/{project_id}`. Each read returns the sa
 | Environment type other than `openai_hosted` | 400 |
 | Session missing or in another Project | 404 |
 
-One transaction marks the Environment expired (a failed Environment stays failed), requests cancellation of running work, revokes the Runtime's authority and writes the audit entry. Cleanup of the sandbox and its snapshot follows through the normal lifecycle; a resource whose release is uncertain stays owned until the provider confirms it. The Session is not deleted: its history and persisted Files and Artifacts stay readable, unpersisted workspace contents are lost and the Session cannot resume.
+One transaction marks the Environment expired (a failed Environment stays failed), fails input that has not started, so the Session reads `failed` with "The environment is no longer available for this input.", requests cancellation of running work, revokes the Runtime's authority and writes the audit entry. Cleanup of the sandbox and its snapshot follows through the normal lifecycle; a resource whose release is uncertain stays owned until the provider confirms it. The Session is not deleted: its history and persisted Files and Artifacts stay readable, unpersisted workspace contents are lost and the Session cannot resume.
 
 `POST` and `GET /projects/{project_id}/sessions/{session_id}/archive` return `{session_id, environment_id, state}`. `GET` is read-only and needs no generation. `state` is the resource's current disposition: `active`, `cleanup_pending` or `released`, whatever released it. `released` does not mean an active Turn has finished cancelling; read the Turn for that.
 

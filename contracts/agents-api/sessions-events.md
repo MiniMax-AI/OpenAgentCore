@@ -87,7 +87,7 @@ An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apar
 
 - Initial input is required on `none` (400 `invalid_request_error`, "conversation-only sessions currently require initial input") and for `stream: true` on every placement except `self_hosted` (400, "streaming session creation requires initial input"). These checks run before the creation retry lookup.
 - The Session and its initial work commit in one transaction. On `none` that includes the first Turn and the input Items. On `openai_hosted` the input is reserved while the Environment provisions. On `self_hosted` it is reserved with an `environment_connection` action, and creation returns while the machine is offline.
-- Reserved initial input has the same five-minute deadline as later input. When it passes before a Turn starts, the Session reads `failed` without a Turn.
+- Reserved initial input has the same five-minute deadline as later input. When the deadline passes, or the Environment fails or expires, before a Turn starts, the Session reads `failed` without a Turn and `error` states the reason.
 - A creation retry returns the original Session and never admits its input again, including after later Turns ([creation retries](./wire-semantics.md)).
 
 ## Creation streaming

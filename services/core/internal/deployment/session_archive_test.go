@@ -74,6 +74,7 @@ type fakeArchiveTx struct {
 	busy                 bool
 	allocation           *Allocation
 	loadActiveTurn       func() (sessions.Turn, bool, error)
+	failPendingInput     func() error
 	cancelPendingInput   func() error
 	loadEnvironmentInput func() (*sessions.EnvironmentInputState, error)
 	// audited is the administrator source the audit was recorded with.
@@ -84,6 +85,7 @@ type fakeArchiveTx struct {
 // activity change.
 func (f *fakeArchiveTx) idle() {
 	f.loadActiveTurn = func() (sessions.Turn, bool, error) { return sessions.Turn{}, false, nil }
+	f.failPendingInput = func() error { return nil }
 	f.cancelPendingInput = func() error { return nil }
 	f.loadEnvironmentInput = func() (*sessions.EnvironmentInputState, error) { return nil, nil }
 }
@@ -157,6 +159,14 @@ func (f *fakeArchiveTx) LoadActiveTurn(context.Context) (sessions.Turn, bool, er
 	return f.loadActiveTurn()
 }
 
+func (f *fakeArchiveTx) FailPendingInput(context.Context) error {
+	f.record("FailPendingInput")
+	if f.failPendingInput == nil {
+		unexpected(f.t, "FailPendingInput")
+	}
+	return f.failPendingInput()
+}
+
 func (f *fakeArchiveTx) CancelPendingInput(context.Context) error {
 	f.record("CancelPendingInput")
 	if f.cancelPendingInput == nil {
@@ -225,7 +235,7 @@ func TestArchiveSession(t *testing.T) {
 	hosted := &sessions.Environment{ID: "environment", Status: "connected", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	expired := &sessions.Environment{ID: "environment", Status: "expired", Configuration: hosted.Configuration}
 	live := &Allocation{ID: "allocation", DeviceID: "device", ProviderKey: "installation", State: "running"}
-	settle := []string{"LoadEnvironmentInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput"}
+	settle := []string{"LoadEnvironmentInput", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput"}
 	expire := append([]string{"LoadEnvironmentInput", "ExpireEnvironment environment"}, settle[1:]...)
 	head := []string{"LoadDeployment", "LoadEnvironment", "FindAllocation environment"}
 	join := func(parts ...[]string) []string {
@@ -291,10 +301,10 @@ func TestArchiveResetSession(t *testing.T) {
 		calls       []string
 	}{
 		{"idle Session", resetting(ResetAuto), hosted, false, requested, nil,
-			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
+			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
 		{"busy Session", resetting(ResetAuto), hosted, true, requested, ErrSandboxResetSessionBusy, []string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy"}},
 		{"forced busy Session", resetting(ResetForce), hosted, true, requested, nil,
-			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
+			[]string{"LoadDeployment", "LoadEnvironment", "LoadResetSource", "LoadProject", "FindAllocation environment", "LoadEnvironmentInput", "ExpireEnvironment environment", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RecordArchiveAudit", "LoadArchive"}},
 		{"ended Environment", resetting(ResetAuto), failed, false, requested, nil, []string{"LoadDeployment", "LoadEnvironment", "LoadResetBusy", "LoadArchive"}},
 		{"another reset", resetting(ResetAuto), hosted, false, requested.Add(time.Second), ErrConflict, []string{"LoadDeployment", "LoadEnvironment"}},
 	} {

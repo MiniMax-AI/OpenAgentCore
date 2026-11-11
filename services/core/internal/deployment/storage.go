@@ -176,16 +176,12 @@ type AllocationCleanupTx interface {
 // SessionArchiveTx is one Session-locked archive of the Session's hosted
 // Environment, with the Session's cancellation bound to the same transaction.
 type SessionArchiveTx interface {
-	sessions.CancellationTx
-	sessions.InputActivityTx
+	sessions.EnvironmentExpiryTx
 	// LoadDeployment locks the deployment and returns it. The Session lock
 	// precedes it, as in Turn, allocation and input admission.
 	LoadDeployment() (Record, error)
 	// LoadEnvironment reads the Session's Environment.
 	LoadEnvironment(ctx context.Context) (sessions.Environment, error)
-	// ExpireEnvironment sets the status of the Session's Environment to
-	// expired.
-	ExpireEnvironment(ctx context.Context, environment string) error
 	// LoadResetBusy reports whether the Session has an in-progress or waiting
 	// Turn or subagent Turn, or a pending Environment file write, which an
 	// automatic reset does not archive.
