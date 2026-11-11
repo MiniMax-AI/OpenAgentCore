@@ -100,33 +100,34 @@ func FailEnvironment(ctx context.Context, tx EnvironmentFailureTx, environment E
 	return tx.AppendChanges(ctx, environmentFailedChanges(EnvironmentFailure{Reason: reason, FailedAt: failedAt}, activity, pending, usage)...)
 }
 
-// environmentTermination is how the end of a Session's managed compute settles
-// its Environment.
-type environmentTermination int
+// EnvironmentExpiryTx is the Session transaction ExpireEnvironment runs in.
+type EnvironmentExpiryTx interface {
+	CancellationTx
+	InputActivityTx
+	// FailPendingInput settles the Session's pending Environment input
+	// reservation as failed.
+	FailPendingInput(ctx context.Context) error
+	// ExpireEnvironment sets the status of the Session's Environment to
+	// expired.
+	ExpireEnvironment(ctx context.Context, environment string) error
+}
 
-const (
-	// terminationFails records the provisioning failure of a live Environment
-	// whose compute did not expire.
-	terminationFails environmentTermination = iota
-	// terminationExpires expires a live Environment whose compute expired and
-	// settles its input. Public expiry neither asserts compute removal nor
-	// invents an expired event.
-	terminationExpires
-	// terminationSettles only settles the remaining input of an Environment
-	// that already failed or expired, without repeating its events.
-	terminationSettles
-)
-
-// decideEnvironmentTermination decides how the end of managed compute settles
-// an Environment of status whose compute did or did not expire.
-func decideEnvironmentTermination(status string, computeExpired bool) environmentTermination {
-	switch {
-	case status == "failed" || status == "expired":
-		return terminationSettles
-	case computeExpired:
-		return terminationExpires
-	}
-	return terminationFails
+// ExpireEnvironment ends the Session's Environment without a failure of its
+// own: a live Environment expires, input that never ran fails, so the Session
+// reads failed with its reason instead of idle, and active work is cancelled.
+// It reports the input activity this changes.
+func ExpireEnvironment(ctx context.Context, tx EnvironmentExpiryTx, environment Environment) error {
+	return TrackInputActivity(ctx, tx, func(ctx context.Context) error {
+		if environment.Status != "failed" && environment.Status != "expired" {
+			if err := tx.ExpireEnvironment(ctx, environment.ID); err != nil {
+				return err
+			}
+		}
+		if err := tx.FailPendingInput(ctx); err != nil {
+			return err
+		}
+		return CancelWork(ctx, tx)
+	})
 }
 
 // EnvironmentTerminationTx is the Session transaction TerminateEnvironment
@@ -142,31 +143,19 @@ type EnvironmentTerminationTx interface {
 
 // TerminateEnvironment settles the Session's Environment when its managed
 // compute ends. A live Environment whose compute did not expire fails with the
-// reason and detail, as FailEnvironment reports it. Otherwise the Environment
-// expires if it is still live, its pending input fails and its work is
-// cancelled, and the input activity this changes is reported.
+// reason and detail, as FailEnvironment reports it; any other ends as
+// ExpireEnvironment reports it.
 func TerminateEnvironment(ctx context.Context, tx EnvironmentTerminationTx, computeExpired bool, reason string, detail *ProvisioningFailureDetail) error {
 	environment, err := tx.LoadEnvironment(ctx)
 	if err != nil {
 		return err
 	}
-	termination := decideEnvironmentTermination(environment.Status, computeExpired)
-	if termination == terminationFails {
+	if environment.Status != "failed" && environment.Status != "expired" && !computeExpired {
 		if environment.Initialization == "complete" {
 			// The category describes a failed initialization, which this was not.
 			detail = nil
 		}
 		return FailEnvironment(ctx, tx, environment, reason, detail)
 	}
-	return TrackInputActivity(ctx, tx, func(ctx context.Context) error {
-		if termination == terminationExpires {
-			if err := tx.ExpireEnvironment(ctx, environment.ID); err != nil {
-				return err
-			}
-		}
-		if err := tx.FailPendingInput(ctx); err != nil {
-			return err
-		}
-		return CancelWork(ctx, tx)
-	})
+	return ExpireEnvironment(ctx, tx, environment)
 }

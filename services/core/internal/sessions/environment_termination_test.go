@@ -35,24 +35,6 @@ func TestEnvironmentStateChange(t *testing.T) {
 	}
 }
 
-func TestDecideEnvironmentTermination(t *testing.T) {
-	for _, test := range []struct {
-		status  string
-		expired bool
-		want    environmentTermination
-	}{
-		{"connected", false, terminationFails},
-		{"disconnected", true, terminationExpires},
-		{"failed", false, terminationSettles},
-		{"failed", true, terminationSettles},
-		{"expired", true, terminationSettles},
-	} {
-		if got := decideEnvironmentTermination(test.status, test.expired); got != test.want {
-			t.Errorf("%s expired=%v: %v", test.status, test.expired, got)
-		}
-	}
-}
-
 // FailEnvironment journals the Environment failure, then cancels the Session's
 // work, then reports the error and the failed Session with the recorded
 // failure time and the settled input activity.

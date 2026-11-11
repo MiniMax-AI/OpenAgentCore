@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 7fdb71b28ca0132d219056f9ddea1d3c1500f5e833b4ef788cbb930c9c40d4e0
+source_hash: d6301f4facacd059a48fc79afdcc922c4882692ce7368018e5c3c8763423e91f
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -127,7 +127,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 | Environment 类型不是 `openai_hosted` | 400 |
 | Session 不存在或属于另一个项目 | 404 |
 
-一个事务会将 Environment 标记为过期（已失败的 Environment 仍保持失败状态）、请求取消正在运行的工作、吊销 Runtime 的权限并写入审计条目。沙箱及其快照随后通过正常生命周期完成清理；如果资源是否已释放尚不确定，在提供商确认之前，该资源仍归 Core 所有。Session 不会被删除：其历史以及已持久化的 Files 和 Artifacts 仍可读取，未持久化的工作区内容会丢失，并且该 Session 无法恢复运行。
+一个事务会将 Environment 标记为过期（已失败的 Environment 仍保持失败状态）、将尚未开始的输入标记为失败（Session 因此显示为 `failed`，错误为 "The environment is no longer available for this input."）、请求取消正在运行的工作、吊销 Runtime 的权限并写入审计条目。沙箱及其快照随后通过正常生命周期完成清理；如果资源是否已释放尚不确定，在提供商确认之前，该资源仍归 Core 所有。Session 不会被删除：其历史以及已持久化的 Files 和 Artifacts 仍可读取，未持久化的工作区内容会丢失，并且该 Session 无法恢复运行。
 
 `POST` 和 `GET /projects/{project_id}/sessions/{session_id}/archive` 返回 `{session_id, environment_id, state}`。`GET` 是只读操作，不需要代次。`state` 表示资源的当前处置状态：`active`、`cleanup_pending` 或 `released`，无论该资源由什么操作释放。`released` 不表示活动的 Turn 已完成取消；请读取相应的 Turn。
 

@@ -10,8 +10,9 @@ import (
 )
 
 // ArchiveSession ends the lifetime of a hosted Session's Environment while
-// keeping the public Session, its history and persisted files. It cancels the
-// Session's work, revokes the allocation's device and requests its cleanup;
+// keeping the public Session, its history and persisted files. It expires the
+// Environment as compute expiry does, so input that never ran fails and work is
+// cancelled, then revokes the allocation's device and requests its cleanup;
 // the lifecycle performs the provider work, and only its confirmation releases
 // the allocation. expectedGeneration must be the current generation of the Web
 // managed deployment.
@@ -87,14 +88,7 @@ func (e *ExecutionOperations) archiveSession(ctx context.Context, tenantID, sess
 		if live && current.ProviderKey != d.InstallationID {
 			return ErrConflict
 		}
-		if err := sessions.TrackInputActivity(ctx, tx, func(ctx context.Context) error {
-			if !ended {
-				if err := tx.ExpireEnvironment(ctx, environment.ID); err != nil {
-					return err
-				}
-			}
-			return sessions.CancelWork(ctx, tx)
-		}); err != nil {
+		if err := sessions.ExpireEnvironment(ctx, tx, environment); err != nil {
 			return err
 		}
 		if live {

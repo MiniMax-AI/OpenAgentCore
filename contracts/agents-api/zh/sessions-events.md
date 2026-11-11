@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 1c6e57bbd212f7155906d68bbbcb2e976170512a2aca907e024104667419d720
+source_hash: dcd0eac2866f22d4bc050f56e2cc81b3feb70186a0eb971831a99fe0c4852509
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -89,7 +89,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 - `none` 必须提供初始输入（400 `invalid_request_error`，"conversation-only sessions currently require initial input"）；使用 `stream: true` 时，除 `self_hosted` 外的所有部署方式也必须提供初始输入（400，"streaming session creation requires initial input"）。这些检查在创建重试查找之前执行。
 - Session 及其初始工作在一个事务中提交。对于 `none`，这包括首个 Turn 和输入 Item。对于 `openai_hosted`，输入会在 Environment 预配期间保留。对于 `self_hosted`，输入会保留并带有 `environment_connection` 操作，即使机器仍处于离线状态，创建操作也会返回。
-- 预留的初始输入与后续输入具有相同的五分钟截止时间。如果截止时间在 Turn 启动前过去，Session 将显示为 `failed`，且不会创建 Turn。
+- 预留的初始输入与后续输入具有相同的五分钟截止时间。如果在 Turn 启动前截止时间已过，或 Environment 失败或过期，Session 将显示为 `failed`，不会创建 Turn，`error` 说明原因。
 - 创建重试会返回原始 Session，绝不会再次接纳其输入，即使之后已经产生新的 Turn（[创建重试](wire-semantics.md)）。
 
 ## 创建时流式传输 {#creation-streaming}

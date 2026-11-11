@@ -119,13 +119,19 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if err != nil || result.State != sessions.ManagedArchiveReleased {
 		t.Fatal("unallocated archive", result, err)
 	}
+	// The initial input never ran, so the Session fails with the reason
+	// instead of reading idle; the Environment expired rather than failed.
 	row, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
-	if err != nil || row.Environment.Status != "expired" || row.EnvironmentFailure != nil || row.PendingInput || row.EnvironmentInputActivity != nil || row.LastTurn != nil {
-		t.Fatal("archive fabricated failed execution", row, err)
+	if err != nil || row.Environment.Status != "expired" || row.EnvironmentFailure != nil || row.PendingInput || row.LastTurn != nil ||
+		row.EnvironmentInputActivity == nil || row.EnvironmentInputActivity.Status != "failed" || row.EnvironmentInputActivity.Failure != "environment_unavailable" {
+		t.Fatal("archive left the unrun initial input without a failure", row, err)
 	}
 	var reservationState string
-	if err := s.pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE session_id=$1", session.ID).Scan(&reservationState); err != nil || reservationState != "cancelled" {
+	if err := s.pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE session_id=$1", session.ID).Scan(&reservationState); err != nil || reservationState != "failed" {
 		t.Fatal("archive left pending initial input", reservationState, err)
+	}
+	if events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0); err != nil || len(events) == 0 || events[len(events)-1].Event.Type != "agent.session.failed" {
+		t.Fatal("archive did not report the failed input", events, err)
 	}
 	before := adminMutationSnapshot(t, s, "sessions", "environments", "environment_input_reservations", "session_events")
 	retry, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
