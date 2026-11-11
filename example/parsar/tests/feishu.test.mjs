@@ -2080,7 +2080,7 @@ test("a bot takes the name its app has in Feishu when it connects", async (t) =>
   assert.equal(saved.name, "OddjobHandler");
 });
 
-test("a message sent while the Turn runs steers it and keeps that Turn's card", async (t) => {
+test("a message sent while the Turn runs steers it, and the Turn's card moves below it", async (t) => {
   const f = await feishu(t);
   const config = await f.api("GET", `/app/feishu/bots/${botId}`);
   await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
@@ -2093,19 +2093,27 @@ test("a message sent while the Turn runs steers it and keeps that Turn's card", 
     if (method === "POST" && path.endsWith("/events")) posted.push(body.events[0]);
     return f.core(path, method, body, ...rest);
   };
+  const recalled = [];
+  f.channel.rawClient.im.message.delete = async ({ path }) => (recalled.push(path.message_id), { code: 0 });
   const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
   const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
   worker.receive("cli_0123456789abcdef", dm);
   await worker.tick();
   assert.equal(f.sent.length, 1);
+  const first = f.store.list("feishu_outbound").find((row) => row.sent_message_id);
   worker.receive("cli_0123456789abcdef", { ...dm, messageId: "steer", content: "我明天要去开发者大会" });
   await worker.tick();
-  // The steer reaches the running Turn, gets no card of its own and adds no Turn.
+  // The steer reaches the running Turn and adds no Turn.
   assert.ok(posted.some((event) => event.type === "agent.session.input.message" && JSON.stringify(event.input).includes("开发者大会")));
-  assert.equal(f.sent.length, 1);
   assert.equal(f.store.list("turns").length, 1);
   assert.equal(f.store.list("turns")[0].steers.length, 1);
   assert.equal(f.store.list("feishu_inbound").find((row) => row.message_id === "steer").state, "delivered");
+  // The card moves: a new one answers the steer and the old one is recalled.
+  assert.equal(f.sent.length, 2);
+  assert.equal(f.sent.at(-1).path.message_id, "steer");
+  assert.deepEqual(recalled, [first.sent_message_id]);
+  const thread = f.store.list("feishu_threads")[0];
+  assert.equal(f.store.get("feishu_outbound", thread.active_outbound_id).reply_to, "steer");
 });
 
 test("a reply that names missing Feishu scopes gets a link to apply for them", async () => {

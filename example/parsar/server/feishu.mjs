@@ -635,6 +635,9 @@ export function feishuOperations(client) {
         throw new Error("Feishu did not return a message identifier");
       return { id: value.message_id };
     },
+    async recall(id) {
+      confirmed(await client.im.message.delete({ path: { message_id: id } }));
+    },
     async edit(id, text) {
       const result = await client.im.message.patch({
         path: { message_id: id },
@@ -1225,8 +1228,16 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           thread,
           "已请求取消，等待 Agent 确认停止。",
         );
-      // A message that steered the running Turn keeps that Turn's card.
-      else if (!steered) progress(thinking);
+      // A message that steers the running Turn takes over its card, which moves
+      // below that message: one card per Turn, always under the latest message.
+      else {
+        const previous = steered && thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
+        progress(previous?.payload || thinking);
+        if (previous?.sent_message_id) {
+          store.put("feishu_outbound", { ...previous, moved: true });
+          await channel.recall(previous.sent_message_id).catch(() => {});
+        } else if (previous) store.remove("feishu_outbound", previous.id);
+      }
     }
     store.put("feishu_inbound", {
       ...row,
@@ -1325,7 +1336,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     const cardFor = (turn) => {
       const entry = ledger.entryFor(run.id, turn.id);
       const own = entry && store.get("feishu_outbound", stableId(`${entry.kind === "first" ? thread.first_message_id : entry.id}:accepted`));
-      return own || (turn.id === turns.at(-1)?.id ? progress : undefined);
+      return (own?.moved ? undefined : own) || (turn.id === turns.at(-1)?.id ? progress : undefined);
     };
     const progressReplyTo = progress?.reply_to || thread.root_id;
     const questionBase = progress?.sent_message_id ? progress.id : thread.id;
