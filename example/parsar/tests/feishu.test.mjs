@@ -2256,3 +2256,34 @@ test("a Feishu file reaches the workspace through Core's Files API, up to 50 MiB
   assert.match(file.path, /share\.pptx$/);
   assert.doesNotMatch(JSON.stringify(f.store.list("feishu_inbound")), /AQEBAQEB/, "the message keeps no file bytes");
 });
+
+test("a steer moves its Turn's own card, whatever card the thread last showed", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const patched = [];
+  const patch = f.channel.rawClient.im.message.patch;
+  f.channel.rawClient.im.message.patch = async (request) => (patched.push(request), patch(request));
+  const worker = f.create();
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  const thread = f.store.list("feishu_threads")[0];
+  const session = f.resources.get(f.store.get("sessions", thread.session_id).core_session_id);
+  session.status = "in_progress";
+  session.turns[0].status = "in_progress";
+  await f.api.sessions.turns.monitor();
+  const first = f.store.list("feishu_outbound").find((row) => row.sent_message_id);
+  // The thread last showed another card, as after a question or an earlier Turn.
+  f.store.put("feishu_outbound", { id: "other-card", app_id: thread.app_id, chat_id: thread.chat_id, thread_id: thread.id, state: "delivered", sent_message_id: "om_other", payload: "{}" });
+  f.store.put("feishu_threads", { ...f.store.get("feishu_threads", thread.id), active_outbound_id: "other-card" });
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "steer", content: "补充一句" });
+  await worker.tick();
+  // The fake channel patches a card under its sent ID with a prefix.
+  const sentAs = (row) => (request) => request.path.message_id.endsWith(row.sent_message_id);
+  assert.match(patched.find(sentAs(first)).data.content, /已并入下方回复/, "the Turn's own card moves");
+  assert.ok(!patched.some((request) => request.path.message_id === "om_other"), "another card is left alone");
+  // The thread's live card is now the one below the steer, where the result goes.
+  const thread2 = f.store.get("feishu_threads", thread.id);
+  assert.equal(f.store.get("feishu_outbound", thread2.active_outbound_id).reply_to, "steer");
+});

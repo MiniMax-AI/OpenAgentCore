@@ -838,6 +838,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   // A Turn's files reply to the message it answers. Only files its reply names
   // reach the chat; every file stays downloadable in the Web conversation.
+  // A Turn's card is the newest card one of its inputs opened that has not moved.
+  const turnCard = (thread, entry) =>
+    entry && [entry.kind === "first" ? thread.first_message_id : entry.id, ...(entry.steers || []).map((steer) => steer.id)]
+      .map((id) => store.get("feishu_outbound", stableId(`${id}:accepted`)))
+      .filter((card) => card && !card.moved)
+      .at(-1);
   const queueMedia = (thread, items, artifacts = [], replyTo = thread.root_id) => {
     const replies = items
       .filter((item) => item.type === "message" && item.role === "assistant")
@@ -1105,7 +1111,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           row,
           "支持的命令：/clear、/stop、/answer、/help。其他消息会交给 Agent。",
         );
-      let steered = false;
+      // The ledger entry of the running Turn this message steered, if any.
+      let steered;
       try {
         if (
           media.files.length &&
@@ -1192,7 +1199,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         // A message sent while a Turn runs joins it in Core and keeps its card.
         if (event.type === "agent.session.input.message") {
           const delivered = await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
-          steered = delivered.id !== row.id || delivered.base_running === true;
+          steered = delivered.id !== row.id ? delivered : delivered.base_running === true &&
+            store.list("turns").find((t) => t.session_id === run.id && t.outcome === "running" && t.id !== row.id);
         }
         else
           await core(
@@ -1229,7 +1237,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       // A message that steers the running Turn takes over its card, which moves
       // below that message: the Turn's live card always follows the latest message.
       else {
-        const previous = steered && thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
+        const previous = steered && turnCard(thread, steered);
         progress(previous?.payload || thinking);
         // Feishu marks every recall in the chat, so the old card shrinks to one line instead.
         if (previous?.sent_message_id) {
@@ -1332,11 +1340,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     let progress = thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
     // The progress card of the input a Turn answers; an older Turn never takes
     // the card of a newer message.
-    const cardFor = (turn) => {
-      const entry = ledger.entryFor(run.id, turn.id);
-      const own = entry && store.get("feishu_outbound", stableId(`${entry.kind === "first" ? thread.first_message_id : entry.id}:accepted`));
-      return (own?.moved ? undefined : own) || (turn.id === turns.at(-1)?.id ? progress : undefined);
-    };
+    const cardFor = (turn) =>
+      turnCard(thread, ledger.entryFor(run.id, turn.id)) || (turn.id === turns.at(-1)?.id ? progress : undefined);
     const progressReplyTo = progress?.reply_to || thread.root_id;
     const questionBase = progress?.sent_message_id ? progress.id : thread.id;
     if ((progress || session.status === "requires_action") && (["in_progress", "requires_action"].includes(session.status) || recovering) && !unseen.length) {
