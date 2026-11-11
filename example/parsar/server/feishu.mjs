@@ -839,8 +839,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   // A Turn's files reply to the message it answers. Only files its reply names
   // reach the chat; every file stays downloadable in the Web conversation.
   // A Turn's card is the newest card one of its inputs opened that has not moved.
-  const turnCard = (thread, entry) =>
+  const turnCard = (thread, entry, except) =>
     entry && [entry.kind === "first" ? thread.first_message_id : entry.id, ...(entry.steers || []).map((steer) => steer.id)]
+      .filter((id) => id !== except)
       .map((id) => store.get("feishu_outbound", stableId(`${id}:accepted`)))
       .filter((card) => card && !card.moved)
       .at(-1);
@@ -1196,7 +1197,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         row = { ...row, state: "submitting", event };
         store.put("feishu_inbound", row);
         // Messages go through the Turn ledger; answers and cancellations go to Core directly.
-        // A message sent while a Turn runs joins it in Core and keeps its card.
+        // A message sent while a Turn runs joins it in Core.
         if (event.type === "agent.session.input.message") {
           const delivered = await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
           steered = delivered.id !== row.id ? delivered : delivered.base_running === true &&
@@ -1237,13 +1238,21 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       // A message that steers the running Turn takes over its card, which moves
       // below that message: the Turn's live card always follows the latest message.
       else {
-        const previous = steered && turnCard(thread, steered);
+        // The card this message opened is never the one that moves, so a retry is safe.
+        const previous = steered && turnCard(thread, steered, row.id);
         progress(previous?.payload || thinking);
-        // Feishu marks every recall in the chat, so the old card shrinks to one line instead.
+        // Feishu marks every recall in the chat, so the old card shrinks instead.
+        const folded = statusCard("moved", grey("回复在下方。"));
         if (previous?.sent_message_id) {
-          store.put("feishu_outbound", { ...previous, moved: true });
-          await channel.edit(previous.sent_message_id, statusCard("moved", grey("回复在下方。")), thread).catch(() => {});
-        } else if (previous) store.remove("feishu_outbound", previous.id);
+          // A transient failure retries the whole message; a card Feishu no longer edits stays as it is.
+          await channel.edit(previous.sent_message_id, folded, thread).catch((error) => {
+            if (error?.code !== "feishu_card_unavailable") throw error;
+          });
+          store.put("feishu_outbound", { ...previous, payload: folded, moved: true });
+        } else if (previous?.first_attempt_at)
+          // A send that may have landed is finished by delivery, with the folded card.
+          store.put("feishu_outbound", { ...previous, payload: folded, moved: true });
+        else if (previous) store.remove("feishu_outbound", previous.id);
       }
     }
     store.put("feishu_inbound", {
