@@ -2287,3 +2287,52 @@ test("a steer moves its Turn's own card, whatever card the thread last showed", 
   const thread2 = f.store.get("feishu_threads", thread.id);
   assert.equal(f.store.get("feishu_outbound", thread2.active_outbound_id).reply_to, "steer");
 });
+
+test("moving a steered Turn's card survives a failed edit and an unconfirmed send", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const core = async (path, method, body, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "running-turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: [], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "in_progress" };
+    return f.core(path, method, body, ...rest);
+  };
+  const folds = [];
+  let failNext = true;
+  const patch = f.channel.rawClient.im.message.patch;
+  f.channel.rawClient.im.message.patch = async (request) => {
+    if (/已并入下方回复/.test(request.data.content)) {
+      folds.push(request.path.message_id);
+      if (failNext) { failNext = false; throw new Error("socket hang up"); }
+    }
+    return patch(request);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  const first = f.store.list("feishu_outbound").find((row) => row.sent_message_id);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "steer", content: "补充一句" });
+  await worker.tick();
+  // The fold failed, so the old card is still the Turn's card and the message is retried.
+  assert.ok(!f.store.get("feishu_outbound", first.id).moved);
+  const steer = f.store.list("feishu_inbound").find((row) => row.message_id === "steer");
+  f.store.put("feishu_inbound", { ...steer, next_at: 0 });
+  await worker.tick();
+  assert.ok(f.store.get("feishu_outbound", first.id).moved, "the retry folds the old card");
+  assert.equal(new Set(folds).size, 1, "only the old card is ever folded, never the new one");
+  assert.ok(!f.store.list("feishu_outbound").find((row) => row.reply_to === "steer").moved);
+
+  // A second steer while the steer's card is sent but unconfirmed folds it on delivery, not deletes it.
+  const live = f.store.list("feishu_outbound").find((row) => row.reply_to === "steer");
+  f.store.put("feishu_outbound", { ...live, state: "queued", sent_message_id: undefined, first_attempt_at: Date.now() });
+  // As in Core, the first steer has appeared in the Turn's items by now.
+  f.store.put("feishu_threads", { ...f.store.list("feishu_threads")[0], awaiting_user_input: false });
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "steer2", content: "再补充一句" });
+  await worker.tick();
+  const kept = f.store.get("feishu_outbound", live.id);
+  assert.ok(kept, "an unconfirmed send is kept");
+  assert.ok(kept.moved);
+  assert.match(kept.payload, /已并入下方回复/);
+});
