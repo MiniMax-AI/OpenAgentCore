@@ -1310,7 +1310,8 @@ test("group topics are shared by their participants and private chats stay per s
     messageId: "om_colleague",
     rootId: "om_first",
     senderId: "ou_colleague",
-    mentionedBot: false,
+    // A colleague joins the topic's conversation by mentioning the bot.
+    mentionedBot: true,
     content: "Add the payment step",
   });
   await w.tick();
@@ -2335,4 +2336,22 @@ test("moving a steered Turn's card survives a failed edit and an unconfirmed sen
   assert.ok(kept, "an unconfirmed send is kept");
   assert.ok(kept.moved);
   assert.match(kept.payload, /已并入下方回复/);
+});
+
+test("in a group topic only people who mentioned the bot are answered without a mention", async (t) => {
+  const f = await feishu(t);
+  const worker = f.create();
+  const say = (messageId, senderId, extra = {}) =>
+    worker.receive("cli_0123456789abcdef", { ...f.message, messageId, senderId, rootId: "om_first", mentionedBot: false, content: messageId, ...extra });
+  const reached = (messageId) => f.store.list("feishu_inbound").some((row) => row.message_id === messageId);
+  worker.receive("cli_0123456789abcdef", f.message);
+  say("a_follow_up", "ou_user");
+  say("b_unmentioned", "ou_b");
+  say("a_to_b", "ou_user", { mentions: [{ id: "ou_b" }] });
+  assert.ok(reached("a_follow_up"), "the person who opened the topic keeps talking without a mention");
+  assert.ok(!reached("b_unmentioned"), "someone who never mentioned the bot is ignored");
+  assert.ok(!reached("a_to_b"), "a reply that mentions only someone else is ignored");
+  say("b_mentions", "ou_b", { mentionedBot: true });
+  say("b_follow_up", "ou_b");
+  assert.ok(reached("b_mentions") && reached("b_follow_up"), "mentioning the bot once makes B a participant");
 });

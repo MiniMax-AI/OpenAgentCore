@@ -724,14 +724,19 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
                   out.sent_message_id === message.replyToMessageId,
               )),
       );
+  // A topic's participants are the people who mentioned the bot in it.
+  const participates = (thread, senderId) =>
+    thread.sender_id === senderId || (thread.participants || []).includes(senderId);
   const receive = (appId, message) => {
+    const topic = message.chatType === "group" && threadFor(appId, message);
     if (
       !allowed(appId, message.chatType) ||
       !["group", "p2p"].includes(message.chatType) ||
       (message.chatType === "group" &&
         !message.mentionedBot &&
-        // A topic reply that mentions only other people is addressed to them.
-        (message.mentions?.length || !threadFor(appId, message))) ||
+        // Without a mention, only a participant's reply in the topic reaches the
+        // bot, and not one that mentions only other people.
+        (message.mentions?.length || !topic || !participates(topic, message.senderId))) ||
       !message.senderId ||
       message.mentionAll
     )
@@ -774,7 +779,13 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       thread?.id || stableId(`${appId}:${message.chatId}:${root}`);
     store.transaction(() => {
       if (thread)
-        store.put("feishu_threads", { ...thread, settled_at: undefined });
+        store.put("feishu_threads", {
+          ...thread,
+          settled_at: undefined,
+          ...(message.chatType === "group" && !participates(thread, message.senderId) && {
+            participants: [...(thread.participants || []), message.senderId],
+          }),
+        });
       if (!thread)
         store.put("feishu_threads", {
           id: threadId,
