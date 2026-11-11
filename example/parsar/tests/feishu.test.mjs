@@ -2093,8 +2093,9 @@ test("a message sent while the Turn runs steers it, and the Turn's card moves be
     if (method === "POST" && path.endsWith("/events")) posted.push(body.events[0]);
     return f.core(path, method, body, ...rest);
   };
-  const recalled = [];
-  f.channel.rawClient.im.message.delete = async ({ path }) => (recalled.push(path.message_id), { code: 0 });
+  const patched = [];
+  const patch = f.channel.rawClient.im.message.patch;
+  f.channel.rawClient.im.message.patch = async (request) => (patched.push(request), patch(request));
   const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
   const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
   worker.receive("cli_0123456789abcdef", dm);
@@ -2108,10 +2109,11 @@ test("a message sent while the Turn runs steers it, and the Turn's card moves be
   assert.equal(f.store.list("turns").length, 1);
   assert.equal(f.store.list("turns")[0].steers.length, 1);
   assert.equal(f.store.list("feishu_inbound").find((row) => row.message_id === "steer").state, "delivered");
-  // The card moves: a new one answers the steer and the old one is recalled.
+  // The card moves: a new one answers the steer and the old one shrinks to one line.
   assert.equal(f.sent.length, 2);
   assert.equal(f.sent.at(-1).path.message_id, "steer");
-  assert.deepEqual(recalled, [first.sent_message_id]);
+  const folded = patched.find((request) => request.path.message_id === first.sent_message_id);
+  assert.match(folded.data.content, /已并入下方回复/);
   const thread = f.store.list("feishu_threads")[0];
   assert.equal(f.store.get("feishu_outbound", thread.active_outbound_id).reply_to, "steer");
 });

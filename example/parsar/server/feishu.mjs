@@ -180,6 +180,7 @@ const cardTones = {
   cancelled: ["已停止", "grey"],
   failed: ["执行失败", "red"],
   missing_scopes: ["需要开通权限", "orange"],
+  moved: ["已并入下方回复", "grey"],
 };
 const grey = (text) => `<font color='grey'>${text}</font>`;
 
@@ -634,9 +635,6 @@ export function feishuOperations(client) {
       if (!value?.message_id)
         throw new Error("Feishu did not return a message identifier");
       return { id: value.message_id };
-    },
-    async recall(id) {
-      confirmed(await client.im.message.delete({ path: { message_id: id } }));
     },
     async edit(id, text) {
       const result = await client.im.message.patch({
@@ -1229,13 +1227,14 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           "已请求取消，等待 Agent 确认停止。",
         );
       // A message that steers the running Turn takes over its card, which moves
-      // below that message: one card per Turn, always under the latest message.
+      // below that message: the Turn's live card always follows the latest message.
       else {
         const previous = steered && thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
         progress(previous?.payload || thinking);
+        // Feishu marks every recall in the chat, so the old card shrinks to one line instead.
         if (previous?.sent_message_id) {
           store.put("feishu_outbound", { ...previous, moved: true });
-          await channel.recall(previous.sent_message_id).catch(() => {});
+          await channel.edit(previous.sent_message_id, statusCard("moved", grey("回复在下方。")), thread).catch(() => {});
         } else if (previous) store.remove("feishu_outbound", previous.id);
       }
     }
