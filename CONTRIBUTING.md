@@ -10,6 +10,7 @@ Every subject has one owner. Most owners are the page whose title names the subj
 | --- | --- |
 | Design principles, public API fidelity, settings and data ownership, documentation rules | [AGENTS.md](AGENTS.md) |
 | Protocol code and documents at each component boundary | [Protocol map](AGENTS.md#protocols-at-every-boundary) |
+| Agent review gate | [Independent review gate](AGENTS.md#independent-review-gate) |
 | Generated files (OpenAPI documents, Harness catalog reference, architecture diagram) | The source and generator named in [Contract and schema rules](#contract-and-schema-rules) and [Branding](#branding); never edit the output by hand |
 | Core service setup, tests and generation | [Core service guide](services/core/README.md) |
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
@@ -61,7 +62,7 @@ If requirements are unresolved, object ownership is unclear, or a design would n
 
 ### Review
 
-Every change gets an independent review against its requirements, acceptance criteria and boundaries. Follow the [review gate](AGENTS.md#independent-review-gate): it sets who reviews, what reviewers receive, how many rounds run, and when to reassess design and scope or report an unresolved blocker instead of broadening the task.
+Every change gets an independent review against its requirements, acceptance criteria and boundaries by a reviewer who did not write it. Agents follow the [review gate](AGENTS.md#independent-review-gate), which sets who reviews, what reviewers receive and how many rounds run. Fix substantiated in-scope findings; if the cycle repeats, reassess design and scope instead of adding changes, and report an unresolved blocker instead of broadening the task.
 
 ## Required checks
 
