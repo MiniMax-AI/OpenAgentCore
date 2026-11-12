@@ -20,7 +20,7 @@ type scheduledWork struct {
 	reservationID string
 }
 
-func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
+func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool, free int) ([]scheduledWork, error) {
 	turns, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 		}
 	}
 	var selected []scheduledWork
-	for len(turns)+len(environments) > 0 && len(active) < w.executionConcurrency() {
+	for len(turns)+len(environments) > 0 && len(selected) < free {
 		var item scheduledWork
 		if len(environments) > 0 && (s.environmentFirst || len(turns) == 0) {
 			value := environments[0]

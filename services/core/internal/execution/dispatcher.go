@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -28,6 +29,9 @@ type Snapshot struct {
 
 type Dispatcher struct {
 	notifications *executionNotifications
+	// waitingTurns counts the Worker's delivered Turns that wait for function
+	// results; their Sessions stay reserved but hold no execution slot.
+	waitingTurns *atomic.Int64
 	// sessionExecution runs the Session execution operations on the lease;
 	// Bind sets it from Owner.Sessions.
 	sessionExecution *sessions.ExecutionOperations

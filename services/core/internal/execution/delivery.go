@@ -100,6 +100,8 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
 	functions := &functionExchange{kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools, abandoned: map[string]bool{}}
+	waiting := false
+	defer d.markWaiting(&waiting, false)
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -285,6 +287,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				result.ErrorCode = "execution_state_changed"
 				return
 			}
+			d.markWaiting(&waiting, turn.Status == sessions.TurnWaiting)
 			if !turn.CancelRequestedAt.IsZero() {
 				cancelReply = requestCancellation(cancelCtx, peer, runID)
 				cancelSent = time.Now()
@@ -340,6 +343,20 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				pending.waiting = true
 			}
 		}
+	}
+}
+
+// markWaiting records whether the delivered Turn waits for function results,
+// which frees the Worker's execution slot until it resumes.
+func (d *Dispatcher) markWaiting(current *bool, waiting bool) {
+	if d.waitingTurns == nil || *current == waiting {
+		return
+	}
+	*current = waiting
+	if waiting {
+		d.waitingTurns.Add(1)
+	} else {
+		d.waitingTurns.Add(-1)
 	}
 }
 
