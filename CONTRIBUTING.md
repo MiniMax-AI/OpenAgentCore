@@ -61,7 +61,7 @@ If requirements are unresolved, object ownership is unclear, or a design would n
 
 ### Review
 
-Every change gets an independent review of the complete diff against its requirements, acceptance criteria and boundaries. The reviewer receives no implementation summary or earlier findings. Fix substantiated in-scope findings, validate and review again; if the cycle repeats, reassess design and scope instead of adding changes, and report an unresolved blocker instead of broadening the task.
+Every change gets an independent review against its requirements, acceptance criteria and boundaries. Follow the [review gate](AGENTS.md#independent-review-gate): it sets who reviews, what reviewers receive, how many rounds run, and when to reassess design and scope or report an unresolved blocker instead of broadening the task.
 
 ## Required checks
 
