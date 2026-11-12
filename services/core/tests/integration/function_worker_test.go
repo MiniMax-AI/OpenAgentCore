@@ -149,3 +149,24 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	}
 	return string(raw), token
 }
+
+func TestWorkerWaitingTurnHoldsNoExecutionSlot(t *testing.T) {
+	h := newFunctionHarness(t)
+	h.d.MaxConcurrentExecutions = 1
+	asking := h.message("ask", "Ask the user")
+	ctx, cancel := context.WithCancel(t.Context())
+	worker := startWorker(t, ctx, h.s, h.d)
+	done := make(chan error, 1)
+	go func() { done <- worker.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+	h.read(testExecutionRequest)
+	h.write(asking.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "ask", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
+	functionState(t, h, 1)
+	h.session = publicSession(t, h, "meanwhile")
+	other := h.message("meanwhile", "Run meanwhile")
+	if request := h.read(testExecutionRequest); request.ID != other.TurnID {
+		t.Fatal("unexpected Turn", request.ID)
+	}
+	h.write(other.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
+	waitTurn(t, h, other.TurnID, sessions.TurnCompleted)
+}

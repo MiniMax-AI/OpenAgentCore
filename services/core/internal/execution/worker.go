@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -82,6 +83,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
 	owned.notifications = &executionNotifications{}
+	owned.waitingTurns = new(atomic.Int64)
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
@@ -271,7 +273,9 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
-	w.observeSlots(len(active))
+	// A Session waiting for function results stays reserved but holds no slot.
+	slots := func() int { return len(active) - int(w.dispatcher.waitingTurns.Load()) }
+	w.observeSlots(slots())
 	type completion struct {
 		id  string
 		err error
@@ -315,12 +319,12 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:
-			if request.ctx.Err() != nil || active[request.environment.AttachedSessionID] || len(active) == w.executionConcurrency() {
+			if request.ctx.Err() != nil || active[request.environment.AttachedSessionID] || slots() >= w.executionConcurrency() {
 				request.result <- fileWriteResult{err: ErrExecutionUnavailable}
 				continue
 			}
 			active[request.environment.AttachedSessionID] = true
-			w.observeSlots(len(active))
+			w.observeSlots(slots())
 			running.Add(1)
 			go func() {
 				defer running.Done()
@@ -329,21 +333,21 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			continue
 		case write := <-writesCompleted:
 			delete(active, write.request.environment.AttachedSessionID)
-			w.observeSlots(len(active))
+			w.observeSlots(slots())
 			write.request.result <- write.result
 			if !rescanOnCompletion {
 				continue
 			}
 			rescanOnCompletion = false
 		case request := <-w.directoryReads:
-			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.AttachedSessionID] && len(active) == w.executionConcurrency()) {
+			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.AttachedSessionID] && slots() >= w.executionConcurrency()) {
 				request.reply(directoryReadResult{err: ErrExecutionUnavailable})
 				continue
 			}
 			reserved := !active[request.environment.AttachedSessionID]
 			if reserved {
 				active[request.environment.AttachedSessionID] = true
-				w.observeSlots(len(active))
+				w.observeSlots(slots())
 			}
 			reads++
 			running.Add(1)
@@ -361,7 +365,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			reads--
 			if read.id != "" {
 				delete(active, read.id)
-				w.observeSlots(len(active))
+				w.observeSlots(slots())
 			}
 			read.request.reply(read.result)
 			if read.id == "" || !rescanOnCompletion {
@@ -370,7 +374,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			rescanOnCompletion = false
 		case result := <-completed:
 			delete(active, result.id)
-			w.observeSlots(len(active))
+			w.observeSlots(slots())
 			if result.err != nil {
 				return result.err
 			}
@@ -400,7 +404,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 				return err
 			}
 		}
-		if len(active) == w.executionConcurrency() {
+		w.observeSlots(slots())
+		if slots() >= w.executionConcurrency() {
 			w.observeSchedulerPoll(0, nil)
 			continue
 		}
@@ -412,14 +417,14 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		if !maintenance {
 			schedule.nextEnvironmentScan = time.Time{}
 		}
-		work, err := schedule.selectWork(ctx, w, devices, active)
-		w.observeSlots(len(active))
+		work, err := schedule.selectWork(ctx, w, devices, active, w.executionConcurrency()-slots())
+		w.observeSlots(slots())
 		if err != nil {
 			w.observeSchedulerPoll(0, err)
 			return err
 		}
 		w.observeSchedulerPoll(len(work), nil)
-		rescanOnCompletion = rescanOnCompletion && (len(active) > len(work) || len(active) == w.executionConcurrency())
+		rescanOnCompletion = rescanOnCompletion && (len(active) > len(work) || slots() >= w.executionConcurrency())
 		for _, item := range work {
 			running.Add(1)
 			go func() {
@@ -431,7 +436,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 					err = w.runClaim(ctx, item.ExecutionWork)
 				}
 				w.dispatcher.notifications.notify(item.TenantID, item.SessionID)
-				completed <- completion{id: item.SessionID, err: err}
+				// Waiting Turns hold no slot, so more Turns can run than the buffer holds.
+				select {
+				case completed <- completion{id: item.SessionID, err: err}:
+				case <-ctx.Done():
+				}
 			}()
 		}
 	}
