@@ -33,6 +33,8 @@ export function explainFailure(error, runtimeName = "环境模板") {
   if (/provision/i.test(message)) return `「${runtimeName}」准备失败。通常是网络或安装问题，可以直接重试。`;
   if (/expired|no longer available/i.test(message)) return "这个对话的工作环境已过期，请开始新对话。";
   if (/rate|429/i.test(message)) return "模型服务繁忙（请求过多），请稍后重试。";
+  // Core's input deadline passed while the sandbox waited for a free slot.
+  if (/waiting for the environment/i.test(message)) return "沙箱已满，排队超时，请稍后重试。";
   if (/timeout|timed out/i.test(message)) return "模型服务响应超时，可以直接重试。";
   return message ? `执行失败：${message}` : "执行失败，可以直接重试。";
 }
