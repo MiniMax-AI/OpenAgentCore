@@ -2153,6 +2153,8 @@ test("Parsar's views show a Feishu message without the source line the Agent see
   assert.equal(line, "[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1；回复写在最终回复里，Parsar 会把它发回这条消息所在的对话；要给对方看的图片或文件放进工作区的 outputs 目录，并在回复里写出文件名；不要用 lark-cli 往这个对话发消息]");
   assert.equal(withoutFeishuSource(`${line}\n记一下明天的 meetup`), "记一下明天的 meetup");
   assert.equal(withoutFeishuSource("[飞书消息] 不是来源行"), "[飞书消息] 不是来源行");
+  // A message stored with the earlier, shorter source line is shown without it too.
+  assert.equal(withoutFeishuSource("[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1]\n旧消息"), "旧消息");
 });
 
 test("a command keeps working when Feishu's rich-text box formats it", async () => {
