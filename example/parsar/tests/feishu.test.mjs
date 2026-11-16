@@ -199,7 +199,7 @@ test("Feishu settings redact secrets, default-deny chat dispatch and persist ing
     f.calls.find((x) => x.path.endsWith("/events")).body.events[0].input[0]
       .content[0].text,
     // The Agent sees which Feishu message it is answering.
-    "[飞书消息 message_id=om_next chat_id=oc_test chat_type=group sender_open_id=ou_user]\nAlso check mobile",
+    "[飞书消息 message_id=om_next chat_id=oc_test chat_type=group sender_open_id=ou_user；回复写在最终回复里，Parsar 会把它发回这条消息所在的对话；要给对方看的图片或文件放进工作区的 outputs 目录，并在回复里写出文件名；不要用 lark-cli 往这个对话发消息]\nAlso check mobile",
   );
 });
 
@@ -1166,7 +1166,7 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   );
   assert.equal(
     f.calls.findLast((call) => call.path === "/v1/agents/sessions").body.input,
-    "[飞书消息 message_id=om_dm_3 chat_id=oc_dm_single chat_type=p2p sender_open_id=ou_user]\n收到请回复",
+    "[飞书消息 message_id=om_dm_3 chat_id=oc_dm_single chat_type=p2p sender_open_id=ou_user；回复写在最终回复里，Parsar 会把它发回这条消息所在的对话；要给对方看的图片或文件放进工作区的 outputs 目录，并在回复里写出文件名；不要用 lark-cli 往这个对话发消息]\n收到请回复",
   );
   const listedSessions = await f.api("GET", "/app/sessions");
   assert.equal(
@@ -2150,7 +2150,7 @@ test("a reply that names missing Feishu scopes gets a link to apply for them", a
 test("Parsar's views show a Feishu message without the source line the Agent sees", async () => {
   const { feishuSource, withoutFeishuSource } = await import("../shared/feishu-source.mjs");
   const line = feishuSource({ message_id: "om_1", chat_id: "oc_1", chat_type: "p2p", sender_id: "ou_1" });
-  assert.equal(line, "[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1]");
+  assert.equal(line, "[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1；回复写在最终回复里，Parsar 会把它发回这条消息所在的对话；要给对方看的图片或文件放进工作区的 outputs 目录，并在回复里写出文件名；不要用 lark-cli 往这个对话发消息]");
   assert.equal(withoutFeishuSource(`${line}\n记一下明天的 meetup`), "记一下明天的 meetup");
   assert.equal(withoutFeishuSource("[飞书消息] 不是来源行"), "[飞书消息] 不是来源行");
 });

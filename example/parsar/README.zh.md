@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: f0705df7d832d4eb66c03ce1c80fb626f9befbc4af7d96715ebb1a81b5314814
+source_hash: 0d332f081e1e5b12911ea24e185bf89ee7fcbda45a2fdb2a90d9e921272cfa48
 ---
 
 # Parsar 工作空间
@@ -138,7 +138,7 @@ Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出�
 
 ### 机器人身份 {#bot-identity}
 
-Agent 以绑定的机器人身份工作。每条飞书消息转给 Agent 时，正文前会附一行来源信息：`message_id`、`chat_id`、会话类型和发送者 `open_id`，Skill 可以据此对消息做幂等处理；Parsar 自己的页面不显示这一行。Agent 的回复里写出了工具报告缺少的权限时，卡片标题显示 **需要开通权限**，并在回复下方附上在飞书开发者后台申请这些权限的链接；Agent 排查时顺带碰到的权限不会列出。管理员批准并发布新版本后，直接回复即可继续。绑定了机器人的 Agent，它的每个对话（包括网页对话）都会以 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_BRAND` 拿到机器人身份，不需要任何映射。需要机器人身份的模板、Skill 或 Plugin 在 **需要的密钥** 里列出这几个名字：能力列表里它的凭据需求显示为 **飞书机器人**，Agent 页面显示由哪个机器人提供，没有绑定机器人的 Agent 不能保存。这几个名字只能由绑定的机器人提供。飞书案例的初始化脚本运行 `lark-cli config init --app-secret-stdin`，由 CLI 自行获取并刷新租户令牌，长对话也能持续工作。不要以 `LARKSUITE_CLI_APP_ID` 或 `LARKSUITE_CLI_APP_SECRET` 传入：这两个变量会让 lark-cli 进入环境凭据模式，该模式要求直接提供租户令牌。任何能与机器人对话的人都能使用机器人的权限，Environment 中的工具也能读取该密钥。只为机器人授予其 Agent 需要的权限，尽量一个 Agent 使用一个机器人。轮换后的密钥只对新对话生效。
+Agent 以绑定的机器人身份工作。每条飞书消息转给 Agent 时，正文前会附一行来源信息：`message_id`、`chat_id`、会话类型和发送者 `open_id`，Skill 可以据此对消息做幂等处理。这一行同时告诉 Agent：把回复写在最终回复里，Parsar 会发回消息所在的对话；要给对方看的图片或文件放进工作区的 `outputs` 目录，并在回复里写出文件名；不要用 lark-cli 往这个对话发消息。Parsar 自己的页面不显示这一行。Agent 的回复里写出了工具报告缺少的权限时，卡片标题显示 **需要开通权限**，并在回复下方附上在飞书开发者后台申请这些权限的链接；Agent 排查时顺带碰到的权限不会列出。管理员批准并发布新版本后，直接回复即可继续。绑定了机器人的 Agent，它的每个对话（包括网页对话）都会以 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_BRAND` 拿到机器人身份，不需要任何映射。需要机器人身份的模板、Skill 或 Plugin 在 **需要的密钥** 里列出这几个名字：能力列表里它的凭据需求显示为 **飞书机器人**，Agent 页面显示由哪个机器人提供，没有绑定机器人的 Agent 不能保存。这几个名字只能由绑定的机器人提供。飞书案例的初始化脚本运行 `lark-cli config init --app-secret-stdin`，由 CLI 自行获取并刷新租户令牌，长对话也能持续工作。不要以 `LARKSUITE_CLI_APP_ID` 或 `LARKSUITE_CLI_APP_SECRET` 传入：这两个变量会让 lark-cli 进入环境凭据模式，该模式要求直接提供租户令牌。任何能与机器人对话的人都能使用机器人的权限，Environment 中的工具也能读取该密钥。只为机器人授予其 Agent 需要的权限，尽量一个 Agent 使用一个机器人。轮换后的密钥只对新对话生效。
 
 ### 飞书工作环境案例 {#feishu-workspace-case}
 
