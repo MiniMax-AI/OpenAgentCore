@@ -51,6 +51,10 @@ print(session.id)
 
 [Run your first Session](https://openagentcore.dev/docs/getting-started/quickstart) waits for the result and reads it back.
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/OpenAgentCore/)
+
 ## How it works
 
 <picture>
