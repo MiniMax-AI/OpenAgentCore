@@ -1234,7 +1234,9 @@ test("the run overview lists running and recent Turns with their stage, counts a
   await put("sessions", { ...input, name: "Done" }, done);
   await put("sessions", { ...input, name: "Busy" }, busy);
   await api("POST", `/app/sessions/${busy}/messages`, { text: "Keep going", key: "k1" });
-  await put("sessions", { ...input, name: "Broken", input: "Fix it" }, broken);
+  // A Feishu message's source line is for the Agent; 运行 shows only the message.
+  const { feishuSource } = await import("../shared/feishu-source.mjs");
+  await put("sessions", { ...input, name: "Broken", input: `${feishuSource({ message_id: "om_1", chat_id: "oc_1", chat_type: "group", sender_id: "ou_1" })}\nFix it` }, broken);
   await api.sessions.turns.monitor();
   await api.sessions.turns.monitor();
   const overview = await api("GET", "/app/turns");

@@ -1,3 +1,4 @@
+import { withoutFeishuSource } from "../shared/feishu-source.mjs";
 import { AppError } from "./store.mjs";
 
 // After this long without any output from a running Core Turn, the Turn is
@@ -353,7 +354,7 @@ export function turnsAPI(store, core) {
       if (!latestOf.has(t.session_id) || latestOf.get(t.session_id).started_at < t.started_at) latestOf.set(t.session_id, t);
     const row = (t) => {
       const record = store.get("sessions", t.session_id);
-      const prompt = (t.input || []).flatMap((m) => m.content || []).find((part) => part.type === "input_text")?.text || "";
+      const prompt = withoutFeishuSource((t.input || []).flatMap((m) => m.content || []).find((part) => part.type === "input_text")?.text || "");
       return {
         id: t.id,
         session_id: t.session_id,
