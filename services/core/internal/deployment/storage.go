@@ -104,6 +104,8 @@ type ReservationTx interface {
 	LoadGenerationSpecification(generation uint64) (GenerationSpecification, error)
 	// LoadNodes reads eligible placement facts under the deployment lock.
 	LoadNodes() ([]placement.Node, error)
+	// LoadPlacementDemanded reports whether the Environment is still placement demand, counting one that already reserved a placement: the runtime_placement_demand view the scan uses.
+	LoadPlacementDemanded() (bool, error)
 	// ReservePlacement inserts a first reservation or replaces a released reservation without changing historical receipts.
 	ReservePlacement(placement.Placement) error
 	// ReleaseFailedPlacement yields only the exact reservation without active compute.
@@ -273,6 +275,8 @@ type Reader interface {
 	RetainedNativeHistory(ctx context.Context, key AllocationKey) (bool, error)
 	// PlacementDemand lists up to 32 unreserved first or retained requests in demand-time and ID order.
 	PlacementDemand(ctx context.Context, after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
+	// PlacementDemanded reports whether the Environment is placement demand with the same definition as PlacementDemand, counting one that already reserved a placement.
+	PlacementDemanded(ctx context.Context, key AllocationKey) (bool, error)
 	// LifecyclePlacement returns what routing the Environment to its
 	// lifecycle reads, including for a deleted Session. A missing Environment
 	// is sessions.ErrNotFound.

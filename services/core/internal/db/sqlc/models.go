@@ -385,6 +385,15 @@ type RuntimePlacement struct {
 	DeploymentGeneration pgtype.Int8        `json:"deployment_generation"`
 }
 
+type RuntimePlacementDemand struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	Engine     string             `json:"engine"`
+	Retained   bool               `json:"retained"`
+	DemandedAt pgtype.Timestamptz `json:"demanded_at"`
+	Reserved   pgtype.Bool        `json:"reserved"`
+}
+
 type RuntimeResetRetainedEnvironment struct {
 	EnvironmentID        pgtype.UUID `json:"environment_id"`
 	SessionID            pgtype.UUID `json:"session_id"`

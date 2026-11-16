@@ -214,6 +214,10 @@ func (t *reservationTx) LoadReserved() (placement.Reserved, error) {
 	return reserved, err
 }
 
+func (t *reservationTx) LoadPlacementDemanded() (bool, error) {
+	return t.q.IsPlacementDemanded(t.ctx, t.environment)
+}
+
 func (t *reservationTx) CanReplaceAllocation() (bool, error) {
 	current, found, err := t.FindAllocation()
 	if err != nil || !found {
@@ -626,6 +630,16 @@ func (s *Store) PlacementDemand(ctx context.Context, after deployment.PlacementD
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
 	return loadPlacementDemand(ctx, s.pool.Queries(), after)
+}
+
+func (s *Store) PlacementDemanded(ctx context.Context, key deployment.AllocationKey) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
+	defer cancel()
+	_, environment, err := allocationKey(key)
+	if err != nil {
+		return false, err
+	}
+	return s.pool.Queries().IsPlacementDemanded(ctx, environment)
 }
 
 func (s *Store) LifecyclePlacement(ctx context.Context, key deployment.AllocationKey) (deployment.LifecyclePlacement, error) {

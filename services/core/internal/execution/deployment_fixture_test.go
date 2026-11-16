@@ -142,6 +142,7 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 
 // strictDeploymentReader runs each set func; any other call fails the test.
 type strictDeploymentReader struct {
+	placementDemanded       func(context.Context, deployment.AllocationKey) (bool, error)
 	placementDemand         func(context.Context, deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error)
 	retainedNativeHistory   func(context.Context, deployment.AllocationKey) (bool, error)
 	t                       *testing.T
@@ -360,6 +361,14 @@ func (r *strictDeploymentReader) PlacementDemand(ctx context.Context, after depl
 		return nil, deployment.PlacementDemandCursor{}, unexpectedDeploymentCall(r.t, "PlacementDemand")
 	}
 	return r.placementDemand(ctx, after)
+}
+
+// PlacementDemanded answers true unless a test sets placementDemanded: provisioning tests reach it with real demand.
+func (r *strictDeploymentReader) PlacementDemanded(ctx context.Context, key deployment.AllocationKey) (bool, error) {
+	if r.placementDemanded == nil {
+		return true, nil
+	}
+	return r.placementDemanded(ctx, key)
 }
 func (r *strictDeploymentReader) RetainedNativeHistory(ctx context.Context, key deployment.AllocationKey) (bool, error) {
 	if r.retainedNativeHistory == nil {

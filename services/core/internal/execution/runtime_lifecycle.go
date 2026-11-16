@@ -238,6 +238,16 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
 			return deployment.Allocation{}, lookupErr
 		}
+		// Input that expired since the placement was reserved prepares nothing. A direct deployment has no placement demand.
+		if r.config.Mode == string(sandbox.DeploymentNodes) && (errors.Is(lookupErr, deployment.ErrNotFound) || existing.State == "released") {
+			demanded, demandErr := r.reader.PlacementDemanded(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+			if demandErr != nil {
+				return deployment.Allocation{}, demandErr
+			}
+			if !demanded {
+				return deployment.Allocation{}, deployment.ErrAllocationConflict
+			}
+		}
 		if errors.Is(lookupErr, deployment.ErrNotFound) {
 			workspace, err = r.workspaces.Ensure(ctx, tenant, environment, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
 			if err == nil && workspace == nil {

@@ -28,6 +28,7 @@ type fakeReservationTx struct {
 	findAllocation          func() (Allocation, bool, error)
 	lockDeployment          func() (placement.Deployment, error)
 	loadReserved            func() (placement.Reserved, error)
+	placementDemanded       func() (bool, error)
 	insertAllocation        func(NewAllocation) (Allocation, error)
 }
 
@@ -71,6 +72,14 @@ func (f *fakeReservationTx) LoadReserved() (placement.Reserved, error) {
 		unexpected(f.t, "LoadReserved")
 	}
 	return f.loadReserved()
+}
+
+// LoadPlacementDemanded answers true unless a test sets placementDemanded.
+func (f *fakeReservationTx) LoadPlacementDemanded() (bool, error) {
+	if f.placementDemanded == nil {
+		return true, nil
+	}
+	return f.placementDemanded()
 }
 
 func (f *fakeReservationTx) CanReplaceAllocation() (bool, error) {
