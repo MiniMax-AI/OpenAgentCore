@@ -1492,3 +1492,9 @@ test("a message that joins a Turn while the monitor checks it stays recorded", a
   assert.deepEqual(store.get("turns", `${id}:first`).steers?.map((steer) => steer.id), [`${id}:steer`]);
   assert.equal(store.get("turns", `${id}:steer`), null);
 });
+
+test("a sandbox queue timeout is not reported as a model timeout", async () => {
+  const { explainFailure } = await import("../server/turns.mjs");
+  assert.equal(explainFailure("The initial input timed out waiting for the environment connection."), "沙箱已满，排队超时，请稍后重试。");
+  assert.equal(explainFailure({ message: "model request timed out" }), "模型服务响应超时，可以直接重试。");
+});
