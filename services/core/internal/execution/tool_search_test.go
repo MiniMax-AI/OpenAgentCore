@@ -28,8 +28,11 @@ func TestDiscoveryUsesSharedOperationQualification(t *testing.T) {
 	if err := policy.ValidateSessionConfiguration("new_harness", json.RawMessage(workspace)); err != nil {
 		t.Fatal("Core imposed another adapter's placement restriction", err)
 	}
-	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
-		if err := (Policy{}).ValidateSessionConfiguration(kind, json.RawMessage(discoveryConfiguration)); (err == nil) != (kind == "claude_sdk") {
+	// Built-in Harnesses follow their declarations, the only source of support facts.
+	harnesses := (Policy{}).Harnesses()
+	for _, kind := range harnesses.Kinds() {
+		declaration, _ := harnesses.Lookup(kind)
+		if err := (Policy{}).ValidateSessionConfiguration(kind, json.RawMessage(discoveryConfiguration)); (err == nil) != declaration.Capabilities.ToolSearch.IsSupported() {
 			t.Fatal(kind, err)
 		}
 	}
