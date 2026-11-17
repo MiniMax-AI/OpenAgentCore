@@ -28,6 +28,7 @@ type fakeReservationTx struct {
 	findAllocation          func() (Allocation, bool, error)
 	lockDeployment          func() (placement.Deployment, error)
 	loadReserved            func() (placement.Reserved, error)
+	placementDemandLapsed   func() (bool, error)
 	insertAllocation        func(NewAllocation) (Allocation, error)
 }
 
@@ -71,6 +72,14 @@ func (f *fakeReservationTx) LoadReserved() (placement.Reserved, error) {
 		unexpected(f.t, "LoadReserved")
 	}
 	return f.loadReserved()
+}
+
+// LoadPlacementDemandLapsed answers not lapsed unless a test sets placementDemandLapsed.
+func (f *fakeReservationTx) LoadPlacementDemandLapsed() (bool, error) {
+	if f.placementDemandLapsed == nil {
+		return false, nil
+	}
+	return f.placementDemandLapsed()
 }
 
 func (f *fakeReservationTx) CanReplaceAllocation() (bool, error) {

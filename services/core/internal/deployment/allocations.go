@@ -84,6 +84,13 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 			if err := placement.CheckReserved(reserved); err != nil {
 				return err
 			}
+			// Input may have expired since the placement was reserved; nothing exists to start for it.
+			if lapsed, err := tx.LoadPlacementDemandLapsed(); err != nil || lapsed {
+				if err == nil {
+					err = ErrPlacementDemandLapsed
+				}
+				return err
+			}
 			allocation.NodeID, allocation.Generation = reserved.NodeID, reserved.Generation
 		}
 		device := sessions.ExecutionDevice{ID: allocation.DeviceID, Name: registration.Name, EnvironmentID: environment.ID}

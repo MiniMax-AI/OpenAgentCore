@@ -2,6 +2,7 @@ package deploymentpg_test
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -211,5 +212,146 @@ func TestPlacementDemandWrapsDespiteContinuousNewArrivals(t *testing.T) {
 	again, _, err := f.adapter.PlacementDemand(t.Context(), next)
 	if err != nil || len(again) != 32 || again[0].ID != first[0].ID {
 		t.Fatal(again, err)
+	}
+}
+
+// A never-allocated Environment waits for a node from its creation, unless its initial input expired: then only a live input demands one, from that input's creation.
+func TestPlacementDemandStopsWhenInitialInputExpires(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	input := func(key deployment.AllocationKey, initial bool, state string, created time.Time, deadline time.Duration) {
+		t.Helper()
+		settled := "NULL"
+		if state != "pending" {
+			settled = "clock_timestamp()"
+		}
+		if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,settings,created_at,deadline,state,settled_at) SELECT $1,id,$2,'[{}]',$3,'{}',$4,clock_timestamp()+$5::interval,$6,`+settled+` FROM sessions WHERE environment_id=$7`, uuid.NewString(), uuid.NewString(), initial, created, deadline.String(), state, key.EnvironmentID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idle, idleSettled, expired, expiredUnswept, revived, pending := pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f)
+	livedAt := now.Add(-time.Minute)
+	// Only an expired initial input ends the wait; a later input that expired does not.
+	input(idleSettled, false, "expired", now.Add(-time.Hour), -time.Hour)
+	input(expired, true, "expired", now.Add(-time.Hour), -time.Hour)
+	input(expiredUnswept, true, "pending", now.Add(-time.Hour), -time.Minute)
+	input(revived, true, "expired", now.Add(-time.Hour), -time.Hour)
+	input(revived, false, "pending", livedAt, time.Minute)
+	input(pending, true, "pending", now.Add(-time.Second), time.Minute)
+	for _, key := range []deployment.AllocationKey{idle, idleSettled, expired, expiredUnswept, revived, pending} {
+		if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET created_at=$2 WHERE id=$1`, key.EnvironmentID, now.Add(-2*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	demand, _, err := f.adapter.PlacementDemand(t.Context(), deployment.PlacementDemandCursor{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := map[string]time.Time{}
+	for _, row := range demand {
+		at[row.ID] = row.At
+	}
+	want := map[string]time.Time{idle.EnvironmentID: now.Add(-2 * time.Hour), idleSettled.EnvironmentID: now.Add(-2 * time.Hour), revived.EnvironmentID: livedAt, pending.EnvironmentID: now.Add(-2 * time.Hour)}
+	if len(at) != len(want) {
+		t.Fatal("demand", at)
+	}
+	for id, when := range want {
+		if !at[id].Equal(when) {
+			t.Fatal("demanded at", id, at[id], "want", when)
+		}
+	}
+	// The recheck reads the same rule: only an Environment the view lists as not waiting has lapsed.
+	for key, wanted := range map[deployment.AllocationKey]bool{idle: false, idleSettled: false, expired: true, expiredUnswept: true, revived: false, pending: false} {
+		if got, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || got != wanted {
+			t.Fatal("PlacementDemandLapsed", key.EnvironmentID, got, wanted, err)
+		}
+	}
+}
+
+// Input that expires after the placement was reserved creates no allocation.
+func TestReserveAllocationRefusesExpiredInitialInput(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	f.connect(t, node.NodeID)
+	key := pendingHostedEnvironment(t, f)
+	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,settings,created_at,deadline,state,settled_at) SELECT $1,id,$2,'[{}]',true,'{}',clock_timestamp(),clock_timestamp(),'expired',clock_timestamp() FROM sessions WHERE environment_id=$3`, uuid.NewString(), uuid.NewString(), key.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrPlacementDemandLapsed) {
+		t.Fatal("expired input reserved an allocation", err)
+	}
+	var allocations, devices int
+	if err := f.pool.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM runtime_allocations),(SELECT count(*) FROM devices)`).Scan(&allocations, &devices); err != nil || allocations != 0 || devices != 0 {
+		t.Fatal(allocations, devices, err)
+	}
+}
+
+// releasedWithoutDemand reserves and releases an allocation, then reserves a placement again: released compute with no wake request and no live input.
+func releasedWithoutDemand(t *testing.T) (fixture, *deployment.ExecutionOperations, string, deployment.AllocationKey) {
+	t.Helper()
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+	f.connect(t, node.NodeID)
+	key := hostedEnvironment(t, f.pool)
+	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseRetainedFixture(t, f, changes, owner)
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_wake_requested=false WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
+		t.Fatal(err)
+	}
+	return f, changes, installation, key
+}
+
+// Released compute with no wake request and no live input has no demand, so reserving an allocation for it is refused.
+func TestReserveAllocationRefusesReleasedComputeWithoutDemand(t *testing.T) {
+	f, changes, installation, key := releasedWithoutDemand(t)
+	if lapsed, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || !lapsed {
+		t.Fatal("lapsed", lapsed, err)
+	}
+	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrPlacementDemandLapsed) {
+		t.Fatal("released compute without demand reserved an allocation", err)
+	}
+}
+
+// A reset, a failed Environment or a workspace that is not ready is not a lapsed demand: the Environment is not listed, and the refusal is the one those conditions always gave.
+func TestOtherRefusalsAreNotReportedAsLapsedDemand(t *testing.T) {
+	for name, tc := range map[string]struct {
+		change string
+		want   error
+	}{
+		"reset":             {`UPDATE runtime_deployment SET reset_clear='force', reset_requested_at=clock_timestamp(), reset_forced_at=clock_timestamp(), reset_audit='{}'`, placement.ErrResetAdmission},
+		"failed":            {`UPDATE environments SET status='failed'`, deployment.ErrAllocationConflict},
+		"workspace missing": {`UPDATE environment_workspaces SET state='deleting'`, deployment.ErrAllocationConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, changes, installation, key := releasedWithoutDemand(t)
+			if _, err := f.pool.Exec(t.Context(), tc.change); err != nil {
+				t.Fatal(err)
+			}
+			if lapsed, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || lapsed {
+				t.Fatal("lapsed", lapsed, err)
+			}
+			_, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+			if !errors.Is(err, tc.want) || errors.Is(err, deployment.ErrPlacementDemandLapsed) {
+				t.Fatal(err, "want", tc.want)
+			}
+		})
 	}
 }

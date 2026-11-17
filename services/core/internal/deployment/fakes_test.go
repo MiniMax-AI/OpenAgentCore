@@ -638,6 +638,9 @@ func (f *fakeSessionReader) GetManagedSessionArchive(context.Context, string, st
 	return sessions.ManagedArchive{}, nil
 }
 
+func (f *fakeReader) PlacementDemandLapsed(context.Context, AllocationKey) (bool, error) {
+	panic("unexpected PlacementDemandLapsed")
+}
 func (f *fakeReader) PlacementDemand(context.Context, PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error) {
 	panic("unexpected PlacementDemand")
 }

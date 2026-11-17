@@ -66,6 +66,9 @@ func TestReplacementKeepsSessionIdentityAndFencesPriorOwner(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, firstNode.NodeID); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.service.TouchActivity(t.Context(), key.TenantID, key.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
 	reserved, err := changes.EnsurePlacement(t.Context(), key, installation)
 	if err != nil || reserved.NodeID != secondNode.NodeID {
 		t.Fatal(reserved, err)
@@ -215,6 +218,11 @@ func TestTenRetainedWorkspacesShareThreeComputeSlots(t *testing.T) {
 	}
 	check(0, 0)
 	owners := make([]deployment.Allocation, 3)
+	for i := range keys {
+		if err := f.service.TouchActivity(t.Context(), keys[i].TenantID, keys[i].EnvironmentID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for i := range owners {
 		if _, err := changes.EnsurePlacement(t.Context(), keys[i], installation); err != nil {
 			t.Fatal(err)

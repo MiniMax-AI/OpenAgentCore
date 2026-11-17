@@ -56,29 +56,21 @@ func (q *Queries) GetRuntimeLifecyclePlacement(ctx context.Context, arg GetRunti
 	return i, err
 }
 
+const isPlacementDemandLapsed = `-- name: IsPlacementDemandLapsed :one
+SELECT EXISTS (SELECT 1 FROM runtime_placement_demand WHERE id = $1 AND NOT waiting)::boolean
+`
+
+// Listed by the view but not waiting. A plain id predicate keeps an index plan under a cached generic plan, which the scan's statement could not.
+func (q *Queries) IsPlacementDemandLapsed(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlacementDemandLapsed, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listPlacementDemand = `-- name: ListPlacementDemand :many
-WITH demand AS (
-SELECT e.id, e.tenant_id, COALESCE(s.engine, '')::text AS engine, (latest.id IS NOT NULL OR EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id=e.id))::boolean AS retained,
-       GREATEST(p.released_at, CASE WHEN latest.id IS NULL THEN e.created_at
-            ELSE LEAST((SELECT min(r.created_at) FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp()), CASE WHEN latest.compute_wake_requested THEN latest.compute_activity_at END) END)::timestamptz AS demanded_at
-FROM environments e JOIN environment_liveness l ON l.id = e.id AND l.active
-LEFT JOIN sessions s ON s.environment_id = e.id AND s.deleted_at IS NULL
-LEFT JOIN runtime_placements p ON p.environment_id = e.id
-LEFT JOIN LATERAL (SELECT a.id, a.state, a.compute_wake_requested, a.compute_activity_at FROM runtime_allocations a WHERE a.environment_id = e.id ORDER BY a.created_at DESC, a.id DESC LIMIT 1) latest ON true
-WHERE e.configuration->>'type' = 'openai_hosted'
-  AND (SELECT reset_clear IS NULL AND mode = 'nodes' FROM runtime_deployment)
-  AND NOT EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
-  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
-  AND (
-    (e.initialization IN ('pending','complete') AND latest.id IS NULL)
-    OR (e.initialization = 'complete'
-      AND EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id AND w.state = 'ready')
-      AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state = 'released')
-      AND (latest.compute_wake_requested OR EXISTS (SELECT 1 FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp())))
-  )
-)
-SELECT id, tenant_id, engine, retained, demanded_at, COALESCE($1::timestamptz, statement_timestamp())::timestamptz AS scan_until FROM demand
-WHERE (demanded_at, id) > ($2::timestamptz, $3::uuid)
+SELECT id, tenant_id, engine, retained, demanded_at, COALESCE($1::timestamptz, statement_timestamp())::timestamptz AS scan_until FROM runtime_placement_demand
+WHERE waiting AND NOT reserved AND (demanded_at, id) > ($2::timestamptz, $3::uuid)
 AND demanded_at <= COALESCE($1::timestamptz, statement_timestamp())
 ORDER BY demanded_at, id LIMIT 32
 `
