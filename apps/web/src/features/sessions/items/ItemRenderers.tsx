@@ -8,6 +8,7 @@ import { Monogram } from "../../../components/atoms/EntityChip";
 import { Shimmer } from "../../../components/atoms/Shimmer";
 import { MessageMarkdown } from "../../../components/MessageMarkdown";
 import { StatusIcon, type StatusKind } from "../../../components/StatusIcon";
+import { itemStatusKind } from "../trace/trace-model";
 import { ApplyPatchDiffViewer } from "./ApplyPatchDiffViewer";
 import { parseApplyPatch } from "./apply-patch";
 
@@ -32,13 +33,6 @@ function TraceCollapse({ open, children }: { open: boolean; children: ReactNode 
     return () => window.clearTimeout(timer);
   }, [mounted, open]);
   return <div className={`trace-collapse ${open ? "open" : ""}`} aria-hidden={!open}><div className="trace-collapse-clip">{mounted ? <div className="trace-collapse-body">{children}</div> : null}</div></div>;
-}
-
-function itemStatusKind(status: SessionItem["status"]): StatusKind {
-  if (status === "in_progress") return "running";
-  if (status === "failed") return "failed";
-  if (status === "incomplete") return "interrupted";
-  return "completed";
 }
 
 function formatDuration(milliseconds: number): string {
@@ -108,7 +102,7 @@ function WorkStep({ item }: { item: SessionItem }) {
     : undefined;
   const patch = supported && item.type === "function_call" && item.name === "apply_patch" ? parseApplyPatch(item.arguments) : null;
   const expandable = args !== undefined && args !== null || result !== undefined && result !== null;
-  const row = <><Icon className="trace-step-icon" size={14} strokeWidth={1.5} aria-hidden="true" /><span className="trace-step-verb">{verb}</span><span className="trace-step-target" title={target}>{target}</span>{item.status != null && item.status !== "completed" ? <StatusIcon status={itemStatusKind(item.status)} title={t(`status.${item.status}` as never)} /> : null}{item.duration_ms ? <span className="trace-duration">{formatDuration(item.duration_ms)}</span> : null}{expandable ? <ChevronRight className={`trace-step-chevron ${open ? "open" : ""}`} size={14} strokeWidth={1.5} aria-hidden="true" /> : null}</>;
+  const row = <><Icon className="trace-step-icon" size={14} strokeWidth={1.5} aria-hidden="true" /><span className="trace-step-verb">{verb}</span><span className="trace-step-target" title={target}>{target}</span>{item.status != null && item.status !== "completed" ? <StatusIcon status={itemStatusKind[item.status]} title={t(`status.${item.status}` as never)} /> : null}{item.duration_ms ? <span className="trace-duration">{formatDuration(item.duration_ms)}</span> : null}{expandable ? <ChevronRight className={`trace-step-chevron ${open ? "open" : ""}`} size={14} strokeWidth={1.5} aria-hidden="true" /> : null}</>;
   return <li className="trace-step" data-trace-step={item.id}>{expandable ? <button className="trace-step-row" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{row}</button> : <div className="trace-step-row">{row}</div>}{expandable ? <TraceCollapse open={open}>{patch ? <ApplyPatchDiffViewer item={item} patch={patch} result={result} /> : <div className="trace-step-details">{args !== undefined && args !== null ? <div><p>{t("items.arguments")}</p><pre>{pretty(args)}</pre></div> : null}{result !== undefined && result !== null ? <div><p>{t("items.result")}</p><pre>{pretty(result)}</pre></div> : null}</div>}</TraceCollapse> : null}</li>;
 }
 
