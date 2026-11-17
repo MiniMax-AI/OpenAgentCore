@@ -136,19 +136,6 @@ func TestInitializeRefusesChangedOrMissingFiles(t *testing.T) {
 	}
 }
 
-func readReceipt(t *testing.T, root string) installReceipt {
-	t.Helper()
-	var receipt installReceipt
-	raw, err := os.ReadFile(filepath.Join(root, "installation.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &receipt); err != nil {
-		t.Fatal(err)
-	}
-	return receipt
-}
-
 func TestInitializeRefusesDataOfAnotherRelease(t *testing.T) {
 	root, release, files := initFixture(t)
 	if err := initialize(root, release, fixed(files)); err != nil {
