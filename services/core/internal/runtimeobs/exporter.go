@@ -3,8 +3,11 @@ package runtimeobs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 const (
@@ -121,21 +124,39 @@ func (d *exportDispatcher) enqueue(record ExportRecord) {
 
 func (d *exportDispatcher) run(ctx context.Context) {
 	defer close(d.done)
+	failing := false
 	for record := range d.queue {
 		exportCtx, cancel := context.WithTimeout(ctx, d.timeout)
-		exportSafely(exportCtx, d.exporter, record)
+		outcome := exportSafely(exportCtx, d.exporter, record)
 		cancel()
 		if ctx.Err() != nil {
 			return
 		}
+		// Warn once per outage, not per record. The exporter's error may carry a
+		// collector response, so only its outcome class is logged.
+		if outcome != "" && !failing {
+			log.Warn(ctx, "Runtime history export failing; records are dropped until it recovers", "exporter", fmt.Sprintf("%T", d.exporter), "outcome", outcome)
+		}
+		failing = outcome != ""
 	}
 }
 
-func exportSafely(ctx context.Context, exporter Exporter, record ExportRecord) {
+// exportSafely returns "" on success, otherwise "timeout", "error" or "panic".
+func exportSafely(ctx context.Context, exporter Exporter, record ExportRecord) (outcome string) {
 	defer func() {
-		_ = recover()
+		if recover() != nil {
+			outcome = "panic"
+		}
 	}()
-	_ = exporter.Export(ctx, record)
+	err := exporter.Export(ctx, record)
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		return "error"
+	}
 }
 
 func (d *exportDispatcher) close(ctx context.Context) error {
