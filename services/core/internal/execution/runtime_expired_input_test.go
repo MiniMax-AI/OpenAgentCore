@@ -26,6 +26,8 @@ func TestExpiredInitialInputPreparesNothingAndReleasesTheReservation(t *testing.
 	r, s := f.lifecycle, f.session
 	r.config.Mode = string(sandbox.DeploymentNodes)
 	expireInitialInput(t, f)
+	wake := make(chan struct{}, 1)
+	r.placementWake = wake
 	_, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
 	if !errors.Is(err, deployment.ErrPlacementDemandLapsed) || !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal(err)
@@ -37,6 +39,10 @@ func TestExpiredInitialInputPreparesNothingAndReleasesTheReservation(t *testing.
 	target, err := r.reader.LifecyclePlacement(t.Context(), deployment.AllocationKey{TenantID: s.TenantID, EnvironmentID: s.Environment.ID})
 	if err != nil || workspaces != 0 || allocations != 0 || provider.creates != 0 || !target.PlacementReleased {
 		t.Fatal("prepared for expired input", workspaces, allocations, provider.creates, target, err)
+	}
+	// Input that arrived since the check is placed at once, not at the next tick.
+	if len(wake) != 1 {
+		t.Fatal("placement scan not woken after the release")
 	}
 }
 

@@ -293,8 +293,9 @@ func TestReserveAllocationRefusesExpiredInitialInput(t *testing.T) {
 	}
 }
 
-// Released compute with no wake request and no live input has no demand, so reserving an allocation for it is refused.
-func TestReserveAllocationRefusesReleasedComputeWithoutDemand(t *testing.T) {
+// releasedWithoutDemand reserves and releases an allocation, then reserves a placement again: released compute with no wake request and no live input.
+func releasedWithoutDemand(t *testing.T) (fixture, *deployment.ExecutionOperations, string, deployment.AllocationKey) {
+	t.Helper()
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
@@ -315,7 +316,42 @@ func TestReserveAllocationRefusesReleasedComputeWithoutDemand(t *testing.T) {
 	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
 		t.Fatal(err)
 	}
+	return f, changes, installation, key
+}
+
+// Released compute with no wake request and no live input has no demand, so reserving an allocation for it is refused.
+func TestReserveAllocationRefusesReleasedComputeWithoutDemand(t *testing.T) {
+	f, changes, installation, key := releasedWithoutDemand(t)
+	if lapsed, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || !lapsed {
+		t.Fatal("lapsed", lapsed, err)
+	}
 	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrPlacementDemandLapsed) {
 		t.Fatal("released compute without demand reserved an allocation", err)
+	}
+}
+
+// A reset, a failed Environment or a workspace that is not ready is not a lapsed demand: the Environment is not listed, and the refusal is the one those conditions always gave.
+func TestOtherRefusalsAreNotReportedAsLapsedDemand(t *testing.T) {
+	for name, tc := range map[string]struct {
+		change string
+		want   error
+	}{
+		"reset":             {`UPDATE runtime_deployment SET reset_clear='force', reset_requested_at=clock_timestamp(), reset_forced_at=clock_timestamp(), reset_audit='{}'`, placement.ErrResetAdmission},
+		"failed":            {`UPDATE environments SET status='failed'`, deployment.ErrAllocationConflict},
+		"workspace missing": {`UPDATE environment_workspaces SET state='deleting'`, deployment.ErrAllocationConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, changes, installation, key := releasedWithoutDemand(t)
+			if _, err := f.pool.Exec(t.Context(), tc.change); err != nil {
+				t.Fatal(err)
+			}
+			if lapsed, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || lapsed {
+				t.Fatal("lapsed", lapsed, err)
+			}
+			_, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+			if !errors.Is(err, tc.want) || errors.Is(err, deployment.ErrPlacementDemandLapsed) {
+				t.Fatal(err, "want", tc.want)
+			}
+		})
 	}
 }

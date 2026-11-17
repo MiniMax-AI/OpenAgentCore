@@ -363,10 +363,9 @@ func (r *strictDeploymentReader) PlacementDemand(ctx context.Context, after depl
 	return r.placementDemand(ctx, after)
 }
 
-// PlacementDemandLapsed answers not lapsed unless a test sets placementDemandLapsed.
 func (r *strictDeploymentReader) PlacementDemandLapsed(ctx context.Context, key deployment.AllocationKey) (bool, error) {
 	if r.placementDemandLapsed == nil {
-		return false, nil
+		return false, unexpectedDeploymentCall(r.t, "PlacementDemandLapsed")
 	}
 	return r.placementDemandLapsed(ctx, key)
 }
