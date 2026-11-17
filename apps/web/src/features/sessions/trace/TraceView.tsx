@@ -35,6 +35,7 @@ import { parseApplyPatch } from "../items/apply-patch";
 import {
   buildTraceModel,
   filterTraceModel,
+  itemStatusKind,
   type TraceGroup,
   type TraceRow,
   type TraceValue,
@@ -82,13 +83,6 @@ function formatDuration(milliseconds: number, locale = "en-US"): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = Math.floor(seconds % 60);
   return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
-}
-
-function itemStatusKind(status: TraceRow["status"]): StatusKind {
-  if (status === "in_progress") return "running";
-  if (status === "failed") return "failed";
-  if (status === "incomplete") return "interrupted";
-  return status === "completed" ? "completed" : "queued";
 }
 
 function turnStatusKind(status: unknown): StatusKind | null {
@@ -458,7 +452,7 @@ export function TraceView({
                           <strong>{localizedRowTitle(row, translate)}</strong>
                           <small>{rowExcerpt(row, translate)}</small>
                         </span>
-                        {row.status ? <StatusIcon status={itemStatusKind(row.status)} title={t("trace.itemStatus", { status: t(`status.${row.status}` as never) })} /> : null}
+                        {row.status ? <StatusIcon status={itemStatusKind[row.status]} title={t("trace.itemStatus", { status: t(`status.${row.status}` as never) })} /> : null}
                         <span className="trace-row-duration" data-duration-state={row.durationMs.state} title={duration.title}>
                           <span aria-hidden="true">{duration.visible}</span>
                           <span className="trace-visually-hidden">{duration.assistive}</span>

@@ -5,6 +5,8 @@ import type {
   SessionItem,
 } from "@oac/agents-client";
 
+import type { StatusKind } from "../../../components/StatusIcon";
+
 export type TraceValueState = "available" | "unavailable" | "unknown";
 
 export interface TraceValue<T> {
@@ -121,7 +123,9 @@ const TOOL_CALL_TYPES = new Set<SessionItem["type"]>([
   "function_call",
   "web_search_call",
 ]);
-const ITEM_STATUSES = new Set<ItemStatus>(["in_progress", "completed", "failed", "incomplete"]);
+/** How each item status is drawn. The Record makes a new status a type error until it is mapped. */
+export const itemStatusKind: Record<ItemStatus, StatusKind> = { in_progress: "running", completed: "completed", failed: "failed", incomplete: "interrupted" };
+const ITEM_STATUSES = new Set(Object.keys(itemStatusKind));
 const MESSAGE_ROLES = new Set(["user", "assistant"]);
 const MESSAGE_PHASES = new Set(["commentary", "final_answer"]);
 const CONTENT_TYPES = new Set(["input_text", "output_text", "input_image"]);
