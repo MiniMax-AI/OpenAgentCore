@@ -56,13 +56,13 @@ func (q *Queries) GetRuntimeLifecyclePlacement(ctx context.Context, arg GetRunti
 	return i, err
 }
 
-const isPlacementDemanded = `-- name: IsPlacementDemanded :one
-SELECT EXISTS (SELECT 1 FROM runtime_placement_demand WHERE id = $1)::boolean
+const isPlacementDemandLapsed = `-- name: IsPlacementDemandLapsed :one
+SELECT EXISTS (SELECT 1 FROM runtime_placement_demand WHERE id = $1 AND NOT waiting)::boolean
 `
 
-// A plain id predicate keeps an index plan under a cached generic plan; the scan's statement could not.
-func (q *Queries) IsPlacementDemanded(ctx context.Context, id pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, isPlacementDemanded, id)
+// Listed by the view but not waiting. A plain id predicate keeps an index plan under a cached generic plan, which the scan's statement could not.
+func (q *Queries) IsPlacementDemandLapsed(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlacementDemandLapsed, id)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -70,7 +70,7 @@ func (q *Queries) IsPlacementDemanded(ctx context.Context, id pgtype.UUID) (bool
 
 const listPlacementDemand = `-- name: ListPlacementDemand :many
 SELECT id, tenant_id, engine, retained, demanded_at, COALESCE($1::timestamptz, statement_timestamp())::timestamptz AS scan_until FROM runtime_placement_demand
-WHERE NOT reserved AND (demanded_at, id) > ($2::timestamptz, $3::uuid)
+WHERE waiting AND NOT reserved AND (demanded_at, id) > ($2::timestamptz, $3::uuid)
 AND demanded_at <= COALESCE($1::timestamptz, statement_timestamp())
 ORDER BY demanded_at, id LIMIT 32
 `

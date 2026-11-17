@@ -42,10 +42,10 @@ WHERE e.tenant_id=$1 AND e.id=$2;
 
 -- name: ListPlacementDemand :many
 SELECT id, tenant_id, engine, retained, demanded_at, COALESCE(sqlc.narg(until_time)::timestamptz, statement_timestamp())::timestamptz AS scan_until FROM runtime_placement_demand
-WHERE NOT reserved AND (demanded_at, id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+WHERE waiting AND NOT reserved AND (demanded_at, id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
 AND demanded_at <= COALESCE(sqlc.narg(until_time)::timestamptz, statement_timestamp())
 ORDER BY demanded_at, id LIMIT 32;
 
--- name: IsPlacementDemanded :one
--- A plain id predicate keeps an index plan under a cached generic plan; the scan's statement could not.
-SELECT EXISTS (SELECT 1 FROM runtime_placement_demand WHERE id = $1)::boolean;
+-- name: IsPlacementDemandLapsed :one
+-- Listed by the view but not waiting. A plain id predicate keeps an index plan under a cached generic plan, which the scan's statement could not.
+SELECT EXISTS (SELECT 1 FROM runtime_placement_demand WHERE id = $1 AND NOT waiting)::boolean;

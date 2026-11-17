@@ -392,6 +392,7 @@ type RuntimePlacementDemand struct {
 	Retained   bool               `json:"retained"`
 	DemandedAt pgtype.Timestamptz `json:"demanded_at"`
 	Reserved   pgtype.Bool        `json:"reserved"`
+	Waiting    interface{}        `json:"waiting"`
 }
 
 type RuntimeResetRetainedEnvironment struct {

@@ -231,14 +231,16 @@ func TestPlacementDemandStopsWhenInitialInputExpires(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	idle, expired, expiredUnswept, revived, pending := pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f)
+	idle, idleSettled, expired, expiredUnswept, revived, pending := pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f), pendingHostedEnvironment(t, f)
 	livedAt := now.Add(-time.Minute)
+	// Only an expired initial input ends the wait; a later input that expired does not.
+	input(idleSettled, false, "expired", now.Add(-time.Hour), -time.Hour)
 	input(expired, true, "expired", now.Add(-time.Hour), -time.Hour)
 	input(expiredUnswept, true, "pending", now.Add(-time.Hour), -time.Minute)
 	input(revived, true, "expired", now.Add(-time.Hour), -time.Hour)
 	input(revived, false, "pending", livedAt, time.Minute)
 	input(pending, true, "pending", now.Add(-time.Second), time.Minute)
-	for _, key := range []deployment.AllocationKey{idle, expired, expiredUnswept, revived, pending} {
+	for _, key := range []deployment.AllocationKey{idle, idleSettled, expired, expiredUnswept, revived, pending} {
 		if _, err := f.pool.Exec(t.Context(), `UPDATE environments SET created_at=$2 WHERE id=$1`, key.EnvironmentID, now.Add(-2*time.Hour)); err != nil {
 			t.Fatal(err)
 		}
@@ -251,7 +253,7 @@ func TestPlacementDemandStopsWhenInitialInputExpires(t *testing.T) {
 	for _, row := range demand {
 		at[row.ID] = row.At
 	}
-	want := map[string]time.Time{idle.EnvironmentID: now.Add(-2 * time.Hour), revived.EnvironmentID: livedAt, pending.EnvironmentID: now.Add(-2 * time.Hour)}
+	want := map[string]time.Time{idle.EnvironmentID: now.Add(-2 * time.Hour), idleSettled.EnvironmentID: now.Add(-2 * time.Hour), revived.EnvironmentID: livedAt, pending.EnvironmentID: now.Add(-2 * time.Hour)}
 	if len(at) != len(want) {
 		t.Fatal("demand", at)
 	}
@@ -260,10 +262,10 @@ func TestPlacementDemandStopsWhenInitialInputExpires(t *testing.T) {
 			t.Fatal("demanded at", id, at[id], "want", when)
 		}
 	}
-	// The recheck reads the same rule.
-	for key, wanted := range map[deployment.AllocationKey]bool{idle: true, expired: false, expiredUnswept: false, revived: true, pending: true} {
-		if got, err := f.adapter.PlacementDemanded(t.Context(), key); err != nil || got != wanted {
-			t.Fatal("PlacementDemanded", key.EnvironmentID, got, wanted, err)
+	// The recheck reads the same rule: only an Environment the view lists as not waiting has lapsed.
+	for key, wanted := range map[deployment.AllocationKey]bool{idle: false, idleSettled: false, expired: true, expiredUnswept: true, revived: false, pending: false} {
+		if got, err := f.adapter.PlacementDemandLapsed(t.Context(), key); err != nil || got != wanted {
+			t.Fatal("PlacementDemandLapsed", key.EnvironmentID, got, wanted, err)
 		}
 	}
 }
@@ -282,11 +284,38 @@ func TestReserveAllocationRefusesExpiredInitialInput(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,settings,created_at,deadline,state,settled_at) SELECT $1,id,$2,'[{}]',true,'{}',clock_timestamp(),clock_timestamp(),'expired',clock_timestamp() FROM sessions WHERE environment_id=$3`, uuid.NewString(), uuid.NewString(), key.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrPlacementDemandLapsed) {
 		t.Fatal("expired input reserved an allocation", err)
 	}
 	var allocations, devices int
 	if err := f.pool.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM runtime_allocations),(SELECT count(*) FROM devices)`).Scan(&allocations, &devices); err != nil || allocations != 0 || devices != 0 {
 		t.Fatal(allocations, devices, err)
+	}
+}
+
+// Released compute with no wake request and no live input has no demand, so reserving an allocation for it is refused.
+func TestReserveAllocationRefusesReleasedComputeWithoutDemand(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+	f.connect(t, node.NodeID)
+	key := hostedEnvironment(t, f.pool)
+	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
+		t.Fatal(err)
+	}
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseRetainedFixture(t, f, changes, owner)
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_wake_requested=false WHERE id=$1`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.EnsurePlacement(t.Context(), key, installation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash()); !errors.Is(err, deployment.ErrPlacementDemandLapsed) {
+		t.Fatal("released compute without demand reserved an allocation", err)
 	}
 }

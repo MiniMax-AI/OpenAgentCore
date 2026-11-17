@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -27,6 +28,8 @@ var (
 	// matches the stored allocation, device binding, state or compute revision,
 	// or a replay for another installation.
 	ErrAllocationConflict = errors.New("the sandbox allocation changed")
+	// ErrPlacementDemandLapsed means the Environment no longer waits for capacity, so nothing is prepared for it. It is ErrAllocationConflict for the caller.
+	ErrPlacementDemandLapsed = fmt.Errorf("%w: the Environment no longer waits for capacity", ErrAllocationConflict)
 	// ErrNotIdle means neither idle expiry nor current demand requires suspension.
 	ErrNotIdle = errors.New("sandbox compute is not ready to suspend")
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not

@@ -213,7 +213,12 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 				}
 				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 				defer cancel()
-				resultErr = errors.Join(resultErr, r.deployment.ReleaseFailedPlacement(cleanup, key, expected))
+				releaseErr := r.deployment.ReleaseFailedPlacement(cleanup, key, expected)
+				// Input that arrived since the check was skipped as reserved; rescan now, not at the next tick.
+				if releaseErr == nil && errors.Is(resultErr, deployment.ErrPlacementDemandLapsed) {
+					r.freedSlot()
+				}
+				resultErr = errors.Join(resultErr, releaseErr)
 			}()
 		}
 	}
@@ -240,12 +245,12 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		}
 		// Input that expired since the placement was reserved prepares nothing. A direct deployment has no placement demand.
 		if r.config.Mode == string(sandbox.DeploymentNodes) && (errors.Is(lookupErr, deployment.ErrNotFound) || existing.State == "released") {
-			demanded, demandErr := r.reader.PlacementDemanded(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+			lapsed, demandErr := r.reader.PlacementDemandLapsed(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 			if demandErr != nil {
 				return deployment.Allocation{}, demandErr
 			}
-			if !demanded {
-				return deployment.Allocation{}, deployment.ErrAllocationConflict
+			if lapsed {
+				return deployment.Allocation{}, deployment.ErrPlacementDemandLapsed
 			}
 		}
 		if errors.Is(lookupErr, deployment.ErrNotFound) {

@@ -12,7 +12,7 @@ The routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-A
 - Public paths start at `/workspace`, which stands for the Environment's workspace directory wherever it is on the machine.
 - The Environment is looked up in the caller's Project first; a missing or foreign ID returns 404.
 - On a standalone Environment that no Session is attached to, both operations return 409 `conflict_error`, "Attach a session to this environment before using its files."
-- On an `openai_hosted` Environment that is still `pending`, both operations return 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`. This check runs after request validation and before any source File lookup. Any other state proceeds, and an unreachable Runtime returns 503.
+- On an `openai_hosted` Environment that is still `pending`, both operations return 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`. An Environment whose initial input expired before it had a sandbox stays `pending` until [new input arrives](./sandbox-deployment.md#generation-ownership-and-rollout). This check runs after request validation and before any source File lookup. Any other state proceeds, and an unreachable Runtime returns 503.
 - File operations wait within their request deadline for Environment initialization to complete; `connected` alone does not imply readiness, and failed initialization or exhausted execution capacity still returns 503.
 - Listing and writing never start a Turn or send input to the model.
 

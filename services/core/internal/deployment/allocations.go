@@ -85,9 +85,9 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 				return err
 			}
 			// Input may have expired since the placement was reserved; nothing exists to start for it.
-			if demanded, err := tx.LoadPlacementDemanded(); err != nil || !demanded {
+			if lapsed, err := tx.LoadPlacementDemandLapsed(); err != nil || lapsed {
 				if err == nil {
-					err = ErrAllocationConflict
+					err = ErrPlacementDemandLapsed
 				}
 				return err
 			}
