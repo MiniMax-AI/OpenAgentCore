@@ -83,6 +83,16 @@ class GenerationTests(unittest.TestCase):
         final = lease.stat()
         self.assertEqual((original.st_dev, original.st_ino), (final.st_dev, final.st_ino))
 
+    def test_collecting_a_generation_that_never_prepared_is_a_no_op(self):
+        self.next_generation({"cpus": 2, "memory_mib": 2048})
+        node_generations.collect(self.args, installer)
+        self.assertEqual(sorted(path.name for path in self.directory.iterdir()), ["1.lease", "1.lease-identity"])
+        # A generation with any file of its own still needs its identity and fails loudly without it.
+        (self.directory / "2.lease").write_bytes(b"")
+        os.chmod(self.directory / "2.lease", 0o600)
+        with self.assertRaises(OSError):
+            node_generations.collect(self.args, installer)
+
     def test_collection_leaves_the_installations_runtime_and_other_generations(self):
         other = dict(self.value, generation=2)
         node_generations.atomic_json(self.directory / "2.json", other)

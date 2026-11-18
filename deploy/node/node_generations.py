@@ -223,16 +223,29 @@ def collection_lease(root, generation, installer, identity=None, initialize=Fals
         os.close(descriptor)
 
 
+def never_prepared(root, generation, installer):
+    """Whether the node holds no file of this generation, as when its preparation was cancelled before it wrote any."""
+    directory = root / "state/node/generations"
+    base = installer.private_json(root / "provider.json")
+    if base and base["generation"] == generation:
+        return False
+    paths = [directory / (str(generation) + suffix) for suffix in (".json", ".lease", ".lease-identity", ".dropped")]
+    return not any(path.exists() or path.is_symlink() for path in paths)
+
+
 def collect(args, installer):
     root, _ = owned_root(args, installer)
-    with installer.install_lock(root), collection_lease(root, args.generation, installer, marker_identity(args)):
-        value = retained_configs(root, installer).get(args.generation)
-        if value is None:
-            return
-        if (value["installation_id"] != args.installation_id
-                or installer.node_spec.digest(value["provider"], value["specification"]) != args.specification_digest):
-            raise installer.InstallError("Collection grant does not match the local generation")
-        # The Runtime belongs to the installation; uninstall removes it. Keep the immutable
-        # configuration and this permanent journal as restart identity. They contain no
-        # provider credentials and are not readiness.
-        atomic_json(root / "state/node/generations" / (str(args.generation) + ".dropped"), marker_identity(args))
+    with installer.install_lock(root):
+        if never_prepared(root, args.generation, installer):
+            return  # Nothing to retain or release: a failure here would repeat at every retention heartbeat.
+        with collection_lease(root, args.generation, installer, marker_identity(args)):
+            value = retained_configs(root, installer).get(args.generation)
+            if value is None:
+                return
+            if (value["installation_id"] != args.installation_id
+                    or installer.node_spec.digest(value["provider"], value["specification"]) != args.specification_digest):
+                raise installer.InstallError("Collection grant does not match the local generation")
+            # The Runtime belongs to the installation; uninstall removes it. Keep the immutable
+            # configuration and this permanent journal as restart identity. They contain no
+            # provider credentials and are not readiness.
+            atomic_json(root / "state/node/generations" / (str(args.generation) + ".dropped"), marker_identity(args))
