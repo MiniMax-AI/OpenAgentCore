@@ -920,6 +920,45 @@ describe("OpenAIAgentsClient", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("delivers no event after an onEvent callback aborts, even within one network chunk", async () => {
+    const controller = new AbortController();
+    const reason = new DOMException("Stop streaming", "AbortError");
+    const frame = (eventId: string) => `event: agent.session.turn.output_text.delta\ndata: ${JSON.stringify({
+      type: "agent.session.turn.output_text.delta",
+      event_id: eventId,
+      session_id: "session/one",
+      turn_id: "turn_1",
+      item_id: "item_1",
+      output_index: 0,
+      content_index: 0,
+      delta: eventId,
+    })}\n\n`;
+    let cancelled = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(stream) {
+        stream.enqueue(encoder.encode(frame("evt_1") + frame("evt_2")));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const delivered: string[] = [];
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(new Response(body, { headers: { "Content-Type": "text/event-stream" } }), []),
+    });
+
+    await expect(client.streamEvents("session/one", {
+      signal: controller.signal,
+      onEvent: (event) => {
+        delivered.push(event.event_id);
+        controller.abort(reason);
+      },
+    })).rejects.toBe(reason);
+    expect(delivered).toEqual(["evt_1"]);
+    expect(cancelled).toBe(true);
+  });
+
   it("turns a creation response without a stream body into empty_stream", async () => {
     const onOpen = vi.fn();
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 201 }), []) });
