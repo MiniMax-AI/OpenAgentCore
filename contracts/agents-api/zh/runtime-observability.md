@@ -1,7 +1,7 @@
 ---
 title: "Runtime 可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: 5a79ce08bd5c611abae2a3a488e80b1efeb8316bd2939f1a311c0579cc22792b
+source_hash: 074d31e8c05493593eb48a95de2c9b2c28aafd3695e5baf16815e3f7a60e18ad
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`services/core/internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `services/core/internal/runtimeobs/otlpexporter`。
