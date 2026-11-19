@@ -28,7 +28,6 @@ type fakeGateway struct {
 	dialURL  string
 	dialAuth string
 	frames   []proto.Envelope
-	wantAuth bool
 
 	connCh chan *websocket.Conn
 }
