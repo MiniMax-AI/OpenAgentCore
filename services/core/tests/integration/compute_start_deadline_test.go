@@ -2,12 +2,14 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // failedComputeProvider settles Create but its compute is natively failed, so
@@ -91,5 +93,37 @@ func TestRunningAllocationIsNeverFailedByStartDeadline(t *testing.T) {
 	_, body := request("GET", "/agents/environments/"+environment, "")
 	if p.kills != 0 || strings.Contains(body, `"failed"`) {
 		t.Fatalf("running allocation was failed: kills=%d environment=%s", p.kills, body)
+	}
+}
+
+func TestComputeThatNeverStartsFailsSessionWithUnrunInitialInputAtDeadline(t *testing.T) {
+	s, key := configuredStore(t)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`),
+		InitialInputs: []sessions.Input{messageInput("first")}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &failedComputeProvider{lifecycleProvider{resources: map[string]sandbox.Info{}}}
+	w, _ := managedWorker(t, s, key, p)
+	if _, err := w.ProvisionEnvironment(t.Context(), tenant, session.Environment.ID, key); err == nil {
+		t.Fatal("compute that never starts provisioned")
+	}
+	backdateAllocations(t, s)
+	p.unavailable = true
+	for range 4 {
+		if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The input never ran, so the Session ends failed with the reason, never idle.
+	row, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
+	if err != nil || row.Environment.Status != "failed" || row.EnvironmentFailure == nil || row.PendingInput || row.LastTurn != nil ||
+		row.EnvironmentInputActivity == nil || row.EnvironmentInputActivity.Status != "failed" {
+		t.Fatal("unstarted compute left the initial input without a failure", row, err)
+	}
+	if events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0); err != nil || len(events) == 0 || events[len(events)-1].Event.Type != "agent.session.failed" {
+		t.Fatal("unstarted compute did not report the failed Session", events, err)
 	}
 }

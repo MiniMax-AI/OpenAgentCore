@@ -225,7 +225,9 @@ func (m *GenerationManager) Drop(ctx context.Context, grant sandbox.GenerationRe
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err != nil {
-		g.removing = false
+		// A failed removal leaves the generation as it was: a leftover collecting mark would make
+		// Core's later Deployment frame for it an ownership error that ends the node.
+		g.removing, g.collecting = false, false
 		return err
 	}
 	if g.value.Close != nil {

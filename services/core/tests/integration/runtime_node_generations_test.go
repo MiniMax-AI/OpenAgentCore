@@ -216,3 +216,37 @@ func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testin
 		t.Fatal("ready node did not admit waiting Session", err)
 	}
 }
+
+// A deployment change while a Session's Environment is still being prepared leaves
+// that sandbox on the generation it was placed with; only Sessions created after the
+// target is ready use the new one.
+func TestDeploymentChangeDuringPreparationKeepsTheSandboxGeneration(t *testing.T) {
+	s, w, first, input := webSpecificationFixture(t, "microsandbox")
+	node := specificationNode(t, s, first)
+	connection := onlineManagerNode(t, s, node.NodeID)
+	preparing, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
+	if _, generation := placedGeneration(t, s, w, session); generation != 1 {
+		t.Fatal("placed on", generation)
+	}
+	second, _ := changeNodeTarget(t, w, first, input)
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: preparing, EnvironmentID: session.Environment.ID}, first.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	if err != nil || owner.DeploymentGeneration != 1 || owner.NodeID != node.NodeID {
+		t.Fatal("change moved the preparing sandbox", owner, err)
+	}
+	setup, err := deploymentService(t, s).AllocationSetup(t.Context(), sandbox.Reference{TenantID: preparing, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID})
+	if err != nil || setup.Generation != 1 || setup.Specification.Resources.CPUs != first.Specification.Resources.CPUs {
+		t.Fatal("preparing sandbox lost its specification", setup, err)
+	}
+	generationHeartbeat(t, s, node, connection, second, "ready")
+	next, nextSession := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
+	if _, generation := placedGeneration(t, s, w, nextSession); generation != 2 {
+		t.Fatal("new Session placed on", generation)
+	}
+	fresh, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: next, EnvironmentID: nextSession.Environment.ID}, first.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	if err != nil || fresh.DeploymentGeneration != 2 {
+		t.Fatal("new Session did not use the new generation", fresh, err)
+	}
+	if setup, err = deploymentService(t, s).AllocationSetup(t.Context(), sandbox.Reference{TenantID: next, EnvironmentID: fresh.EnvironmentID, AllocationID: fresh.ID}); err != nil || setup.Specification.Resources.CPUs != first.Specification.Resources.CPUs+1 {
+		t.Fatal("new sandbox lost the new specification", setup, err)
+	}
+}

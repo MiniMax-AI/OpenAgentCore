@@ -311,3 +311,24 @@ func TestPreparationDiagnosticPreservesTypedCause(t *testing.T) {
 		})
 	}
 }
+
+func TestFailedCollectionLeavesTheGenerationUsable(t *testing.T) {
+	m := generationFixture(3)
+	m.target.ServingGeneration = nil
+	removal := errors.New("remove failed")
+	m.options.Remove = func(context.Context, GenerationProvider) error { return removal }
+	grant := sandbox.GenerationRetention{GenerationReference: sandbox.GenerationReference{Generation: 2, SpecificationDigest: strings.Repeat("a", 64)}}
+	if err := m.Drop(t.Context(), grant); !errors.Is(err, removal) {
+		t.Fatal("removal error lost", err)
+	}
+	// Core naming the generation again must not end the node over a leftover collecting mark.
+	serving := uint64(2)
+	if err := m.Deployment(sandbox.NodeDeployment{Generation: 3, SpecificationDigest: strings.Repeat("a", 64), ServingGeneration: &serving}); err != nil {
+		t.Fatal("failed collection left an ownership error", err)
+	}
+	if _, _, release, err := m.Acquire(2); err != nil {
+		t.Fatal("failed collection left the generation unusable", err)
+	} else {
+		release()
+	}
+}
